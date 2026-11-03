@@ -265,3 +265,17 @@ fn no_menu_means_no_menu_input() {
     assert!(!menu_step(&mut p, &held(Dir::Down), 0.0));
     assert_eq!(focused(&p), None);
 }
+
+#[test]
+fn a_tap_pressed_and_released_in_one_frame_still_moves() {
+    let sc = scene();
+    let ctx = egui::Context::default();
+    let key = egui::Key::ArrowDown;
+    let events = [true, false]
+        .map(|pressed| egui::Event::Key { key, physical_key: Some(key), pressed, repeat: false, modifiers: egui::Modifiers::NONE })
+        .to_vec();
+    ctx.begin_pass(egui::RawInput { events, ..Default::default() });
+    let read = ctx.input(|i| read_menu(i, &sc.doc.game, 0, 0, [0.0; 2], &|_| false));
+    ctx.end_pass().textures_delta.clear();
+    assert_eq!(read.held, Some(Dir::Down));
+}

@@ -125,7 +125,8 @@ pub fn read_menu(i: &InputState, settings: &GameSettings, held: u32, pressed: u3
             .is_some_and(|names| names.iter().filter(|name| !taken(name)).any(|name| super::input::binding(i, name, buttons, edge)))
     };
     let dirs = [("menu-up", Dir::Up), ("menu-down", Dir::Down), ("menu-left", Dir::Left), ("menu-right", Dir::Right)];
-    let keyed = dirs.iter().find(|(action, _)| any(action, held, false)).map(|(_, dir)| *dir);
+    // Held, or tapped this frame (a key pressed and released between two frames is not down).
+    let keyed = dirs.iter().find(|(action, _)| any(action, held, false) || any(action, pressed, true)).map(|(_, dir)| *dir);
     let [x, y] = stick;
     let stuck = (x.is_finite() && y.is_finite() && x.abs().max(y.abs()) >= STICK_DEADZONE).then(|| {
         if x.abs() > y.abs() {
