@@ -326,4 +326,18 @@ fn starter_kit_menus_are_auto_layout_with_state_variants() {
     }
     let x = |i: usize| doc.node(slots.children[i]).unwrap().transform.as_coeffs()[4];
     assert!(x(1) > x(0) && x(6) == x(0), "the grid lays its cells out in rows of 6");
+    // Every menu's items fit inside it (nothing is clipped).
+    for menu in &menus {
+        let m = doc.node(*menu).unwrap();
+        for c in &m.children {
+            let n = doc.node(*c).unwrap();
+            let [.., cx, cy] = n.transform.as_coeffs();
+            assert!(
+                cx >= 0.0 && cy >= 0.0 && cx + n.width <= m.width + 0.01 && cy + n.height <= m.height + 0.01,
+                "{} spills out of {}",
+                n.name,
+                m.name
+            );
+        }
+    }
 }

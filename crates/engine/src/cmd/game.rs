@@ -450,6 +450,7 @@ fn starter_kit(s: &mut Session, _: &Value) -> Result<Value> {
         grid_rows: rows,
         gap,
         cross_gap,
+        padding: [0.0; 4],
         ..AutoLayout::default()
     };
     let slots = menu_frame(doc, inventory, "Grid / Slots", [220.0, 280.0, 812.0, 240.0], grid_layout(6, 3, 28.0, 24.0))?;
