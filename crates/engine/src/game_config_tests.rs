@@ -287,3 +287,43 @@ fn bind_accepts_menu_actions_and_reset_restores_them() {
     ex(&mut s, "game.bind", json!({"reset": true}));
     assert_eq!(s.doc().unwrap().game.menu_bindings, before.menu_bindings);
 }
+
+#[test]
+fn starter_kit_menus_are_auto_layout_with_state_variants() {
+    use crate::components::{variant_options, variant_props};
+    let mut s = Session::new();
+    let kit = ex(&mut s, "game.starterKit", json!({}));
+    let doc = s.doc().unwrap();
+    let states = ["Default", "Focused", "Pressed", "Disabled"];
+    // Button, Tab and Grid cell are sets with every State.
+    let sets: Vec<_> = kit["sets"].as_array().unwrap().iter().map(|v| id_of(v).unwrap()).collect();
+    assert_eq!(sets.len(), 3);
+    for set in &sets {
+        assert!(matches!(doc.node(*set).unwrap().kind, NodeKind::ComponentSet { .. }));
+        let options = variant_options(doc, *set);
+        assert_eq!(options, [("State".to_string(), states.iter().map(|s| s.to_string()).collect::<Vec<_>>())]);
+    }
+    let menus: Vec<_> = kit["menus"].as_array().unwrap().iter().map(|v| id_of(v).unwrap()).collect();
+    assert_eq!(menus.len(), 4, "inventory slots, pause buttons, library list and grid");
+    assert_eq!(doc.game.menus.keys().copied().collect::<std::collections::BTreeSet<_>>(), menus.iter().copied().collect());
+    for menu in &menus {
+        let node = doc.node(*menu).unwrap();
+        assert!(node.layout.is_some(), "{} has auto layout", node.name);
+        assert!(!node.children.is_empty());
+    }
+    // The inventory grid: 18 Grid cell instances, 6 per row, laid out by auto layout.
+    let inventory = id_of(&kit["inventory"]).unwrap();
+    let slots = *menus.iter().find(|m| doc.node(**m).unwrap().parent == Some(inventory)).unwrap();
+    let slots = doc.node(slots).unwrap();
+    let layout = slots.layout.as_ref().unwrap();
+    assert_eq!((layout.mode, layout.grid_columns), (figcraft_doc::LayoutMode::Grid, 6));
+    assert_eq!(slots.children.len(), 18);
+    for c in &slots.children {
+        let NodeKind::Instance { component, .. } = &doc.node(*c).unwrap().kind else { panic!("slot is not an instance") };
+        let main = doc.node(*component).unwrap();
+        assert_eq!(variant_props(&main.name)["State"], "Default");
+        assert!(sets.contains(&main.parent.unwrap()));
+    }
+    let x = |i: usize| doc.node(slots.children[i]).unwrap().transform.as_coeffs()[4];
+    assert!(x(1) > x(0) && x(6) == x(0), "the grid lays its cells out in rows of 6");
+}

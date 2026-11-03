@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use figcraft_color::{Color, Paint};
 use figcraft_doc::game::{ACTIONS, DisabledItems, EVENT_NAMES, GameSettings, MENU_ACTIONS, MenuSettings, default_menu_bindings, validate_keys};
 use figcraft_doc::proto::{Action, Easing, Interaction, OverlayAnchor, OverlayPosition, Transition, Trigger};
-use figcraft_doc::{Collection, Document, Mode, Node, NodeId, NodeKind, TextData, Variable, VariableValue};
+use figcraft_doc::{AutoLayout, Collection, Document, LayoutMode, Mode, Node, NodeId, NodeKind, TextData, Variable, VariableValue};
 use figcraft_geom::Affine;
 use serde_json::{Value, json};
 
@@ -283,6 +283,36 @@ fn wire(doc: &mut Document, parent: NodeId, name: &str, box_: [f64; 4]) -> Resul
     Ok(id)
 }
 
+/// A wireframe component set with `State=Default|Focused|Pressed|Disabled`: the inset turns
+/// orange on focus, darker while pressed, and the item fades when disabled. Returns (set, Default).
+fn state_set(doc: &mut Document, parent: NodeId, name: &str, at: (f64, f64), size: (f64, f64)) -> Result<(NodeId, NodeId)> {
+    let (w, h) = size;
+    let gap = 16.0;
+    let kind = NodeKind::ComponentSet { description: "Navigable menu item: the State variant shows focus in Play".into() };
+    let set = add(doc, parent, kind, name, [at.0, at.1, w * 4.0 + gap * 5.0, h + gap * 2.0], false, false)?;
+    let focus = Color::from_hex("#ff5a00").unwrap_or(Color::WHITE);
+    let pressed = Color::from_hex("#b83f00").unwrap_or(Color::WHITE);
+    let mut default = None;
+    for (k, (state, inset, opacity)) in
+        [("Default", Color::WHITE, 1.0), ("Focused", focus, 1.0), ("Pressed", pressed, 1.0), ("Disabled", Color::WHITE, 0.4)].into_iter().enumerate()
+    {
+        let variant = wire(doc, set, &format!("State={state}"), [gap + k as f64 * (w + gap), gap, w, h])?;
+        if let Some(inner) = doc.get(variant)?.children.first().copied() {
+            doc.get_mut(inner)?.fills = vec![Paint::solid(inset)];
+        }
+        doc.get_mut(variant)?.opacity = opacity;
+        default.get_or_insert(variant);
+    }
+    Ok((set, default.ok_or_else(|| bad("game.starterKit", "Missing default variant"))?))
+}
+
+/// A frame with `layout`, for a navigable menu.
+fn menu_frame(doc: &mut Document, parent: NodeId, name: &str, box_: [f64; 4], layout: AutoLayout) -> Result<NodeId> {
+    let id = add(doc, parent, NodeKind::Frame, name, box_, false, false)?;
+    doc.get_mut(id)?.layout = Some(layout);
+    Ok(id)
+}
+
 fn close_button(doc: &mut Document, parent: NodeId, label: &str, y: f64) -> Result<NodeId> {
     let id = wire(doc, parent, label, [520.0, y, 240.0, 48.0])?;
     let label = text(doc, id, label, 18.0, 12.0, 16.0)?;
@@ -400,27 +430,42 @@ fn starter_kit(s: &mut Session, _: &Value) -> Result<Value> {
     }
     add(doc, hud, NodeKind::Rectangle, "Reticle horizontal", [630.0, 359.0, 20.0, 2.0], true, false)?;
     add(doc, hud, NodeKind::Rectangle, "Reticle vertical", [639.0, 350.0, 2.0, 20.0], true, false)?;
+    // The component library first: menus below are built from its State sets.
+    let library = add(doc, page, NodeKind::Frame, "Wireframe / Components", [2720.0, 800.0, 1280.0, 800.0], false, false)?;
+    text(doc, library, "WIREFRAME COMPONENTS", 48.0, 40.0, 32.0)?;
+    text(doc, library, "White border / transparent padding / editable white inset. State shows focus in Play.", 48.0, 100.0, 18.0)?;
+    let (button_set, button) = state_set(doc, library, "Button", (48.0, 150.0), (240.0, 48.0))?;
+    let (tab_set, _) = state_set(doc, library, "Tab", (48.0, 250.0), (160.0, 36.0))?;
+    let (cell_set, cell) = state_set(doc, library, "Grid cell", (48.0, 340.0), (112.0, 64.0))?;
+    let mut menus = Vec::new();
     let inventory = frame_id("inventory")?;
     text(doc, inventory, "INVENTORY", 220.0, 112.0, 32.0)?;
     for (i, label) in ["Equipment", "Supplies", "Key items"].into_iter().enumerate() {
         wire(doc, inventory, &format!("Tabs / {label}"), [220.0 + i as f64 * 280.0, 180.0, 248.0, 36.0])?;
         text(doc, inventory, label, 220.0 + i as f64 * 280.0, 230.0, 16.0)?;
     }
-    for row in 0..3 {
-        for col in 0..6 {
-            wire(
-                doc,
-                inventory,
-                &format!("Grid / Slot {}", row * 6 + col + 1),
-                [220.0 + f64::from(col) * 140.0, 280.0 + f64::from(row) * 88.0, 112.0, 64.0],
-            )?;
-        }
+    let grid_layout = |columns: u32, rows: u32, gap: f64, cross_gap: f64| AutoLayout {
+        mode: LayoutMode::Grid,
+        grid_columns: columns,
+        grid_rows: rows,
+        gap,
+        cross_gap,
+        ..AutoLayout::default()
+    };
+    let slots = menu_frame(doc, inventory, "Grid / Slots", [220.0, 280.0, 812.0, 240.0], grid_layout(6, 3, 28.0, 24.0))?;
+    for i in 0..18 {
+        let slot = crate::components::create_instance(doc, cell, slots, 0.0, 0.0)?;
+        doc.get_mut(slot)?.name = format!("Grid / Slot {}", i + 1);
     }
+    menus.push(slots);
     close_button(doc, inventory, "Close inventory · Tab", 600.0)?;
     let pause = frame_id("pause")?;
     text(doc, pause, "PAUSED", 520.0, 160.0, 40.0)?;
-    close_button(doc, pause, "Resume", 280.0)?;
-    close_button(doc, pause, "Return to game", 352.0)?;
+    let vertical = |gap: f64, padding: f64| AutoLayout { mode: LayoutMode::Vertical, gap, padding: [padding; 4], ..AutoLayout::default() };
+    let pause_menu = menu_frame(doc, pause, "Pause / Menu", [520.0, 280.0, 240.0, 120.0], vertical(24.0, 0.0))?;
+    close_button(doc, pause_menu, "Resume", 0.0)?;
+    close_button(doc, pause_menu, "Return to game", 0.0)?;
+    menus.push(pause_menu);
     text(doc, pause, "Escape / controller Menu to resume", 520.0, 450.0, 16.0)?;
     let map = frame_id("map")?;
     text(doc, map, "ARENA MAP", 220.0, 96.0, 32.0)?;
@@ -438,25 +483,30 @@ fn starter_kit(s: &mut Session, _: &Value) -> Result<Value> {
     if let Some(id) = vars.get("atacante") {
         doc.get_mut(attacker)?.bound.insert("characters".into(), id.clone());
     }
-    let library = add(doc, page, NodeKind::Frame, "Wireframe / Components", [2720.0, 800.0, 1280.0, 720.0], false, false)?;
-    text(doc, library, "WIREFRAME COMPONENTS", 48.0, 40.0, 32.0)?;
-    text(doc, library, "White border / transparent padding / editable white inset", 48.0, 100.0, 18.0)?;
     let mut components = vec![health, ammo];
-    components.push(wire(doc, library, "Button", [48.0, 180.0, 240.0, 48.0])?);
-    components.push(wire(doc, library, "Tab", [336.0, 180.0, 160.0, 36.0])?);
-    components.push(wire(doc, library, "Grid cell", [544.0, 180.0, 80.0, 80.0])?);
-    let list = add(doc, library, component_kind(), "List", [48.0, 300.0, 448.0, 256.0], false, true)?;
+    let list = add(doc, library, component_kind(), "List", [48.0, 460.0, 264.0, 252.0], false, true)?;
+    doc.get_mut(list)?.layout = Some(vertical(12.0, 12.0));
     for i in 0..4 {
-        wire(doc, list, &format!("Row {}", i + 1), [12.0, 12.0 + f64::from(i) * 60.0, 424.0, 48.0])?;
+        let row = crate::components::create_instance(doc, button, list, 0.0, 0.0)?;
+        doc.get_mut(row)?.name = format!("Row {}", i + 1);
     }
     components.push(list);
-    let grid = add(doc, library, component_kind(), "Grid", [544.0, 300.0, 288.0, 192.0], false, false)?;
-    for i in 0..6 {
-        wire(doc, grid, "Cell", [f64::from(i % 3) * 96.0, f64::from(i / 3) * 96.0, 80.0, 80.0])?;
+    let grid = add(doc, library, component_kind(), "Grid", [400.0, 460.0, 368.0, 144.0], false, false)?;
+    doc.get_mut(grid)?.layout = Some(grid_layout(3, 2, 16.0, 16.0));
+    for _ in 0..6 {
+        crate::components::create_instance(doc, cell, grid, 0.0, 0.0)?;
     }
     components.push(grid);
+    menus.extend([list, grid]);
+    for menu in &menus {
+        doc.game.menus.insert(*menu, MenuSettings::default());
+    }
     example_interactions(doc, hud, inventory, pause, map, death)?;
-    let result = json!({"hud": hud, "inventory": inventory, "pause": pause, "map": map, "death": death, "components": components, "variables": vars});
+    let sets = [button_set, tab_set, cell_set];
+    let result = json!({
+        "hud": hud, "inventory": inventory, "pause": pause, "map": map, "death": death,
+        "components": components, "sets": sets, "menus": menus, "variables": vars
+    });
     s.set_selection(vec![hud]);
     Ok(result)
 }
