@@ -29,8 +29,9 @@
 - G4 navigable menus (2026-11-03): any auto layout frame (list, row, grid) can be switched on as
   "Navigable menu" in the Prototype tab (`game.menu.set`, stored in `GameSettings::menus`). In
   Play, focus moves with arrows/WASD/D-pad/left stick and the mouse, holding repeats (0.4 s, then
-  every 0.12 s), Confirm (Enter/Space/A) runs the item's On click, Back (Escape/B) closes the
-  overlay. Items that are instances of a set with a `State` property show `Focused`/`Pressed`;
+  every 0.12 s), Confirm (Enter/Space/A) runs the item's On click (or On press), Back (Escape/B) closes the
+  overlay. A wrapping vertical layout navigates like a grid (↑↓ in a column, ←→ across).
+  Items that are instances of a set with a `State` property show `Focused`/`Pressed`;
   others get an orange outline. Navigation math in `figcraft_game::menu`, focus in
   `ui-egui/src/game/menu.rs`, applied by `present/game.rs`. Starter kit: Button, Tab and Grid
   cell are State sets; the Inventory grid, Pause buttons and library List/Grid are menus. Checked

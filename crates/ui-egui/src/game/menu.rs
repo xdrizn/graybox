@@ -65,19 +65,33 @@ pub fn items(doc: &Document, menu: NodeId) -> Vec<NodeId> {
     n.children.iter().copied().filter(|c| doc.node(*c).is_some_and(|c| c.visible)).collect()
 }
 
-/// Items per row: a list has one, a row all of them, a grid its column count and a wrapping row
-/// the items on its first line.
-fn columns(doc: &Document, menu: NodeId, items: &[NodeId]) -> usize {
-    let Some(layout) = doc.node(menu).and_then(|n| n.layout.as_ref()) else { return 1 };
+/// How the items lie: items per row (a list has one, a row all of them, a grid its column count, a
+/// wrapping row the items on its first line), and `true` for a wrapping column, whose items run
+/// down each column first (its rows here are its columns, so the directions turn).
+fn columns(doc: &Document, menu: NodeId, items: &[NodeId]) -> (usize, bool) {
+    let Some(layout) = doc.node(menu).and_then(|n| n.layout.as_ref()) else { return (1, false) };
+    // Items on the first line: same x (a column) or same y (a row) as the first item.
+    let first_line = |axis: usize| {
+        let at = |id: &NodeId| doc.node(*id).and_then(|n| n.transform.as_coeffs().get(axis).copied());
+        let first = items.first().and_then(at);
+        items.iter().take_while(|id| at(id).zip(first).is_some_and(|(a, b)| (a - b).abs() < 0.5)).count().max(1)
+    };
     match layout.mode {
-        LayoutMode::Vertical => 1,
-        LayoutMode::Grid => (layout.grid_columns as usize).max(1),
-        LayoutMode::Horizontal if !layout.wrap => items.len().max(1),
-        LayoutMode::Horizontal => {
-            let y = |id: &NodeId| doc.node(*id).map(|n| n.transform.as_coeffs()[5]);
-            let first = items.first().and_then(y);
-            items.iter().take_while(|id| y(id).zip(first).is_some_and(|(a, b)| (a - b).abs() < 0.5)).count().max(1)
-        }
+        LayoutMode::Vertical if !layout.wrap => (1, false),
+        LayoutMode::Vertical => (first_line(4), true),
+        LayoutMode::Grid => ((layout.grid_columns as usize).max(1), false),
+        LayoutMode::Horizontal if !layout.wrap => (items.len().max(1), false),
+        LayoutMode::Horizontal => (first_line(5), false),
+    }
+}
+
+/// A direction in a wrapping column, read on its turned grid.
+fn turned(dir: Dir) -> Dir {
+    match dir {
+        Dir::Up => Dir::Left,
+        Dir::Down => Dir::Right,
+        Dir::Left => Dir::Up,
+        Dir::Right => Dir::Down,
     }
 }
 
@@ -212,7 +226,8 @@ impl Focus {
         let settings = doc.game.menus.get(&menu).cloned().unwrap_or_default();
         let items = items(doc, menu);
         let opts = NavOptions { wrap: settings.wrap, skip_disabled: settings.disabled == DisabledItems::Skip };
-        let grid = MenuGrid { columns: columns(doc, menu, &items), enabled: items.iter().map(|i| !self.disabled(doc, *i)).collect() };
+        let (columns, column_first) = columns(doc, menu, &items);
+        let grid = MenuGrid { columns, enabled: items.iter().map(|i| !self.disabled(doc, *i)).collect() };
         let position = |id: Option<NodeId>| id.and_then(|id| items.iter().position(|i| *i == id));
         let mut index = position(self.pointed.take()).or_else(|| position(self.item));
         if index.is_none() {
@@ -221,7 +236,7 @@ impl Focus {
             index = first_focusable(&grid, start, opts);
         }
         if let (Some(dir), Some(i)) = (dir, index) {
-            index = Some(step(&grid, i, dir, opts));
+            index = Some(step(&grid, i, if column_first { turned(dir) } else { dir }, opts));
         }
         let item = index.and_then(|i| items.get(i).copied());
         if item != self.item {

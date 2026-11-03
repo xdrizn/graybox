@@ -86,11 +86,7 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
             play.game.input.look[0] += pad.axes[2] * dt * 2.5;
             play.game.input.look[1] -= pad.axes[3] * dt * 2.5;
         }
-        if !play.captured || menu_active {
-            play.game.input.forward = 0.0;
-            play.game.input.strafe = 0.0;
-            play.game.input.jump = false;
-        }
+        stop_moving(play, menu_active);
         if play.game.player.dead && play.game.input.respawn {
             play.game.respawn();
             play.game.input.respawn = false;
@@ -319,9 +315,11 @@ pub(super) fn menu_step(p: &mut Presenter, input: &MenuInputs, now: f64) -> bool
         p.settle(&before);
     }
     if let Some(item) = plan.confirm {
-        // The item's own On click (or the first layer inside it that has one).
+        // The item's own On click or On press (or the first layer inside it that has one).
         let found = p.doc.as_ref().and_then(|doc| {
-            doc.subtree(item).into_iter().find_map(|id| super::actions::find_trigger(doc, id, |t| *t == Trigger::OnClick).map(|k| (id, k)))
+            doc.subtree(item)
+                .into_iter()
+                .find_map(|id| super::actions::find_trigger(doc, id, |t| matches!(t, Trigger::OnClick | Trigger::OnPress)).map(|k| (id, k)))
         });
         if let Some((id, k)) = found {
             p.fire(id, k, None, now);
@@ -360,5 +358,14 @@ pub(super) fn menu_overlay(p: &mut Presenter, painter: &egui::Painter, ctx: &Con
             egui::Stroke::new(2.0, crate::theme::ACCENT),
             egui::StrokeKind::Outside,
         );
+    }
+}
+
+/// The player stands still while the mouse is free or a navigable menu owns the keys.
+pub(super) fn stop_moving(play: &mut game::Play, menu_active: bool) {
+    if !play.captured || menu_active {
+        play.game.input.forward = 0.0;
+        play.game.input.strafe = 0.0;
+        play.game.input.jump = false;
     }
 }

@@ -279,3 +279,61 @@ fn a_tap_pressed_and_released_in_one_frame_still_moves() {
     ctx.end_pass().textures_delta.clear();
     assert_eq!(read.held, Some(Dir::Down));
 }
+
+#[test]
+fn confirm_runs_on_press_when_the_item_has_no_click() {
+    let mut s = Session::new();
+    let screen = idv(&ex(&mut s, "frame.create", json!({"width": 1280, "height": 720})));
+    let list = idv(&ex(&mut s, "frame.create", json!({"parent": screen, "width": 200, "height": 200, "props": {"layout": "vertical"}})));
+    let item = idv(&ex(&mut s, "shape.rectangle", json!({"parent": list, "width": 200, "height": 40})));
+    let popup = idv(&ex(&mut s, "frame.create", json!({"y": 1000, "width": 100, "height": 100})));
+    ex(&mut s, "proto.interaction.add", json!({"id": item, "trigger": {"type": "onPress"}, "actions": [{"type": "openOverlay", "dest": popup}]}));
+    ex(&mut s, "game.menu.set", json!({"node": list, "enabled": true}));
+    let mut p = play(s.doc().unwrap(), screen);
+    menu_step(&mut p, &idle(), 0.0);
+    menu_step(&mut p, &confirm(), 0.1);
+    assert_eq!(p.overlays.len(), 1);
+}
+
+/// A vertical layout that wraps into columns navigates like a grid: ↑↓ inside a column, ←→ across.
+#[test]
+fn wrapping_vertical_layout_navigates_like_a_grid() {
+    let mut s = Session::new();
+    let screen = idv(&ex(&mut s, "frame.create", json!({"width": 1280, "height": 720})));
+    let list = idv(&ex(
+        &mut s,
+        "frame.create",
+        json!({"parent": screen, "width": 300, "height": 100, "props": {"layout": "vertical", "wrap": true, "gap": 0, "padding": 0}}),
+    ));
+    let items: Vec<NodeId> = (0..4).map(|_| idv(&ex(&mut s, "shape.rectangle", json!({"parent": list, "width": 100, "height": 40})))).collect();
+    ex(&mut s, "game.menu.set", json!({"node": list, "enabled": true}));
+    let mut p = play(s.doc().unwrap(), screen);
+    menu_step(&mut p, &idle(), 0.0);
+    let press = |p: &mut Presenter, dir: Dir, t: f64| {
+        menu_step(p, &held(dir), t);
+        menu_step(p, &idle(), t + 0.05);
+    };
+    press(&mut p, Dir::Down, 0.1);
+    assert_eq!(focused(&p), Some(items[1]));
+    press(&mut p, Dir::Down, 0.2);
+    assert_eq!(focused(&p), Some(items[1]), "the column ends here");
+    press(&mut p, Dir::Right, 0.3);
+    assert_eq!(focused(&p), Some(items[3]));
+    press(&mut p, Dir::Up, 0.4);
+    assert_eq!(focused(&p), Some(items[2]));
+    press(&mut p, Dir::Left, 0.5);
+    assert_eq!(focused(&p), Some(items[0]));
+}
+
+#[test]
+fn an_open_menu_stops_the_player() {
+    let mut play = crate::game::Play::new();
+    play.captured = true;
+    play.game.input.forward = 1.0;
+    play.game.input.strafe = -1.0;
+    play.game.input.jump = true;
+    super::stop_moving(&mut play, false);
+    assert_eq!(play.game.input.forward, 1.0, "no menu, captured: the player moves");
+    super::stop_moving(&mut play, true);
+    assert_eq!((play.game.input.forward, play.game.input.strafe, play.game.input.jump), (0.0, 0.0, false));
+}
