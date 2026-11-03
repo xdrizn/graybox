@@ -73,6 +73,11 @@ Death are only *examples* in the starter kit, never required.
 - [x] Game event trigger picked from a list of the game's events (no typing).
 - [x] File-level game settings (controls, sounds, share) live in the Prototype tab when nothing is
   selected; no separate floating window.
+- [ ] **Navigable menus**: switch on "Navigable menu" for any auto layout frame (list, row, grid);
+  in Play, focus moves with mouse, keyboard and controller, the `State` variant shows focus, Confirm
+  runs the item's interactions, Back closes the overlay. Spec:
+  [`specs/2026-11-03-menu-navigation-design.md`](specs/2026-11-03-menu-navigation-design.md)
+  (phase 1; nested tab menus are phase 2).
 - [x] Starter kit file: INDIRECT-style wireframe components (rectangles with white border and white
   inside separated by transparent padding, colours editable) for HUD bars, lists, grids, tabs,
   buttons. Its example screens use ordinary interactions only.
