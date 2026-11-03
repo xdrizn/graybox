@@ -4,6 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
+use crate::NodeId;
+
 pub const ACTIONS: [&str; 11] = ["forward", "backward", "left", "right", "run", "jump", "crouch", "shoot", "reload", "heal", "respawn"];
 /// Menu bindings of early files. Opening a menu is a prototype interaction now, so they are dropped on load.
 const LEGACY_ACTIONS: [&str; 3] = ["inventory", "pause", "map"];
@@ -23,6 +25,39 @@ pub const EVENT_NAMES: [&str; 13] = [
     "tela-fechou",
 ];
 pub const MAX_KEYS: usize = 8;
+/// Inputs that move focus inside a navigable menu; their keys may also drive gameplay.
+pub const MENU_ACTIONS: [&str; 6] = ["menu-up", "menu-down", "menu-left", "menu-right", "menu-confirm", "menu-back"];
+pub const MAX_MENUS: usize = 4096;
+
+/// What a disabled item (`State=Disabled`) does in a navigable menu.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DisabledItems {
+    /// It takes focus but does not confirm.
+    #[default]
+    Focus,
+    /// Focus passes over it.
+    Skip,
+}
+
+/// One auto layout frame that is a navigable menu in Play mode.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MenuSettings {
+    /// Past the last item, come back to the first.
+    pub wrap: bool,
+    /// The child focused first (default: the first visible child).
+    pub start: Option<NodeId>,
+    /// Coming back to the menu focuses the item focused last.
+    pub remember: bool,
+    pub disabled: DisabledItems,
+}
+
+impl Default for MenuSettings {
+    fn default() -> Self {
+        Self { wrap: false, start: None, remember: true, disabled: DisabledItems::Focus }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "StoredGameSettings")]
@@ -30,6 +65,10 @@ pub struct GameSettings {
     pub bindings: BTreeMap<String, Vec<String>>,
     pub event_names: BTreeMap<String, String>,
     pub web_url: String,
+    /// Navigable menus: auto layout frame → its options.
+    pub menus: BTreeMap<NodeId, MenuSettings>,
+    /// Keys and buttons for [`MENU_ACTIONS`].
+    pub menu_bindings: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -41,12 +80,21 @@ struct StoredGameSettings {
     screens: Option<serde::de::IgnoredAny>,
     event_names: BTreeMap<String, String>,
     web_url: String,
+    menus: BTreeMap<NodeId, MenuSettings>,
+    menu_bindings: BTreeMap<String, Vec<String>>,
 }
 
 impl Default for StoredGameSettings {
     fn default() -> Self {
         let settings = GameSettings::default();
-        Self { bindings: settings.bindings, screens: None, event_names: settings.event_names, web_url: settings.web_url }
+        Self {
+            bindings: settings.bindings,
+            screens: None,
+            event_names: settings.event_names,
+            web_url: settings.web_url,
+            menus: settings.menus,
+            menu_bindings: settings.menu_bindings,
+        }
     }
 }
 
@@ -55,7 +103,13 @@ impl TryFrom<StoredGameSettings> for GameSettings {
 
     fn try_from(mut stored: StoredGameSettings) -> Result<Self, Self::Error> {
         stored.bindings.retain(|action, _| !LEGACY_ACTIONS.contains(&action.as_str()));
-        let settings = Self { bindings: stored.bindings, event_names: stored.event_names, web_url: stored.web_url };
+        let settings = Self {
+            bindings: stored.bindings,
+            event_names: stored.event_names,
+            web_url: stored.web_url,
+            menus: stored.menus,
+            menu_bindings: stored.menu_bindings,
+        };
         settings.validate()?;
         Ok(settings)
     }
@@ -79,8 +133,29 @@ impl Default for GameSettings {
         .into_iter()
         .map(|(action, keys)| (action.to_string(), keys.iter().map(|key| (*key).to_string()).collect()))
         .collect();
-        Self { bindings, event_names: EVENT_NAMES.into_iter().map(|name| (name.into(), name.into())).collect(), web_url: String::new() }
+        Self {
+            bindings,
+            event_names: EVENT_NAMES.into_iter().map(|name| (name.into(), name.into())).collect(),
+            web_url: String::new(),
+            menus: BTreeMap::new(),
+            menu_bindings: default_menu_bindings(),
+        }
     }
+}
+
+/// Arrows, WASD and the D-pad move; Enter, Space or A confirms; Escape or B goes back.
+pub fn default_menu_bindings() -> BTreeMap<String, Vec<String>> {
+    [
+        ("menu-up", &["ArrowUp", "W", "Gamepad Up"][..]),
+        ("menu-down", &["ArrowDown", "S", "Gamepad Down"][..]),
+        ("menu-left", &["ArrowLeft", "A", "Gamepad Left"][..]),
+        ("menu-right", &["ArrowRight", "D", "Gamepad Right"][..]),
+        ("menu-confirm", &["Enter", "Space", "Gamepad A"][..]),
+        ("menu-back", &["Escape", "Gamepad B"][..]),
+    ]
+    .into_iter()
+    .map(|(action, keys)| (action.to_string(), keys.iter().map(|key| (*key).to_string()).collect()))
+    .collect()
 }
 
 impl GameSettings {
@@ -101,6 +176,22 @@ impl GameSettings {
                     return Err(format!("`{key}` is already bound to {previous}"));
                 }
             }
+        }
+        // Menu keys are unique among menu actions only: a menu owns input while it is active.
+        let mut menu_used = BTreeMap::new();
+        for (action, keys) in &self.menu_bindings {
+            if !MENU_ACTIONS.contains(&action.as_str()) {
+                return Err(format!("Unknown menu action `{action}`"));
+            }
+            validate_keys(keys)?;
+            for key in keys {
+                if let Some(previous) = menu_used.insert(key, action) {
+                    return Err(format!("`{key}` is already bound to {previous}"));
+                }
+            }
+        }
+        if self.menus.len() > MAX_MENUS {
+            return Err(format!("Use at most {MAX_MENUS} navigable menus"));
         }
         if self.event_names.len() > EVENT_NAMES.len() {
             return Err("Too many game event aliases".into());
@@ -202,3 +293,7 @@ pub fn validate_keys(keys: &[String]) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "game_menu_tests.rs"]
+mod menu_tests;
