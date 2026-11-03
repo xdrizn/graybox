@@ -175,3 +175,47 @@ fn helper_only_adds_missing_defaults_to_plain_documents() {
     ensure_variables(&mut doc);
     assert_eq!(doc, before);
 }
+
+/// G6: a component carries its sounds, layer animations and game events into every instance, each
+/// animation aimed at the instance's own copy of the layer.
+#[test]
+fn component_behaviour_follows_every_instance() {
+    let mut s = Session::new();
+    let page = s.page().unwrap();
+    let button = id_of(&ex(&mut s, "frame.create", json!({"width": 200, "height": 48}))["id"]).unwrap();
+    let glow = id_of(&ex(&mut s, "shape.rectangle", json!({"parent": button, "width": 200, "height": 4}))["id"]).unwrap();
+    let main = id_of(&ex(&mut s, "component.create", json!({"ids": [button]}))["id"]).unwrap();
+    let animate = |target| json!({"type": "playAnimation", "target": target, "preset": "pulse", "durationMs": 300, "easing": "easeOut"});
+    ex(&mut s, "proto.interaction.add", json!({"id": main, "trigger": {"type": "mouseEnter"}, "actions": [animate(glow)]}));
+    ex(&mut s, "proto.interaction.add", json!({"id": main, "trigger": {"type": "gameEvent", "event": "atirou"}, "actions": [animate(glow)]}));
+    let hud = id_of(&ex(&mut s, "frame.create", json!({"x": 400, "width": 1280, "height": 720}))["id"]).unwrap();
+    let copy = id_of(&ex(&mut s, "instance.create", json!({"component": main, "parent": hud}))["id"]).unwrap();
+    let mut play = s.doc().unwrap().clone();
+    crate::proto_run::play_interactions(&mut play);
+    let copy_glow = *play.node(copy).unwrap().children.first().unwrap();
+    assert_ne!(copy_glow, glow);
+    let its = &play.node(copy).unwrap().interactions;
+    assert_eq!(its.len(), 2, "the instance plays the component's interactions");
+    assert_eq!(its[1].trigger, Trigger::GameEvent { event: "atirou".into() });
+    for it in its {
+        assert!(
+            matches!(it.actions.first(), Some(Action::PlayAnimation { target, .. }) if *target == copy_glow),
+            "animations aim at the instance's own layer: {:?}",
+            it.actions
+        );
+    }
+    assert!(
+        matches!(play.node(glow).unwrap().interactions.as_slice(), []) && play.node(main).unwrap().interactions.len() == 2,
+        "the main itself keeps aiming at its own layer"
+    );
+    // A layer inside the component with its own animation: each instance's copy aims at itself.
+    ex(&mut s, "proto.interaction.add", json!({"id": glow, "trigger": {"type": "onClick"}, "actions": [animate(glow)]}));
+    let mut play = s.doc().unwrap().clone();
+    crate::proto_run::play_interactions(&mut play);
+    let copy_glow = *play.node(copy).unwrap().children.first().unwrap();
+    assert!(matches!(
+        play.node(copy_glow).unwrap().interactions.first().and_then(|it| it.actions.first()),
+        Some(Action::PlayAnimation { target, .. }) if *target == copy_glow
+    ));
+    let _ = page;
+}

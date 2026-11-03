@@ -149,6 +149,7 @@ pub fn play_interactions(doc: &mut Document) {
             n.interactions = its;
         }
     }
+    crate::cmd::game::aim_animations_at_instances(doc);
 }
 
 /// The instance "Change to" `dest` changes when it runs on `node`: the nearest of `node` and the

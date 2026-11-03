@@ -1,6 +1,6 @@
 # Game layer — status
 
-**Current milestone:** G6 — Animations in component variants
+**Current milestone:** G7 — Share (and G0.3, G2.3 leftovers)
 
 ## Done
 - G0.1 (2026-11-03): `crates/game` (`figcraft-game`, pure simulation, L2) with the game's fixed
@@ -21,6 +21,10 @@
   Play, no errors). Added the player's own Volume slider in Play, bottom right while the mouse is
   free; it scales every sound on top of the file's master, group and sound volumes and is kept
   for the app run. `cargo xtask wasm` passes.
+- G6 (2026-11-03): components carry their behaviour. Instances already played their main's
+  interactions (sounds, game events); "Play animation" now aims at the instance's own copy of
+  the layer (`cmd::game::aim_animations_at_instances`, via each layer's `source`), so a button
+  that pulses its glow pulses the hovered button, not the main component.
 
 ## Decisions
 - Game screens are free-form (owner, 2026-11-03): no predefined screen types. The kit's screens
@@ -53,6 +57,7 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   prototype settings.
 - `crates/ui-egui/src/app/commands.rs` `game.settings`: selects nothing and shows the Prototype tab.
 - `crates/ui-egui/src/present/chrome.rs` `finish`: sounds scaled by `Play::volume`.
+- `crates/engine/src/proto_run.rs` `play_interactions`: calls `cmd::game::aim_animations_at_instances`.
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.
 
@@ -69,7 +74,6 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - Dev machine (Arch): the web target comes from `pacman -S rust-wasm` (no rustup).
 
 ## Next
-- G6: interactions inside component variants carry sounds/animations/game events everywhere.
 - G0.3: checkpoint and recovery copy every 2 minutes.
 - G2.3: try controllers on Linux/macOS (gilrs code is in).
 - G7: share link opening in Play (code is in, untested).

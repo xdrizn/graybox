@@ -95,7 +95,7 @@ Death are only *examples* in the starter kit, never required.
 - [x] Library of preset animations: fade in/out, slide in/out (4 directions), scale pop, pulse,
   shake, bounce, blink, with duration and easing (reuse upstream easings).
 - [x] **Play animation** action on any trigger, applicable to any layer, instance or variant.
-- [ ] Components with variants accept animations, sounds and game events in their interactions,
+- [x] Components with variants accept animations, sounds and game events in their interactions,
   so a button or a health bar component carries its own behaviour everywhere it is used.
 
 ### G7 — Share

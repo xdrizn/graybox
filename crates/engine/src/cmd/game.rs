@@ -389,3 +389,29 @@ fn starter_kit(s: &mut Session, _: &Value) -> Result<Value> {
     s.set_selection(vec![hud]);
     Ok(result)
 }
+
+/// In a prototype, "Play animation" actions an instance plays (its main's, or a layer's inside it)
+/// aim at the instance's own copy of the layer, not at the main component's: a button component
+/// that pulses its glow pulses the glow of the button that was hovered. Called on the play copy by
+/// [`crate::proto_run::play_interactions`].
+pub fn aim_animations_at_instances(doc: &mut Document) {
+    let instances: Vec<(NodeId, NodeId)> =
+        doc.nodes().filter_map(|n| if let NodeKind::Instance { component, .. } = &n.kind { Some((n.id, *component)) } else { None }).collect();
+    for (instance, component) in instances {
+        let layers = doc.subtree(instance);
+        let mut map: BTreeMap<NodeId, NodeId> = layers.iter().filter_map(|id| Some((doc.node(*id)?.source?, *id))).collect();
+        map.insert(component, instance);
+        for id in layers {
+            let Some(node) = doc.node_mut(id) else { continue };
+            for it in &mut node.interactions {
+                figcraft_doc::proto::walk_mut(&mut it.actions, &mut |action| {
+                    if let Action::PlayAnimation { target, .. } = action
+                        && let Some(own) = map.get(target)
+                    {
+                        *target = *own;
+                    }
+                });
+            }
+        }
+    }
+}
