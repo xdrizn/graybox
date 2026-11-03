@@ -190,10 +190,7 @@ pub(crate) fn fail_input_acks(app: &mut FigApp, viewport: ViewportId) {
 }
 
 fn title_of(ds: Option<&DocState>) -> String {
-    match ds {
-        Some(ds) => format!("{}{} – FigCraft", ds.doc.name, if ds.is_dirty() { " •" } else { "" }),
-        None => "FigCraft".into(),
-    }
+    crate::game::brand::window_title(ds.map(|ds| (ds.doc.name.as_str(), ds.is_dirty())))
 }
 
 impl FigApp {
