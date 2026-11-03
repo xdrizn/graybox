@@ -219,3 +219,71 @@ fn component_behaviour_follows_every_instance() {
     ));
     let _ = page;
 }
+
+fn menu_scene(s: &mut Session) -> (figcraft_doc::NodeId, figcraft_doc::NodeId, figcraft_doc::NodeId) {
+    let list = id_of(&ex(s, "frame.create", json!({"width": 200, "height": 200, "props": {"layout": "vertical", "gap": 8}}))["id"]).unwrap();
+    let row = id_of(&ex(s, "shape.rectangle", json!({"parent": list, "width": 200, "height": 40}))["id"]).unwrap();
+    let plain = id_of(&ex(s, "frame.create", json!({"x": 400, "width": 200, "height": 200}))["id"]).unwrap();
+    (list, row, plain)
+}
+
+#[test]
+fn menu_set_enables_updates_disables_and_undoes() {
+    use figcraft_doc::game::{DisabledItems, MenuSettings};
+    let mut s = Session::new();
+    let (list, row, _) = menu_scene(&mut s);
+    ex(&mut s, "game.menu.set", json!({"node": list, "enabled": true}));
+    assert_eq!(s.doc().unwrap().game.menus[&list], MenuSettings::default());
+    ex(&mut s, "game.menu.set", json!({"node": list, "wrap": true, "start": row, "remember": false, "disabled": "skip"}));
+    let m = &s.doc().unwrap().game.menus[&list];
+    assert!(m.wrap && !m.remember && m.start == Some(row) && m.disabled == DisabledItems::Skip);
+    ex(&mut s, "game.menu.set", json!({"node": list, "start": null}));
+    assert_eq!(s.doc().unwrap().game.menus[&list].start, None);
+    ex(&mut s, "game.menu.set", json!({"node": list, "enabled": false}));
+    assert!(s.doc().unwrap().game.menus.is_empty());
+    ex(&mut s, "edit.undo", json!({}));
+    assert!(s.doc().unwrap().game.menus.contains_key(&list));
+}
+
+#[test]
+fn menu_set_refuses_frames_without_auto_layout_and_foreign_start() {
+    let mut s = Session::new();
+    let (list, _, plain) = menu_scene(&mut s);
+    let before = s.doc().unwrap().game.clone();
+    for params in [
+        json!({"node": plain, "enabled": true}),
+        json!({"node": list, "start": plain}),
+        json!({"node": list, "disabled": "maybe"}),
+        json!({"node": list, "wrap": "yes"}),
+        json!({"node": 999_999, "enabled": true}),
+        json!({}),
+    ] {
+        assert!(s.execute("game.menu.set", &params).is_err(), "{params}");
+        assert_eq!(s.doc().unwrap().game, before);
+    }
+}
+
+#[test]
+fn menu_set_drops_menus_whose_frame_is_gone() {
+    let mut s = Session::new();
+    let (list, _, _) = menu_scene(&mut s);
+    let other = id_of(&ex(&mut s, "frame.create", json!({"x": 800, "width": 100, "height": 100, "props": {"layout": "grid"}}))["id"]).unwrap();
+    ex(&mut s, "game.menu.set", json!({"node": list, "enabled": true}));
+    ex(&mut s, "edit.delete", json!({"ids": [list]}));
+    ex(&mut s, "game.menu.set", json!({"node": other, "enabled": true}));
+    let menus = &s.doc().unwrap().game.menus;
+    assert!(menus.contains_key(&other) && !menus.contains_key(&list));
+}
+
+#[test]
+fn bind_accepts_menu_actions_and_reset_restores_them() {
+    let mut s = Session::new();
+    let before = s.doc().unwrap().game.clone();
+    ex(&mut s, "game.bind", json!({"action": "menu-confirm", "keys": ["E", "Gamepad A"]}));
+    assert_eq!(s.doc().unwrap().game.menu_bindings["menu-confirm"], ["E", "Gamepad A"]);
+    // Menu keys may also be gameplay keys, but not another menu action's.
+    ex(&mut s, "game.bind", json!({"action": "menu-back", "keys": ["R"]}));
+    assert!(s.execute("game.bind", &json!({"action": "menu-back", "keys": ["E"]})).is_err());
+    ex(&mut s, "game.bind", json!({"reset": true}));
+    assert_eq!(s.doc().unwrap().game.menu_bindings, before.menu_bindings);
+}

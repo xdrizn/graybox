@@ -3,20 +3,27 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use figcraft_color::{Color, Paint};
-use figcraft_doc::game::{ACTIONS, EVENT_NAMES, GameSettings, validate_keys};
+use figcraft_doc::game::{ACTIONS, DisabledItems, EVENT_NAMES, GameSettings, MENU_ACTIONS, MenuSettings, default_menu_bindings, validate_keys};
 use figcraft_doc::proto::{Action, Easing, Interaction, OverlayAnchor, OverlayPosition, Transition, Trigger};
 use figcraft_doc::{Collection, Document, Mode, Node, NodeId, NodeKind, TextData, Variable, VariableValue};
 use figcraft_geom::Affine;
 use serde_json::{Value, json};
 
 use super::{CommandSpec, ok};
-use crate::params::req_string;
+use crate::params::{opt_id, req_id, req_string};
 use crate::{Result, Session, bad, spec};
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         spec!("game.setup", "Set up game variables", "{} → {variables}", true, setup),
         spec!("game.bind", "Edit game bindings", "{action?, keys? ([input names]), reset? (restore every default binding)}", true, bind),
+        spec!(
+            "game.menu.set",
+            "Set navigable menu",
+            "{node, enabled? (bool), wrap? (bool), start? (child id | null), remember? (bool), disabled? (focus|skip)}",
+            true,
+            menu_set
+        ),
         spec!("game.event.rename", "Rename game event", "{event (canonical name), name (event alias)}", true, rename_event),
         spec!("game.settings", "Game settings", "{}", false, |s, _| {
             s.doc()?;
@@ -150,16 +157,80 @@ fn bind(s: &mut Session, p: &Value) -> Result<Value> {
                 return Err(bad(cmd, "reset cannot be combined with action or keys"));
             }
             settings.bindings = GameSettings::default().bindings;
+            settings.menu_bindings = default_menu_bindings();
         } else {
             return Err(bad(cmd, "Use action and keys, or reset: true"));
         }
     } else {
         let action = req_string(cmd, p, "action")?;
-        if !ACTIONS.contains(&action.as_str()) {
+        let value = p.get("keys").ok_or_else(|| bad(cmd, "keys is required; [] unbinds an action"))?;
+        if ACTIONS.contains(&action.as_str()) {
+            settings.bindings.insert(action, keys(cmd, value)?);
+        } else if MENU_ACTIONS.contains(&action.as_str()) {
+            settings.menu_bindings.insert(action, keys(cmd, value)?);
+        } else {
             return Err(bad(cmd, "Unknown game action"));
         }
-        let value = p.get("keys").ok_or_else(|| bad(cmd, "keys is required; [] unbinds an action"))?;
-        settings.bindings.insert(action, keys(cmd, value)?);
+    }
+    settings.validate().map_err(|e| bad(cmd, e))?;
+    s.doc_mut()?.game = settings;
+    ok()
+}
+
+fn opt_bool(cmd: &str, p: &Value, key: &str) -> Result<Option<bool>> {
+    match p.get(key) {
+        None => Ok(None),
+        Some(v) => v.as_bool().map(Some).ok_or_else(|| bad(cmd, format!("{key} must be true or false"))),
+    }
+}
+
+fn menu_set(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "game.menu.set";
+    let node = req_id(cmd, p, "node")?;
+    let doc = s.doc()?;
+    let frame = doc.node(node).ok_or_else(|| bad(cmd, "No such layer"))?;
+    let mut settings = doc.game.clone();
+    // Menus whose frame is gone are dropped on the way.
+    settings.menus.retain(|id, _| doc.contains(*id));
+    let enabled = opt_bool(cmd, p, "enabled")?;
+    let wrap = opt_bool(cmd, p, "wrap")?;
+    let remember = opt_bool(cmd, p, "remember")?;
+    let disabled = match p.get("disabled") {
+        None => None,
+        Some(v) => Some(match v.as_str() {
+            Some("focus") => DisabledItems::Focus,
+            Some("skip") => DisabledItems::Skip,
+            _ => return Err(bad(cmd, "disabled must be \"focus\" or \"skip\"")),
+        }),
+    };
+    let start = match p.get("start") {
+        None => None,
+        Some(_) => Some(opt_id(cmd, p, "start")?),
+    };
+    if enabled == Some(false) {
+        settings.menus.remove(&node);
+    } else {
+        if frame.layout.is_none() || !frame.kind.is_frame_like() {
+            return Err(bad(cmd, "Navigable menus need an auto layout frame"));
+        }
+        if let Some(Some(child)) = start
+            && !frame.children.contains(&child)
+        {
+            return Err(bad(cmd, "start must be a direct child of the menu"));
+        }
+        let menu = settings.menus.entry(node).or_insert_with(MenuSettings::default);
+        if let Some(wrap) = wrap {
+            menu.wrap = wrap;
+        }
+        if let Some(remember) = remember {
+            menu.remember = remember;
+        }
+        if let Some(disabled) = disabled {
+            menu.disabled = disabled;
+        }
+        if let Some(start) = start {
+            menu.start = start;
+        }
     }
     settings.validate().map_err(|e| bad(cmd, e))?;
     s.doc_mut()?.game = settings;
