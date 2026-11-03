@@ -5,11 +5,14 @@
 pub mod arena;
 mod clock;
 mod controller;
+pub mod menu;
 mod state;
 pub use clock::{FixedClock, MAX_STEPS, STEP_SECS};
 use glam::Vec3;
 pub use state::{Debris, GameEvent, Input, MAGAZINE_SIZE, MAX_DEBRIS, MAX_ENEMIES, MAX_PROJECTILES, Player, Projectile, Sentinel};
 
+#[cfg(test)]
+mod menu_tests;
 #[cfg(test)]
 mod tests;
 
