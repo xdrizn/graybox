@@ -1926,6 +1926,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "figcraft-game"
+version = "0.15.0"
+
+[[package]]
 name = "figcraft-geom"
 version = "0.15.0"
 dependencies = [
@@ -2088,6 +2092,7 @@ dependencies = [
  "figcraft-doc",
  "figcraft-engine",
  "figcraft-format",
+ "figcraft-game",
  "figcraft-geom",
  "figcraft-layout",
  "figcraft-pathops",

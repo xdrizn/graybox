@@ -20,6 +20,8 @@ pub mod canvas;
 pub mod cjk;
 pub mod control;
 pub mod dialogs;
+/// Greybox: Play mode's platform side (docs/game/STATUS.md › Upstream hooks).
+pub mod game;
 pub mod home;
 pub mod i18n;
 pub mod icons;

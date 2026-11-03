@@ -1,0 +1,11 @@
+[package]
+name = "figcraft-game"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Greybox game layer: the simulation of the playable low-poly test scene under a prototype in Play mode (no windowing, GPU, input devices or audio)"
+
+[lints]
+workspace = true
+
+[dependencies]
