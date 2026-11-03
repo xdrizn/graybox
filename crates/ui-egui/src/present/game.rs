@@ -38,6 +38,7 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
         play.pads_held = held;
         if !play.entered {
             play.entered = true;
+            play.volume = ctx.data(|d| d.get_temp::<f32>(egui::Id::unique(VOLUME_KEY))).unwrap_or(1.0);
             play.was_fullscreen = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
             if cfg!(target_arch = "wasm32") {
                 play.captured = app.services.game_cursor_locked() == Some(true);
@@ -105,6 +106,7 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
         }
         super::player::player(&mut p, ui, rect, now, FULL);
         help(&p, ui, rect);
+        volume_control(&mut p, ui, rect);
     });
     super::chrome::finish(app, &mut p, &ctx);
     app.ui.present = Some(p);
@@ -230,6 +232,32 @@ fn publish(p: &mut Presenter) {
     }
     if let Some(before) = before {
         p.settle(&before);
+    }
+}
+
+const VOLUME_KEY: &str = "greybox.play.volume";
+
+/// The player's volume, bottom right, while the mouse is free (a menu is open or the cursor was
+/// released). It scales every sound on top of the file's volumes and is kept for the app run.
+fn volume_control(p: &mut Presenter, ui: &mut Ui, rect: Rect) {
+    let Some(play) = &mut p.game else { return };
+    if play.captured {
+        return;
+    }
+    let t = crate::theme::Tokens::get(ui.ctx());
+    let r = Rect::from_min_size(pos2(rect.max.x - 236.0, rect.max.y - 52.0), vec2(220.0, 32.0));
+    ui.painter().rect_filled(r, 4, t.panel.gamma_multiply(0.9));
+    let mut volume = play.volume;
+    ui.scope_builder(egui::UiBuilder::new().max_rect(r.shrink2(vec2(10.0, 6.0))), |ui| {
+        ui.horizontal_centered(|ui| {
+            ui.label(egui::RichText::new("Volume").color(t.text).font(crate::theme::regular(12.0)));
+            ui.spacing_mut().slider_width = 120.0;
+            ui.add(egui::Slider::new(&mut volume, 0.0..=1.0).show_value(false));
+        });
+    });
+    if (volume - play.volume).abs() > f32::EPSILON && volume.is_finite() {
+        play.volume = volume.clamp(0.0, 1.0);
+        ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique(VOLUME_KEY), play.volume));
     }
 }
 

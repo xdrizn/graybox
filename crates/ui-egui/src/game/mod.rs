@@ -36,6 +36,8 @@ pub struct Play {
     pub(crate) pending: Vec<GameSet>,
     /// What each open overlay changed, undone when it closes (oldest first).
     holds: Vec<Hold>,
+    /// The player's own volume in Play (0..1), on top of the file's volumes. Kept for the app run.
+    pub(crate) volume: f32,
 }
 
 /// A game action from a prototype interaction.
@@ -55,7 +57,7 @@ struct Hold {
 
 impl Play {
     pub fn new() -> Self {
-        Self { captured: true, ..Self::default() }
+        Self { captured: true, volume: 1.0, ..Self::default() }
     }
 
     /// Advance the game to `now`, egui's input time (seconds). The first frame only starts the

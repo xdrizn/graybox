@@ -264,8 +264,9 @@ fn poll_pads(app: &mut FigApp, p: &mut Presenter, ctx: &egui::Context) {
 /// further link that fires while the notice shows is dropped, whatever fired it.
 pub(super) fn finish(app: &mut FigApp, p: &mut Presenter, ctx: &egui::Context) {
     if let Some(doc) = &p.design {
+        let player_volume = p.game.as_ref().map_or(1.0, |g| g.volume);
         for (sound, volume) in p.sound_requests.drain(..) {
-            if let Err(error) = crate::game::audio::play(ctx, &doc.audio, &sound, volume) {
+            if let Err(error) = crate::game::audio::play(ctx, &doc.audio, &sound, volume * player_volume) {
                 app.toast(error);
             }
         }

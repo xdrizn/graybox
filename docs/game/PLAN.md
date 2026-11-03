@@ -86,9 +86,10 @@ Death are only *examples* in the starter kit, never required.
 - [x] Sound library per file: import WAV/OGG/MP3 into the `.figcraft` file.
 - [x] **Play sound** action on any trigger (click, hover, key/gamepad, game event, after delay),
   including interactions inside component variants (hover sound on a button variant, etc.).
-- [ ] **Master volume** and **per-sound volume** (plus optional groups: UI, SFX, music), adjustable
+- [x] **Master volume** and **per-sound volume** (plus optional groups: UI, SFX, music), adjustable
   in the editor and in Play mode.
-- [ ] Desktop and web (web audio starts on the Play click). Pure-Rust audio crate (e.g. `kira`).
+- [x] Desktop and web (web audio starts on the Play click). Pure-Rust audio crate (rodio + symphonia).
+  Desktop checked in the app; the web build compiles (sound not yet heard in a browser).
 
 ### G6 — Ready-made animations
 - [x] Library of preset animations: fade in/out, slide in/out (4 directions), scale pop, pulse,

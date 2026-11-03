@@ -1,6 +1,6 @@
 # Game layer — status
 
-**Current milestone:** G5 — Sound (master and group volumes, web audio check)
+**Current milestone:** G6 — Animations in component variants
 
 ## Done
 - G0.1 (2026-11-03): `crates/game` (`figcraft-game`, pure simulation, L2) with the game's fixed
@@ -17,6 +17,10 @@
   sounds, share, example screens) moved from a floating window to the Prototype tab with nothing
   selected. The starter kit's HUD, Inventory, Pause, Map and Death are examples built from plain
   interactions (`cmd::game::example_interactions`); `examples/game-starter.figcraft` regenerated.
+- G5 (2026-11-03): sound checked end to end on desktop (import, Play sound from a key trigger in
+  Play, no errors). Added the player's own Volume slider in Play, bottom right while the mouse is
+  free; it scales every sound on top of the file's master, group and sound volumes and is kept
+  for the app run. `cargo xtask wasm` passes.
 
 ## Decisions
 - Game screens are free-form (owner, 2026-11-03): no predefined screen types. The kit's screens
@@ -48,6 +52,7 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::prototype_section` after the
   prototype settings.
 - `crates/ui-egui/src/app/commands.rs` `game.settings`: selects nothing and shows the Prototype tab.
+- `crates/ui-egui/src/present/chrome.rs` `finish`: sounds scaled by `Play::volume`.
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.
 
@@ -55,7 +60,7 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - Fail on this Windows machine before the G4 rework too: `fig_export_assets_tests::every_example_keeps_its_variables_and_styles`
   (.fig export drops the starter kit's number→text binding) and `fig_font_names_tests`
   (depends on installed fonts). `cargo fmt --check` flags `apps/figcraft-web/src/game_input.rs`
-  and `web.rs` (from 32b0bc22). No wasm target installed here, so the browser build is unchecked.
+  and `web.rs` (from 32b0bc22).
 - `figcraft-engine` test `board_tables_tests::a_double_click_types_in_the_cell_and_its_row_grows_with_the_text`
   fails on this machine at upstream commit `db3cb317` too, before any game change (checked on a
   clean worktree). Probably text measurement without `../craft-fonts`. Everything else in
@@ -64,7 +69,6 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - Dev machine (Arch): the web target comes from `pacman -S rust-wasm` (no rustup).
 
 ## Next
-- Check sound end to end (import, Play sound on a button hover, volumes) and tick G5.
 - G6: interactions inside component variants carry sounds/animations/game events everywhere.
 - G0.3: checkpoint and recovery copy every 2 minutes.
 - G2.3: try controllers on Linux/macOS (gilrs code is in).
