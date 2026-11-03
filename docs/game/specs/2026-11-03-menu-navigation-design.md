@@ -67,7 +67,8 @@ Rejected:
 ### Storage
 - Stored per file in `GameSettings` (`crates/doc/src/game.rs`) as
   `menus: BTreeMap<NodeId, MenuSettings>`, not on the upstream node, so upstream's document format
-  stays untouched. A menu whose frame was deleted or lost auto layout is ignored (and dropped on save).
+  stays untouched. A menu whose frame was deleted or lost auto layout is ignored (and dropped the next time
+  `game.menu.set` runs).
 - Older files without `menus` load with none. Bounded: at most a few thousand entries, validated on load.
 
 ### Code layout
