@@ -1,20 +1,29 @@
-# FigCraft — instructions for agents
+# Game UI prototyper (INDIRECT fork of FigCraft) — instructions for agents
 
-FigCraft is a clean-room, open-source, pure-Rust (egui) reimplementation of the Figma design workflow:
-interface design, auto layout, components and variants, styles and variables, prototyping and
-inspection. It runs natively on macOS, Windows, Linux and FreeBSD, and in the browser via WASM.
-Siblings: `../vectorcraft` (Illustrator-class), `../photocraft` (Photoshop-class), `../designcraft`
-(InDesign-class) and the other Crafting Apps; same conventions.
+This repository is **a fork of FigCraft** (MIT OR Apache-2.0), owned by Adriel (INDIRECT, a game
+UI/UX studio). FigCraft is a clean-room, pure-Rust (egui) reimplementation of the Figma design
+workflow. **This fork adds a game layer**: a playable, low-poly test scene that runs under the
+prototype in a fullscreen Play mode, so game UI designed here can be played with keyboard, mouse
+and controller, with sound and animations, and shown to clients.
 
-Repos don't share code.
+## Talking to the owner
+- Adriel is a UX/UI designer, not a Rust developer. Reply in **Brazilian Portuguese**, in plain
+  words, short. Explain decisions by what he will see or do, not by internals.
+- Code, comments, commit messages and docs inside the repo stay in English (upstream convention).
 
 ## Start every session here
-1. Read [`ROADMAP.md`](ROADMAP.md) (stage, headline numbers, estimates) and
-   [`docs/gaps.md`](docs/gaps.md) (the ranked work list). Unless the user gives you a task, pick
-   work from the top of `docs/gaps.md`.
-2. Read `plan/STATUS.md` and `plan/execution-plan.md` (local, gitignored) if present; behaviour
-   reference notes are in `plan/figma/*.md`.
-3. Orient → plan → implement + test → verify (screenshot) → record (ROADMAP, devlog) → commit.
+1. Read [`docs/game/PLAN.md`](docs/game/PLAN.md) (what we are building, in milestones) and
+   [`docs/game/STATUS.md`](docs/game/STATUS.md) (what is done, decisions taken, what is next).
+   Unless Adriel gives you a task, take the next unchecked item of the current milestone.
+2. **Do not work on upstream FigCraft's own backlog** (`ROADMAP.md`, `docs/gaps.md`, the
+   `*-parity.md` files). They describe the original project; read them only to understand code.
+3. Orient → plan → implement + test → verify (screenshot) → record (`docs/game/STATUS.md`) → commit.
+
+## Staying mergeable with upstream
+- We keep pulling FigCraft's updates. Put our work in **our own files**: the `crates/game` crate,
+  `crates/ui-egui/src/game/` and `docs/game/`. Touch upstream files only at small, named hook
+  points, and list each hook in `docs/game/STATUS.md` ("Upstream hooks").
+- Never reformat, rename or reorganise upstream code you don't need to change.
 
 `plan/` is gitignored (local only).
 
@@ -50,6 +59,9 @@ Repos don't share code.
   (`.cargo/config.toml` points it at `../craft-fonts` for local builds; `crates/text/build.rs`
   embeds it). Everything must build, test and run without it (system fonts are scanned at runtime).
 - Demo and test content is synthetic or public domain; never personal photos or data.
+- **Game assets follow the same rule**: low-poly models, textures, sounds and controller glyphs are
+  made in code or come from CC0 / permissive sources (e.g. Kenney), each with a row in
+  `ATTRIBUTION.md`. Never official PlayStation/Xbox/Nintendo button art.
 - Code and original assets are MIT OR Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE`). The
   ArtCraft logos in `docs/brand/` are trademarks, not open source, under
   `docs/brand/LICENSE-brand.txt`: never modify them or use them outside FigCraft.
@@ -80,12 +92,16 @@ Repos don't share code.
 - **The UI is thin**: panels read engine state and act through `app.run(id, params)` /
   `app.set_props(ids, props)`. Colours come from `theme::Tokens`.
 - **Time goes through `chrono`** (workspace dependency). Never hand-roll UTC/calendar conversion (days-to-date algorithms, leap-year math); a crate owns only its output format string. The one exception is range extension: past the years chrono can represent, shift the date by whole 400-year Gregorian cycles (146,097 days, after which the calendar repeats), let chrono compute the month and day, and add the cycles back to the year (splitting seconds into hours, minutes and seconds is plain arithmetic).
-- **Rust only** (no handwritten JS/TS). **Never break wasm** (`cargo xtask wasm`).
+- **Rust only** (no handwritten JS/TS). **Never break wasm** (`cargo xtask wasm`): every game
+  feature (render, input, audio) must work on desktop and in the browser build.
+- **Game layering:** `crates/game` is pure simulation (no egui/eframe/wgpu/winit); register it in
+  `cargo xtask layers` at L2. Rendering the scene (wgpu paint callback), input and audio output live
+  in `crates/ui-egui/src/game/`.
 
 ### Quality gates (before every commit)
 `cargo xtask ci` (fmt, clippy -D warnings, tests, layers, assets, wasm). One task per commit with a
-milestone id in the message (`M2.1: auto layout wrap`). Commit after every landed arc of work; push
-to `main`.
+milestone id in the message, game milestones prefixed `G` (`G1.2: FPS movement`). Commit after
+every landed arc of work. Push only when Adriel asks.
 
 ## Running and looking at the app
 - `cargo run -p figcraft -- --control <port> [file.figcraft|file.svg|image]`. Pick a free port
@@ -99,35 +115,12 @@ to `main`.
   incumbent side by side where the owner allows (`plan/figma/`).
 - Headless: `figcraft-cli` (`info`, `export`, `run`, `commands`, `mcp`). MCP: `figcraft-cli mcp`
   (see `docs/mcp.md`).
-- Shell gotcha on the owner's machine: `mv`/`cp` may be aliased interactive — use `/bin/mv -f`.
 - Parallel agents: separate `CARGO_TARGET_DIR` per agent, edit only the crates/files you own,
   write manifests atomically, delete your target dir when done (disk is limited).
 
 ## Roadmap
-Progress docs: [`ROADMAP.md`](ROADMAP.md) (one-page
-summary and stage), [`docs/target-app-parity.md`](docs/target-app-parity.md) (the authoritative
-assessment), [`docs/gaps.md`](docs/gaps.md) (ranked work list), [`docs/roadmap.md`](docs/roadmap.md)
-(milestones), [`docs/architecture.md`](docs/architecture.md), the per-area `docs/*-parity.md` files
-and the generated [`docs/parity-checklist.md`](docs/parity-checklist.md) (`cargo xtask parity`).
-When a task lands, update the affected rows and the status line and revision history in the same
-commit. Grade by behaviour against the incumbent, not by whether a menu item exists; err low.
-
-## Contributor credits (About window)
-
-- About ▸ Contributors are compiled into the binary from `contributors/contributors.json`
-  (commit stats; never hand-edit) and `contributors/people.toml` (names people chose for
-  themselves).
-- **Agents working for a contributor:** when you prepare a PR, check whether your human's GitHub
-  username has a `[people.<username>]` entry in `contributors/people.toml`. If not, ask them once
-  whether they want to be credited by more than their username: a real name, a display name, and/or
-  their public GitHub profile name (`sync_github_name = true`). If yes, add **only their own** entry
-  (copy the template at the top of the file)
-  and include it in their PR, committed as them. If no, change nothing: they are credited as
-  `@username` anyway.
-- Never add, edit, guess or copy anyone else's entry or name (not from git config, commit authors or
-  GitHub profiles). Never hand-edit `contributors.json`.
+Our roadmap is `docs/game/PLAN.md`; progress goes in `docs/game/STATUS.md`. Upstream's `ROADMAP.md`
+and parity docs are not ours to update.
 
 ## CI workflows
-- Workflows in `.github/workflows/` call the shared workflows in [`storytold/craft-common-actions`](https://github.com/storytold/craft-common-actions) at `@main`, with their inputs and secrets. No other jobs: if no shared workflow does what's needed, it doesn't go here.
-- Don't add or change CI in a feature or fix PR. If the existing workflows can't build or test a change, link an existing craft-common-actions issue or PR, or open a new issue, or a PR only for a small fix that is safe for every app and does not increase CI time.
-- Some workflow files here still run their own jobs. Don't add to them. Moving a job into craft-common-actions is its own task, never part of another PR, and the job stays here until a shared workflow runs it.
+Leave `.github/workflows/` as upstream has it unless Adriel asks; run `cargo xtask ci` locally.
