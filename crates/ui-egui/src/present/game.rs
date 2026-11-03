@@ -59,8 +59,12 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
     settle(&mut p);
     escape_frees_cursor(&mut p, &ctx);
     // The navigable menu of the open screen, if any: it owns the menu keys and stops the player.
+    // Menu keys are read only while the open screen has a menu (reading looks through its layers).
     let menu_input = p.doc.as_ref().map(|doc| {
         let root = p.overlays.last().map_or(p.current, |o| o.id);
+        if game::menu::active_menu(doc, root).is_none() {
+            return game::menu::MenuInputs::default();
+        }
         let taken = |name: &str| game::menu::layer_takes_input(doc, root, name);
         ctx.input(|i| game::menu::read_menu(i, &doc.game, held | pressed, pressed, [pad.axes[0], pad.axes[1]], &taken))
     });

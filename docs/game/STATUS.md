@@ -26,7 +26,23 @@
   the layer (`cmd::game::aim_animations_at_instances`, via each layer's `source`), so a button
   that pulses its glow pulses the hovered button, not the main component.
 
+- G4 navigable menus (2026-11-03): any auto layout frame (list, row, grid) can be switched on as
+  "Navigable menu" in the Prototype tab (`game.menu.set`, stored in `GameSettings::menus`). In
+  Play, focus moves with arrows/WASD/D-pad/left stick and the mouse, holding repeats (0.4 s, then
+  every 0.12 s), Confirm (Enter/Space/A) runs the item's On click, Back (Escape/B) closes the
+  overlay. Items that are instances of a set with a `State` property show `Focused`/`Pressed`;
+  others get an orange outline. Navigation math in `figcraft_game::menu`, focus in
+  `ui-egui/src/game/menu.rs`, applied by `present/game.rs`. Starter kit: Button, Tab and Grid
+  cell are State sets; the Inventory grid, Pause buttons and library List/Grid are menus. Checked
+  in the app (Pause list with ↓, Inventory grid with the D-pad). Spec and plan in `docs/game/specs/`.
+
 ## Decisions
+- Navigable menus (2026-11-03): menu keys live in `menu_bindings`, separate from gameplay keys
+  (WASD may move the player and the menu); a menu owns input only while the open screen has one,
+  and the player stops moving meanwhile. A key/controller interaction on the open screen for the
+  same input wins over the menu (Escape → Close overlay closes one overlay, not two). The first
+  menu in layer order owns focus (tab bars switching menus are phase 2). A focused Disabled item
+  keeps its look and gets the outline.
 - Game screens are free-form (owner, 2026-11-03): no predefined screen types. The kit's screens
   only show what interactions can do. Files with old `screens` or inventory/pause/map bindings
   still open; those are dropped on load.
@@ -58,6 +74,10 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - `crates/ui-egui/src/app/commands.rs` `game.settings`: selects nothing and shows the Prototype tab.
 - `crates/ui-egui/src/present/chrome.rs` `finish`: sounds scaled by `Play::volume`.
 - `crates/engine/src/proto_run.rs` `play_interactions`: calls `cmd::game::aim_animations_at_instances`.
+- `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one
+  selected layer (after Scroll behavior).
+- `crates/ui-egui/src/present/player.rs` `player`: calls `game::menu_overlay` right after `draw`.
+- `crates/doc/src/game.rs` and `crates/engine/src/cmd/game.rs` are ours (game settings, game commands).
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.
 
@@ -74,6 +94,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - Dev machine (Arch): the web target comes from `pacman -S rust-wasm` (no rustup).
 
 ## Next
+- Navigable menus phase 2: tab bars (LB/RB) switching the menu below; spatial focus for layers
+  without auto layout. To check: Tab sent through the control channel did not open the starter
+  Inventory in Play (the controller's View did).
 - G0.3: checkpoint and recovery copy every 2 minutes.
 - G2.3: try controllers on Linux/macOS (gilrs code is in).
 - G7: share link opening in Play (code is in, untested).
