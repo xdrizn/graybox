@@ -3,7 +3,7 @@ use super::{Presenter, layout::FULL};
 use crate::{FigApp, game};
 use egui::{Align2, Context, CursorGrab, Key, Rect, Ui, ViewportCommand, pos2, vec2};
 use figcraft_doc::proto::Trigger;
-use figcraft_doc::{NodeId, VariableValue};
+use figcraft_doc::{NodeId, NodeKind, VariableValue};
 
 pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
     let ctx = ui.ctx().clone();
@@ -58,6 +58,14 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
     }
     settle(&mut p);
     escape_frees_cursor(&mut p, &ctx);
+    // The navigable menu of the open screen, if any: it owns the menu keys and stops the player.
+    let menu_input = p.doc.as_ref().map(|doc| {
+        let root = p.overlays.last().map_or(p.current, |o| o.id);
+        let taken = |name: &str| game::menu::layer_takes_input(doc, root, name);
+        ctx.input(|i| game::menu::read_menu(i, &doc.game, held | pressed, pressed, [pad.axes[0], pad.axes[1]], &taken))
+    });
+    let menu_active = menu_input.is_some_and(|input| menu_step(&mut p, &input, now));
+    settle(&mut p);
     app.services.game_capture_allowed(p.game.as_ref().is_some_and(|g| g.captured || p.overlays.is_empty()));
     if let (Some(play), Some(doc)) = (&mut p.game, &p.design) {
         if p.overlays.is_empty() && ctx.input(|i| i.pointer.primary_pressed()) {
@@ -74,7 +82,7 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
             play.game.input.look[0] += pad.axes[2] * dt * 2.5;
             play.game.input.look[1] -= pad.axes[3] * dt * 2.5;
         }
-        if !play.captured {
+        if !play.captured || menu_active {
             play.game.input.forward = 0.0;
             play.game.input.strafe = 0.0;
             play.game.input.jump = false;
@@ -276,4 +284,77 @@ fn help(p: &Presenter, ui: &Ui, rect: Rect) {
     let r = Rect::from_center_size(pos2(rect.center().x, rect.max.y - 24.0), vec2(rect.width().min(650.0) - 24.0, 28.0));
     ui.painter().rect_filled(r, 4, t.panel.gamma_multiply(0.9));
     ui.painter().text(r.center(), Align2::CENTER_CENTER, text, crate::theme::regular(12.0), t.text);
+}
+
+#[cfg(test)]
+#[path = "game_menu_tests.rs"]
+mod menu_tests;
+
+pub(super) use crate::game::menu::MenuInputs;
+
+/// One frame of the navigable menu the open screen (top overlay, else the frame) owns: move focus,
+/// show it, confirm and go back. True when a menu is active (it owns the menu keys).
+pub(super) fn menu_step(p: &mut Presenter, input: &MenuInputs, now: f64) -> bool {
+    let root = p.overlays.last().map_or(p.current, |o| o.id);
+    let plan = match (p.doc.as_ref(), p.game.as_mut()) {
+        (Some(doc), Some(play)) => play.menu.plan(doc, root, input, now),
+        _ => return false,
+    };
+    if !plan.looks.is_empty()
+        && let Some(d) = p.design.as_mut()
+    {
+        let before = d.clone();
+        for (item, variant) in &plan.looks {
+            if let Some(n) = d.node_mut(*item)
+                && let NodeKind::Instance { component, .. } = &mut n.kind
+            {
+                *component = *variant;
+            }
+            figcraft_engine::components::sync_instance(d, *item);
+        }
+        p.settle(&before);
+    }
+    if let Some(item) = plan.confirm {
+        // The item's own On click (or the first layer inside it that has one).
+        let found = p.doc.as_ref().and_then(|doc| {
+            doc.subtree(item).into_iter().find_map(|id| super::actions::find_trigger(doc, id, |t| *t == Trigger::OnClick).map(|k| (id, k)))
+        });
+        if let Some((id, k)) = found {
+            p.fire(id, k, None, now);
+        }
+    }
+    if plan.back && !p.overlays.is_empty() {
+        p.close_overlay(now);
+    }
+    plan.active
+}
+
+/// The pointer at `pointer` is over layer `hit`; see [`game::menu::Focus::point`].
+pub(super) fn menu_pointer(p: &mut Presenter, hit: Option<NodeId>, pointer: Option<[f32; 2]>) {
+    if let (Some(doc), Some(play)) = (p.doc.as_ref(), p.game.as_mut()) {
+        play.menu.point(doc, hit, pointer);
+    }
+}
+
+/// After the prototype is drawn: the pointer marks menu items and an item without a State variant
+/// gets a focus outline.
+pub(super) fn menu_overlay(p: &mut Presenter, painter: &egui::Painter, ctx: &Context, l: &super::layout::Layout) {
+    if p.game.as_ref().is_none_or(|g| g.menu.menu.is_none()) {
+        return;
+    }
+    let (root, place, clip) = l.active(p.current);
+    let pos = ctx.pointer_hover_pos().filter(|q| clip.contains(*q));
+    let hit = pos.and_then(|q| super::chrome::layer_at(&l.disp, root, &place, q));
+    menu_pointer(p, hit, pos.map(|q| [q.x, q.y]));
+    let Some(focus) = p.game.as_ref().map(|g| &g.menu) else { return };
+    if let (true, Some(item)) = (focus.outline, focus.item)
+        && let Some(b) = l.disp.world_bounds(item)
+    {
+        painter.with_clip_rect(clip).rect_stroke(
+            place.rect(b),
+            egui::CornerRadius::ZERO,
+            egui::Stroke::new(2.0, crate::theme::ACCENT),
+            egui::StrokeKind::Outside,
+        );
+    }
 }

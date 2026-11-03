@@ -78,6 +78,8 @@ pub(super) fn player(p: &mut Presenter, ui: &mut Ui, rect: Rect, now: f64, chrom
         painter.rect_filled(l.screen, CornerRadius::ZERO, bg);
     }
     draw(p, &painter, &ctx, &l, now);
+    // Greybox: navigable menu pointer focus and focus outline (Play mode only).
+    super::game::menu_overlay(p, &painter, &ctx, &l);
     if p.view.inspect && !chrome.pane {
         inspect_hover(p, &painter, &ctx, &l, area);
     }

@@ -7,6 +7,7 @@ pub mod audio;
 pub mod brand;
 pub mod editor;
 pub(crate) mod input;
+pub mod menu;
 pub mod renderer;
 pub mod share;
 
@@ -38,6 +39,8 @@ pub struct Play {
     holds: Vec<Hold>,
     /// The player's own volume in Play (0..1), on top of the file's volumes. Kept for the app run.
     pub(crate) volume: f32,
+    /// Focus in the navigable menu the open screen owns.
+    pub(crate) menu: menu::Focus,
 }
 
 /// A game action from a prototype interaction.
