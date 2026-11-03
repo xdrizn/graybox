@@ -6,8 +6,8 @@
 - G0.1 (2026-11-03): `crates/game` (`figcraft-game`, pure simulation, L2) with the game's fixed
   60 Hz clock (`Game::advance`, `FixedClock`); `crates/ui-egui/src/game/` with `Play`, which
   drives the game from egui's frame time. Not shown in the app yet (Play mode is G1).
-- Branding (2026-11-03): the app shows "Graybox by INDIRECT®" (window title, Windows file
-  properties, Home sidebar wordmark, Help ▸ About Graybox). About credits FigCraft and its licence.
+- Branding (2026-11-03): the app shows "Graybox by INDIRECT®" (window title and Windows file
+  properties; "Graybox" in the Home wordmark and Help ▸ About Graybox). About credits FigCraft.
   Code in `crates/ui-egui/src/game/brand.rs`.
 
 ## Decisions

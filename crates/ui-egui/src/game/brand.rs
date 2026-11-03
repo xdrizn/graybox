@@ -22,8 +22,6 @@ pub const NAME: &str = "Graybox";
 pub const FULL_NAME: &str = "Graybox by INDIRECT®";
 /// The About window title and Help menu item.
 pub const ABOUT: &str = "About Graybox";
-/// The studio credit after the wordmark.
-const BY: &str = "by INDIRECT®";
 
 /// The window title for an open file (or none).
 pub fn window_title(file: Option<(&str, bool)>) -> String {
@@ -36,7 +34,7 @@ pub fn window_title(file: Option<(&str, bool)>) -> String {
 /// The About window's text under the wordmark. Keeps the credit and licence of FigCraft, the
 /// open-source app Graybox is built on.
 pub fn about_text(ui: &mut egui::Ui, t: &Tokens) {
-    ui.label("Game UI prototyping by INDIRECT: design an interface, then play it over a test scene with keyboard, mouse and controller.");
+    ui.label("Game UI prototyping: design an interface, then play it over a test scene with keyboard, mouse and controller.");
     ui.add_space(8.0);
     ui.hyperlink_to("github.com/xdrizn/graybox", "https://github.com/xdrizn/graybox");
     ui.add_space(8.0);
@@ -47,16 +45,13 @@ pub fn about_text(ui: &mut egui::Ui, t: &Tokens) {
     );
 }
 
-/// The two-tone "Graybox" wordmark followed by a smaller studio credit.
+/// The two-tone "Graybox" wordmark (the studio credit is only in the window title).
 pub fn paint_wordmark(painter: &egui::Painter, left_center: egui::Pos2, size: f32, t: &Tokens) {
     let font = crate::theme::brand(size);
     let gray = painter.layout_no_wrap("Gray".into(), font.clone(), t.text);
     let gray_width = gray.size().x;
     painter.galley(egui::pos2(left_center.x, left_center.y - gray.size().y / 2.0), gray, t.text);
-    let rect = painter.text(egui::pos2(left_center.x + gray_width, left_center.y), egui::Align2::LEFT_CENTER, "box", font, t.accent_text);
-    // The credit sits on the wordmark's baseline, a little lower than its centre.
-    let small = crate::theme::regular((size * 0.6).max(8.0));
-    painter.text(egui::pos2(rect.max.x + size * 0.3, left_center.y + size * 0.12), egui::Align2::LEFT_CENTER, BY, small, t.text_secondary);
+    painter.text(egui::pos2(left_center.x + gray_width, left_center.y), egui::Align2::LEFT_CENTER, "box", font, t.accent_text);
 }
 
 #[cfg(test)]
