@@ -637,3 +637,9 @@ mod widgets_tests;
 mod selection_reorder_tests;
 #[cfg(test)]
 mod selection_spacing_tests;
+
+#[cfg(test)]
+#[path = "cmd/audio_tests.rs"]
+mod game_audio_tests;
+#[cfg(test)]
+mod game_config_tests;

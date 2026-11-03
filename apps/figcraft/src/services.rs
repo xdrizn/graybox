@@ -564,6 +564,9 @@ impl Services for Desktop {
     fn gamepad_held(&mut self) -> u32 {
         crate::gamepad::held()
     }
+    fn gamepad_state(&mut self) -> figcraft_ui_egui::GamepadState {
+        crate::gamepad::sample()
+    }
     fn system_language(&self) -> Option<String> {
         self.language.clone()
     }

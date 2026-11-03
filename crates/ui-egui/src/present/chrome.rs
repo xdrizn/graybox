@@ -41,6 +41,10 @@ pub fn show(app: &mut FigApp, ui: &mut Ui) {
     let ctx = ui.ctx().clone();
     let now = ctx.input(|i| i.time);
     let Some(mut pres) = app.ui.present.take() else { return };
+    if pres.game.is_some() {
+        super::game::show(app, ui, pres, now);
+        return;
+    }
     // A tab can play a file that is closed or not in front. Then it must not read or change
     // the file in front.
     let live = crate::tabs::present_owner_active(app);
@@ -102,7 +106,7 @@ pub fn show(app: &mut FigApp, ui: &mut Ui) {
     } else if app.ui.comments.open.is_some() {
         app.ui.comments.close();
     }
-    finish(app, &mut pres);
+    finish(app, &mut pres, &ctx);
     link_notice(app, &mut pres, &ctx, Id::unique("present_link_notice"));
     // The options carry over to the next presentation.
     app.ui.present_view = pres.view;
@@ -258,7 +262,14 @@ fn poll_pads(app: &mut FigApp, p: &mut Presenter, ctx: &egui::Context) {
 /// only a link the viewer's own click, press, drag or key fired, one per frame, and never while a
 /// notice shows: a delay or the pointer passing over a layer never opens anything unasked. A
 /// further link that fires while the notice shows is dropped, whatever fired it.
-fn finish(app: &mut FigApp, p: &mut Presenter) {
+pub(super) fn finish(app: &mut FigApp, p: &mut Presenter, ctx: &egui::Context) {
+    if let Some(doc) = &p.design {
+        for (sound, volume) in p.sound_requests.drain(..) {
+            if let Err(error) = crate::game::audio::play(ctx, &doc.audio, &sound, volume) {
+                app.toast(error);
+            }
+        }
+    }
     let skipped = app.session.prefs.link_notice_skipped;
     let mut opened = false;
     for (u, asked, new_tab) in p.urls.drain(..) {
@@ -436,7 +447,7 @@ pub fn show_pane(app: &mut FigApp, ctx: &egui::Context) {
             let (rect, _) = ui.allocate_exact_size(ui.available_size(), Sense::hover());
             action = player(&mut pane.player, ui, rect, now, chrome);
         });
-    finish(app, &mut pane.player);
+    finish(app, &mut pane.player, ctx);
     link_notice(app, &mut pane.player, ctx, pane_id().with("link_notice"));
     match action {
         Some(BarAction::Close) => {}

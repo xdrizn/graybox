@@ -196,6 +196,21 @@ impl FigApp {
                         tabs::open_present(self, start);
                     }
                 }
+                "game.play" => {
+                    if let Some(start) = r.data.get("start").and_then(figcraft_engine::params::id_of) {
+                        if self.session.active_read_only().is_none() && self.run("game.setup", json!({})).is_none() {
+                            continue;
+                        }
+                        tabs::open_present(self, start);
+                        if let Some(p) = self.ui.present.as_mut() {
+                            p.game = Some(crate::game::Play::new());
+                            p.view.hide_ui = true;
+                            p.view.device_frame = false;
+                            p.view.hotspot_hints = false;
+                        }
+                    }
+                }
+                "game.settings" => self.ui.game_settings = true,
                 "present.options" => {
                     let v = &mut self.ui.present_view;
                     if let Some(s) = r.data.get("scale").and_then(|s| s.as_str()).and_then(present::PresentScale::parse) {

@@ -16,7 +16,9 @@ use crate::live_tests::{flat, has_text, text_center, texts};
 
 /// The app as a first run finds it: no documents, no recent files.
 fn first_run() -> Ui {
-    Ui::new(Session::empty())
+    let mut session = Session::empty();
+    session.prefs.theme = "light".into();
+    Ui::new(session)
 }
 
 fn shapes(u: &mut Ui) -> Vec<Shape> {
@@ -355,6 +357,7 @@ fn thumbnails_are_cached_per_theme() {
 #[test]
 fn the_home_screen_draws_no_frames_once_its_thumbnails_are_in() {
     let (mut h, _) = crate::live_tests::Harness::new();
+    h.app.session.prefs.theme = "light".into();
     h.app.ui.home = true;
     for tab in [Section::Templates, Section::Online, Section::Recents] {
         h.app.ui.home_view.section = tab;

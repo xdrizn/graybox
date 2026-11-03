@@ -352,8 +352,8 @@ pub(crate) use clock::repaint_in;
 pub use clock::{AUTO_SAVE_SECS, AUTOSAVE_SECS, FrameClock, ToastClock};
 pub(crate) use open::{drop_overlay, dropped_bytes, is_document, opens};
 pub use services::{
-    ContentsFuture, DialogFuture, MAX_CLIPBOARD_PNG_BYTES, NoServices, ReadFuture, Services, browser_can_read, browser_stopped, egui_copy_png,
-    egui_copy_text, unreadable,
+    ContentsFuture, DialogFuture, GamepadState, MAX_CLIPBOARD_PNG_BYTES, NoServices, ReadFuture, Services, browser_can_read, browser_stopped,
+    egui_copy_png, egui_copy_text, unreadable,
 };
 use services::{DialogDone, PickFuture, Picked, RepaintWaker};
 pub use state::{
@@ -456,6 +456,7 @@ pub struct UiState {
     /// A message at the bottom of the window and how long it has been showing.
     pub toast: Option<(String, ToastClock)>,
     pub present: Option<present::Presenter>,
+    pub game_settings: bool,
     pub presents: Vec<present::PresentTab>,
     /// The tab shown last. It is on screen while `present` has a value.
     pub present_active: Option<u64>,
@@ -645,6 +646,7 @@ impl Default for UiState {
             icon_gallery: false,
             toast: None,
             present: None,
+            game_settings: false,
             presents: Vec::new(),
             present_active: None,
             present_next: 1,

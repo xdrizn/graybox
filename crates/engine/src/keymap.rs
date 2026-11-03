@@ -345,6 +345,7 @@ pub static KEYS: &[Binding] = &[
     // Prototype
     k(Prototype, "proto.present", &["Alt+Cmd+Enter"]).label("Present"),
     k(Prototype, "proto.preview", &["Shift+Space"]).label("Preview in the canvas"),
+    k(Prototype, "game.play", &["F9"]).label("Play game"),
 ];
 
 /// Pointer gestures and held keys the panel lists next to the bindings (handled by the canvas, not

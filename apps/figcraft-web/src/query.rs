@@ -31,3 +31,11 @@ pub fn page_server(content: &str) -> Option<String> {
 pub fn control(search: &str) -> bool {
     search.strip_prefix('?').unwrap_or(search).split('&').any(|entry| entry.split('=').next() == Some("control"))
 }
+
+/// Whether the page asks to enter Play after its fragment's invitation has joined a real
+/// document. Like `control`, this is an exact query entry, never a search through the secret
+/// fragment or the invitation's own query. A browser may supply `?play` or `?play=…`.
+pub fn play(search: &str) -> bool {
+    let search = search.strip_prefix('?').unwrap_or(search).split('#').next().unwrap_or_default();
+    search.split('&').any(|entry| entry.split('=').next() == Some("play"))
+}

@@ -1,4 +1,4 @@
-//! Design tokens (UI3 light and dark) and fonts.
+//! Editor tokens with the Greybox semantic palette, and optional craft-fonts typography.
 
 use std::sync::{Arc, OnceLock};
 
@@ -47,18 +47,17 @@ pub struct Tokens {
     pub focus: Color32,
 }
 
-/// FigCraft's brand green for solid surfaces.
-pub const BRAND: Color32 = Color32::from_rgb(0x02, 0xDA, 0x96);
-/// Contrast-safe green for thin selection outlines and white-on-green labels.
-/// It reaches 4.5:1 on white and 3:1 on the dark canvas.
-pub const ACCENT: Color32 = Color32::from_rgb(0x00, 0x87, 0x5F);
-/// Ink on the bright green brand surface (white would not have enough contrast).
-pub const ACCENT_ON: Color32 = Color32::from_rgb(0x07, 0x35, 0x2A);
-/// Id of the canvas overlays' green for this frame ([`set_canvas_page`]).
+/// Greybox's primary orange for solid surfaces and selection on dark pages.
+pub const BRAND: Color32 = Color32::from_rgb(0xFF, 0x5A, 0x00);
+/// Contrast-safe orange for thin selection outlines and white-on-orange labels.
+pub const ACCENT: Color32 = Color32::from_rgb(0xC0, 0x44, 0x00);
+/// Ink on the bright orange brand surface.
+pub const ACCENT_ON: Color32 = Color32::BLACK;
+/// Id of the canvas overlays' accent for this frame ([`set_canvas_page`]).
 const CANVAS_ACCENT: &str = "figcraft-canvas-accent";
 
 /// Remember the page colour the canvas shows. Its overlays (outlines, handles, arrows) take
-/// whichever green contrasts more with it: the bright one on a dark page, the darker on a light one.
+/// whichever orange contrasts more with it: the bright one on a dark page, the darker on a light one.
 pub fn set_canvas_page(ctx: &Context, page: Color32) {
     let pick = if c(BRAND).contrast(c(page)) > c(ACCENT).contrast(c(page)) { BRAND } else { ACCENT };
     ctx.data_mut(|d| d.insert_temp(egui::Id::unique(CANVAS_ACCENT), pick));
@@ -69,12 +68,12 @@ fn c(x: Color32) -> figcraft_color::Color {
     figcraft_color::Color::new(f32::from(x.r()) / 255.0, f32::from(x.g()) / 255.0, f32::from(x.b()) / 255.0, 1.0)
 }
 
-/// The green for overlays drawn on the page ([`set_canvas_page`]); [`ACCENT`] before a page shows.
+/// The accent for overlays drawn on the page ([`set_canvas_page`]); [`ACCENT`] before a page shows.
 pub fn canvas_accent(ctx: &Context) -> Color32 {
     ctx.data(|d| d.get_temp(egui::Id::unique(CANVAS_ACCENT))).unwrap_or(ACCENT)
 }
 
-/// A fill under white text: the darker green stands in for the bright one.
+/// A fill under white text: the darker orange stands in for the bright one.
 pub fn under_white(c: Color32) -> Color32 {
     if c == BRAND { ACCENT } else { c }
 }
@@ -130,6 +129,7 @@ impl Tokens {
             menu_dim: Color32::from_rgb(0x9A, 0x9A, 0x9A),
             focus: Color32::from_rgb(0x00, 0x7A, 0x56),
         }
+        .greybox()
     }
 
     pub fn dark() -> Self {
@@ -170,10 +170,76 @@ impl Tokens {
             menu_dim: Color32::from_rgb(0x9A, 0x9A, 0x9A),
             focus: BRAND,
         }
+        .greybox()
+    }
+
+    /// Map `docs/game/tokens_1.json` onto the upstream editor roles in one place.
+    /// Component/syntax hues, guides and warning semantics remain independent of the brand.
+    fn greybox(mut self) -> Self {
+        let rgb = Color32::from_rgb;
+        let (bg, surface, raised, border, strong, text, muted, primary, hover, on_primary) = if self.dark {
+            (
+                rgb(0, 0, 0),
+                rgb(13, 13, 13),
+                rgb(22, 22, 22),
+                rgb(34, 34, 34),
+                rgb(58, 58, 58),
+                rgb(250, 250, 250),
+                rgb(154, 154, 154),
+                BRAND,
+                rgb(255, 122, 51),
+                Color32::BLACK,
+            )
+        } else {
+            (
+                rgb(250, 250, 250),
+                Color32::WHITE,
+                rgb(240, 240, 240),
+                rgb(220, 220, 220),
+                rgb(189, 189, 189),
+                Color32::BLACK,
+                rgb(92, 92, 92),
+                rgb(224, 78, 0),
+                rgb(184, 63, 0),
+                Color32::WHITE,
+            )
+        };
+        self.bg = bg;
+        self.panel = surface;
+        self.canvas = bg;
+        self.border = border;
+        self.border_strong = strong;
+        self.text = text;
+        self.text_secondary = muted;
+        self.text_tertiary = if self.dark { rgb(120, 120, 120) } else { rgb(128, 128, 128) };
+        self.icon = text;
+        self.icon_secondary = muted;
+        self.hover = raised;
+        self.pressed = border;
+        self.field = raised;
+        self.field_hover_border = strong;
+        self.accent = primary;
+        self.accent_hover = hover;
+        self.accent_on = on_primary;
+        // Text uses the darker light-theme orange for contrast on raised and selected surfaces.
+        self.accent_text = if self.dark { hover } else { rgb(184, 63, 0) };
+        // Low-opacity selection orange composited over each theme's panel.
+        self.selected_row = if self.dark { rgb(52, 25, 11) } else { rgb(255, 235, 224) };
+        self.selected_row_child = if self.dark { rgb(32, 19, 13) } else { rgb(255, 245, 240) };
+        self.danger = rgb(255, 59, 48);
+        self.success = rgb(34, 197, 94);
+        self.tab_bar = bg;
+        self.tab_active = surface;
+        self.menu = surface;
+        self.menu_text = text;
+        self.menu_hover = raised;
+        self.menu_dim = muted;
+        self.focus = primary;
+        self
     }
 
     pub fn get(ctx: &Context) -> Tokens {
-        ctx.data(|d| d.get_temp::<Tokens>(tokens_id())).unwrap_or_else(Tokens::light)
+        ctx.data(|d| d.get_temp::<Tokens>(tokens_id())).unwrap_or_else(Tokens::dark)
     }
 }
 
@@ -226,11 +292,11 @@ fn visuals(t: Tokens) -> Visuals {
     v.window_stroke = Stroke::new(1.0, t.border);
     v.window_corner_radius = egui::CornerRadius::same(13);
     v.menu_corner_radius = egui::CornerRadius::same(13);
-    v.selection.bg_fill = t.accent.gamma_multiply(0.3);
-    // Also the colour of selected text on that highlight (and a focused text box's outline): the
-    // theme's readable green, not the darker one that sinks into the dark theme's highlight.
+    v.selection.bg_fill = t.selected_row;
     v.selection.stroke = Stroke::new(1.0, t.accent_text);
     v.hyperlink_color = t.accent_text;
+    v.error_fg_color = t.danger;
+    v.warn_fg_color = t.warning;
     for w in [&mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active, &mut v.widgets.open, &mut v.widgets.noninteractive] {
         w.corner_radius = egui::CornerRadius::same(5);
         w.fg_stroke = Stroke::new(1.0, t.text);
@@ -245,10 +311,10 @@ fn visuals(t: Tokens) -> Visuals {
     v.widgets.hovered.bg_stroke = Stroke::new(1.0, t.field_hover_border);
     v.widgets.active.bg_fill = t.pressed;
     v.widgets.active.weak_bg_fill = t.pressed;
-    v.widgets.active.bg_stroke = Stroke::new(1.0, ACCENT);
+    v.widgets.active.bg_stroke = Stroke::new(1.0, t.focus);
     v.popup_shadow = egui::Shadow { offset: [0, 4], blur: 16, spread: 0, color: t.shadow };
     v.window_shadow = egui::Shadow { offset: [0, 8], blur: 24, spread: 0, color: t.shadow };
-    v.text_cursor.stroke = Stroke::new(1.0, ACCENT);
+    v.text_cursor.stroke = Stroke::new(1.0, t.focus);
     v
 }
 
@@ -269,9 +335,9 @@ pub fn on_dark<R>(ui: &mut egui::Ui, f: impl FnOnce(&mut egui::Ui) -> R) -> R {
     r
 }
 
-/// UI fonts: Inter and the Archivo wordmark (from the craft-fonts build input) when present;
-/// otherwise egui's defaults. With
-/// `system`, also system faces for scripts those lack (Hebrew, joined Arabic) so names in them show,
+/// UI fonts: Space Grotesk and JetBrains Mono from the optional craft-fonts input or system;
+/// otherwise Inter/egui defaults. Archivo remains independent for the wordmark.
+/// With `system`, also system faces for scripts those lack (Hebrew, joined Arabic),
 /// and faces for the CJK scripts in `cjk` ([`crate::cjk`]).
 ///
 /// The craft-fonts set embeds Noto Sans Arabic and Noto Sans Hebrew; with `system` off those
@@ -279,19 +345,37 @@ pub fn on_dark<R>(ui: &mut egui::Ui, f: impl FnOnce(&mut egui::Ui) -> R) -> R {
 pub fn install_fonts(ctx: &Context, system: bool, cjk: u8) {
     let mut fonts = FontDefinitions::default();
     let find = |family: &str, style: &str| figcraft_text::CRAFT_FONTS.iter().find(|f| f.family == family && f.style == style).map(|f| f.bytes);
-    let regular = find("Inter", "Regular");
-    let semibold = find("Inter", "SemiBold").or_else(|| find("Inter", "Bold"));
-    if let Some(r) = regular {
-        fonts.font_data.insert("inter".into(), Arc::new(FontData::from_static(r)));
+    let face = |family: &str, style: &str| {
+        find(family, style).map(FontData::from_static).or_else(|| {
+            system
+                .then(|| figcraft_text::find_face(family, style))
+                .flatten()
+                .filter(|face| face.family == family && face.style == style)
+                .map(|face| font_data(&face))
+        })
+    };
+    let regular = face("Space Grotesk", "Regular").or_else(|| find("Inter", "Regular").map(FontData::from_static));
+    let semibold = face("Space Grotesk", "Medium")
+        .or_else(|| face("Space Grotesk", "SemiBold"))
+        .or_else(|| face("Space Grotesk", "Bold"))
+        .or_else(|| find("Inter", "SemiBold").or_else(|| find("Inter", "Bold")).map(FontData::from_static));
+    if let Some(data) = regular {
+        fonts.font_data.insert("ui-sans".into(), Arc::new(data));
         if let Some(list) = fonts.families.get_mut(&FontFamily::Proportional) {
-            list.insert(0, "inter".into());
+            list.insert(0, "ui-sans".into());
         }
     }
-    let sb_name = if let Some(sb) = semibold {
-        fonts.font_data.insert("inter-semibold".into(), Arc::new(FontData::from_static(sb)));
-        "inter-semibold"
+    if let Some(data) = face("JetBrains Mono", "Regular") {
+        fonts.font_data.insert("ui-mono".into(), Arc::new(data));
+        if let Some(list) = fonts.families.get_mut(&FontFamily::Monospace) {
+            list.insert(0, "ui-mono".into());
+        }
+    }
+    let sb_name = if let Some(data) = semibold {
+        fonts.font_data.insert("ui-semibold".into(), Arc::new(data));
+        "ui-semibold"
     } else {
-        "inter"
+        "ui-sans"
     };
     let mut semi: Vec<String> = Vec::new();
     if fonts.font_data.contains_key(sb_name) {
@@ -466,16 +550,39 @@ mod tests {
     use super::*;
 
     #[test]
-    fn canvas_overlays_take_the_green_that_stands_out_on_the_page() {
+    fn greybox_palette_maps_semantics_without_recoloring_components() {
+        let light = Tokens::light();
+        let dark = Tokens::dark();
+        assert_eq!(dark.bg, Color32::BLACK);
+        assert_eq!(dark.panel, Color32::from_rgb(13, 13, 13));
+        assert_eq!(light.bg, Color32::from_rgb(250, 250, 250));
+        assert_eq!(light.panel, Color32::WHITE);
+        assert_eq!(dark.accent, BRAND);
+        assert_eq!(light.accent, Color32::from_rgb(224, 78, 0));
+        assert_eq!(dark.accent_on, Color32::BLACK);
+        assert_eq!(light.accent_on, Color32::WHITE);
+        for t in [light, dark] {
+            assert_eq!(t.focus, t.accent);
+            assert_eq!(t.danger, Color32::from_rgb(255, 59, 48));
+            assert_eq!(t.success, Color32::from_rgb(34, 197, 94));
+            assert_ne!(t.component, t.accent);
+            assert_eq!(visuals(t).text_cursor.stroke.color, t.focus);
+            assert_eq!(visuals(t).selection.bg_fill, t.selected_row);
+        }
+        assert!(Tokens::get(&Context::default()).dark);
+    }
+
+    #[test]
+    fn canvas_overlays_take_the_accent_that_stands_out_on_the_page() {
         let ctx = Context::default();
         assert_eq!(canvas_accent(&ctx), ACCENT, "before any page shows");
         set_canvas_page(&ctx, Color32::from_rgb(0x1E, 0x1E, 0x1E));
-        assert_eq!(canvas_accent(&ctx), BRAND, "the bright green on a dark page");
+        assert_eq!(canvas_accent(&ctx), BRAND, "the bright orange on a dark page");
         set_canvas_page(&ctx, Color32::WHITE);
-        assert_eq!(canvas_accent(&ctx), ACCENT, "the darker green on a light page");
+        assert_eq!(canvas_accent(&ctx), ACCENT, "the darker orange on a light page");
         set_canvas_page(&ctx, Color32::from_rgb(0xF5, 0xF5, 0xF5));
         assert_eq!(canvas_accent(&ctx), ACCENT);
-        // White text never sits on the bright green.
+        // White text never sits on the bright orange.
         assert_eq!(under_white(BRAND), ACCENT);
         assert_eq!(under_white(COMPONENT), COMPONENT);
     }

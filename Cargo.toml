@@ -114,6 +114,9 @@ wat = "1.261"
 egui = "0.37"
 egui_extras = { version = "0.37", default-features = false }
 eframe = { version = "0.37", default-features = false }
+egui-wgpu = { version = "0.37", default-features = false }
+glam = "0.30"
+bytemuck = { version = "1", features = ["derive"] }
 rfd = "0.17"
 arboard = { version = "3.6", default-features = false }
 webbrowser = "1"

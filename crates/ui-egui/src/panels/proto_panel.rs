@@ -5,8 +5,8 @@
 use egui::{Align2, Color32, CornerRadius, Id, Pos2, Rect, Sense, Shape, Stroke, StrokeKind, Ui, pos2, vec2};
 use figcraft_color::Paint;
 use figcraft_doc::proto::{
-    Action, ConditionalBlock, Direction, Easing, GAMEPAD_BUTTONS, GAMEPAD_NAMES, Interaction, KeyMods, Overflow, OverlayAnchor, OverlayPosition,
-    ScrollPosition, Transition, Trigger, is_gamepad_button,
+    Action, AnimationPreset, ConditionalBlock, Direction, Easing, GAMEPAD_BUTTONS, GAMEPAD_NAMES, Interaction, KeyMods, Overflow, OverlayAnchor,
+    OverlayPosition, ScrollPosition, Transition, Trigger, is_gamepad_button,
 };
 use figcraft_doc::{Document, Node, NodeId, NodeKind, VariableValue, proto};
 use serde_json::{Value, json};
@@ -73,7 +73,7 @@ pub fn close_editor(ctx: &egui::Context) -> bool {
     }
 }
 
-const TRIGGERS: [&str; 10] = [
+const TRIGGERS: [&str; 11] = [
     tr_noop("On click"),
     tr_noop("On drag"),
     tr_noop("While hovering"),
@@ -84,6 +84,7 @@ const TRIGGERS: [&str; 10] = [
     tr_noop("Mouse down"),
     tr_noop("Mouse up"),
     tr_noop("After delay"),
+    tr_noop("Game event"),
 ];
 
 fn trigger_kind(t: &Trigger) -> &'static str {
@@ -98,6 +99,7 @@ fn trigger_kind(t: &Trigger) -> &'static str {
         Trigger::MouseDown => "Mouse down",
         Trigger::MouseUp => "Mouse up",
         Trigger::AfterDelay { .. } => "After delay",
+        Trigger::GameEvent { .. } => "Game event",
     }
 }
 
@@ -118,6 +120,10 @@ fn trigger_of(kind: &str, cur: &Trigger) -> Trigger {
             Trigger::AfterDelay { ms } => Trigger::AfterDelay { ms: *ms },
             _ => Trigger::AfterDelay { ms: 800 },
         },
+        "Game event" => match cur {
+            Trigger::GameEvent { event } => Trigger::GameEvent { event: event.clone() },
+            _ => Trigger::GameEvent { event: "tomou-dano".into() },
+        },
         _ => Trigger::OnClick,
     }
 }
@@ -130,6 +136,7 @@ fn trigger_summary(t: &Trigger) -> String {
         Trigger::KeyPress { key } if is_gamepad_button(key) => key.clone(),
         Trigger::KeyPress { key } => trf("Key/Gamepad {key}", &[("key", key)]),
         Trigger::AfterDelay { ms } => trf("After delay {ms}ms", &[("ms", ms)]),
+        Trigger::GameEvent { event } => trf("Game event {event}", &[("event", event)]),
         other => tr(trigger_kind(other)).into(),
     }
 }
@@ -196,6 +203,13 @@ fn name_of(doc: &Document, id: NodeId) -> String {
 pub(crate) fn action_summary(doc: &Document, a: &Action) -> String {
     let vars = &doc.variables;
     match a {
+        Action::GamePause { paused } => tr(if *paused { "Pause game" } else { "Resume game" }).into(),
+        Action::GameCursor { captured } => tr(if *captured { "Capture cursor" } else { "Release cursor" }).into(),
+        Action::PlaySound { sound, .. } => {
+            let name = doc.audio.sounds.get(sound).map_or(sound.as_str(), |s| s.name.as_str());
+            trf("Play sound {name}", &[("name", &name)])
+        }
+        Action::PlayAnimation { target, preset, .. } => format!("{} · {}", tr(preset.label()), name_of(doc, *target)),
         Action::OpenUrl { url, .. } if !url.is_empty() => trf("Open link {url}", &[("url", url)]),
         Action::SetVariable { variable, expr, .. } => {
             let name = vars.get_by_id(variable).map_or(variable.as_str(), |v| v.name.as_str());
@@ -263,6 +277,29 @@ pub(crate) fn action_of(label: &str, doc: &Document, page: NodeId, node: NodeId,
         },
         "Swap overlay" => Action::SwapOverlay { dest: frame_dest? },
         "Close overlay" => Action::CloseOverlay,
+        "Pause game" => Action::GamePause {
+            paused: match cur {
+                Some(Action::GamePause { paused }) => *paused,
+                _ => true,
+            },
+        },
+        "Capture cursor" => Action::GameCursor {
+            captured: match cur {
+                Some(Action::GameCursor { captured }) => *captured,
+                _ => true,
+            },
+        },
+        "Play sound" => {
+            let (sound, volume) = match cur {
+                Some(Action::PlaySound { sound, volume }) if doc.audio.sounds.contains_key(sound) => (sound.clone(), *volume),
+                _ => (doc.audio.sounds.keys().next()?.clone(), 1.0),
+            };
+            Action::PlaySound { sound, volume }
+        }
+        "Play animation" => match cur {
+            Some(Action::PlayAnimation { .. }) => cur?.clone(),
+            _ => Action::PlayAnimation { target: node, preset: AnimationPreset::FadeIn, duration_ms: 300, easing: Easing::EaseOut },
+        },
         "Set variable" => {
             let v = doc.variables.variables.first()?;
             let value = value_json(&figcraft_engine::cmd::proto_actions::start_value(&doc.variables, v));
@@ -712,7 +749,15 @@ fn editor_popover(app: &mut FigApp, ctx: &egui::Context, popover: InteractionPop
 fn animates(a: &Action) -> bool {
     !matches!(
         a,
-        Action::OpenUrl { .. } | Action::SetVariable { .. } | Action::SetVariableMode { .. } | Action::CloseOverlay | Action::Conditional { .. }
+        Action::OpenUrl { .. }
+            | Action::SetVariable { .. }
+            | Action::SetVariableMode { .. }
+            | Action::CloseOverlay
+            | Action::Conditional { .. }
+            | Action::GamePause { .. }
+            | Action::GameCursor { .. }
+            | Action::PlaySound { .. }
+            | Action::PlayAnimation { .. }
     )
 }
 
@@ -749,6 +794,36 @@ fn trigger_rows(app: &mut FigApp, ui: &mut Ui, node: NodeId, k: usize, it: &Inte
         });
     });
     match &it.trigger {
+        Trigger::GameEvent { event } => {
+            let aliases = app
+                .session
+                .doc()
+                .ok()
+                .map(|d| {
+                    figcraft_doc::game::EVENT_NAMES.iter().map(|key| ((*key).to_string(), d.game.event_name(key).to_string())).collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            widgets::sublabels(ui, tr("Game event"), None);
+            row(ui, 32.0, |ui| {
+                let shown = aliases.iter().find(|(key, _)| key == event).map_or(event.as_str(), |(_, alias)| alias.as_str());
+                let resp = widgets::dropdown(ui, shown, ui.available_width(), None);
+                menu_popup(&resp).show(|ui| {
+                    for (key, alias) in &aliases {
+                        if menu_item(ui, alias, "") {
+                            patch(app, node, k, json!({"trigger": {"type": "gameEvent", "event": key}}));
+                            ui.close();
+                        }
+                    }
+                });
+            });
+            row(ui, 32.0, |ui| {
+                if let Some(event) = widgets::text_field(ui, Id::unique(("proto_event", node, k)), event, ui.available_width(), tr("Event name"))
+                    && !event.trim().is_empty()
+                {
+                    patch(app, node, k, json!({"trigger": {"type": "gameEvent", "event": event.trim()}}));
+                }
+            });
+        }
         Trigger::MouseEnter | Trigger::MouseLeave | Trigger::MouseDown | Trigger::MouseUp => {
             row(ui, 32.0, |ui| {
                 widgets::label(ui, tr("Delay"), t.text_secondary);
@@ -889,6 +964,121 @@ pub(crate) fn action_fields(app: &mut FigApp, ui: &mut Ui, doc: &Document, page:
     let node = slot.node;
     let frames = frames_for(doc, page);
     match action {
+        Action::GamePause { paused } => {
+            row(ui, 32.0, |ui| {
+                if widgets::checkbox(ui, *paused, tr("Pause simulation")) {
+                    set_action(app, slot, Action::GamePause { paused: !*paused });
+                }
+            });
+        }
+        Action::GameCursor { captured } => {
+            row(ui, 32.0, |ui| {
+                if widgets::checkbox(ui, *captured, tr("Capture cursor for aiming")) {
+                    set_action(app, slot, Action::GameCursor { captured: !*captured });
+                }
+            });
+        }
+        Action::PlaySound { sound, volume } => {
+            widgets::sublabels(ui, tr("Sound"), None);
+            row(ui, 32.0, |ui| {
+                let label = doc.audio.sounds.get(sound).map_or(sound.as_str(), |s| s.name.as_str());
+                let resp = widgets::dropdown(ui, label, ui.available_width(), None);
+                menu_popup(&resp).show(|ui| {
+                    for (id, audio) in &doc.audio.sounds {
+                        if menu_item(ui, &audio.name, "") {
+                            set_action(app, slot, Action::PlaySound { sound: id.clone(), volume: *volume });
+                            ui.close();
+                        }
+                    }
+                });
+            });
+            widgets::sublabels(ui, tr("Volume"), None);
+            row(ui, 32.0, |ui| {
+                if let Some(FieldEdit::Set(v) | FieldEdit::Scrub(v, true)) =
+                    widgets::number_field(ui, slot.id("sound_volume"), Lead::None, Some(f64::from(*volume) * 100.0), "%", ui.available_width(), 1.0)
+                    && v.is_finite()
+                {
+                    set_action(app, slot, Action::PlaySound { sound: sound.clone(), volume: (v / 100.0).clamp(0.0, 1.0) as f32 });
+                }
+            });
+        }
+        Action::PlayAnimation { target, preset, duration_ms, easing } => {
+            let (target, preset, duration_ms, easing) = (*target, *preset, *duration_ms, *easing);
+            let layers: Vec<_> =
+                doc.subtree(page).into_iter().filter(|id| doc.node(*id).is_some_and(|n| !matches!(n.kind, NodeKind::Page { .. }))).collect();
+            dest_dropdown(
+                app,
+                ui,
+                DestinationPicker {
+                    doc,
+                    options: &layers,
+                    current: Some(target),
+                    label: tr("Animate layer"),
+                    slot,
+                    make: |target| Action::PlayAnimation { target, preset, duration_ms, easing },
+                },
+            );
+            widgets::sublabels(ui, tr("Preset"), None);
+            row(ui, 32.0, |ui| {
+                let resp = widgets::dropdown(ui, tr(preset.label()), ui.available_width(), None);
+                menu_popup(&resp).show(|ui| {
+                    for preset in AnimationPreset::ALL {
+                        if menu_item(ui, tr(preset.label()), "") {
+                            set_action(app, slot, Action::PlayAnimation { target, preset, duration_ms, easing });
+                            ui.close();
+                        }
+                    }
+                });
+            });
+            widgets::sublabels(ui, tr("Easing"), None);
+            row(ui, 32.0, |ui| {
+                let resp = widgets::dropdown(ui, tr(easing.label()), ui.available_width(), None);
+                menu_popup(&resp).show(|ui| {
+                    for e in Easing::ALL.into_iter().chain([Easing::CUSTOM_BEZIER, Easing::CUSTOM_SPRING]) {
+                        if menu_item(ui, tr(e.label()), "") {
+                            let easing = if std::mem::discriminant(&e) == std::mem::discriminant(&easing) { easing } else { e };
+                            set_action(app, slot, Action::PlayAnimation { target, preset, duration_ms, easing });
+                            ui.close();
+                        }
+                    }
+                });
+            });
+            custom_easing_editor(ui, slot.id("animation_easing"), easing, |easing, scrub, done| {
+                if scrub {
+                    let _ = app.session.begin_interaction("Edit");
+                }
+                set_action(app, slot, Action::PlayAnimation { target, preset, duration_ms, easing });
+                if scrub && done {
+                    let _ = app.session.commit_interaction();
+                }
+            });
+            widgets::sublabels(ui, tr("Duration"), None);
+            row(ui, 32.0, |ui| {
+                if easing.is_spring() {
+                    widgets::label(ui, &format!("{:.0} ms", easing.seconds(duration_ms) * 1000.0), Tokens::get(ui.ctx()).text_secondary);
+                } else if let Some(FieldEdit::Set(v) | FieldEdit::Scrub(v, true)) = widgets::number_field(
+                    ui,
+                    slot.id("animation_duration"),
+                    Lead::None,
+                    Some(f64::from(duration_ms)),
+                    "ms",
+                    ui.available_width(),
+                    10.0,
+                ) && v.is_finite()
+                {
+                    set_action(
+                        app,
+                        slot,
+                        Action::PlayAnimation {
+                            target,
+                            preset,
+                            duration_ms: v.round().clamp(1.0, f64::from(proto::MAX_ANIMATION_MS)) as u32,
+                            easing,
+                        },
+                    );
+                }
+            });
+        }
         Action::Navigate { dest, preserve_scroll } => {
             let (dest, preserve_scroll) = (*dest, *preserve_scroll);
             let mk = |d| Action::Navigate { dest: d, preserve_scroll };
@@ -1215,6 +1405,20 @@ fn animation_rows(app: &mut FigApp, ui: &mut Ui, node: NodeId, k: usize, it: &In
 
 /// Fields for a custom bezier (x1, y1, x2, y2) or spring (mass, stiffness, damping).
 fn custom_easing_fields(app: &mut FigApp, ui: &mut Ui, node: NodeId, k: usize, e: Easing) {
+    custom_easing_editor(ui, Id::unique(("proto_ease", node, k)), e, |eased, scrub, done| {
+        if scrub {
+            let _ = app.session.begin_interaction("Edit");
+            let _ = app.session.execute("proto.interaction.set", &json!({"ids": targets_for(app, node), "index": k, "easing": eased}));
+            if done {
+                let _ = app.session.commit_interaction();
+            }
+        } else {
+            patch(app, node, k, json!({"easing": eased}));
+        }
+    });
+}
+
+fn custom_easing_editor(ui: &mut Ui, key: Id, e: Easing, mut set: impl FnMut(Easing, bool, bool)) {
     let (names, vals, steps): ([&str; 4], [f64; 4], [f64; 4]) = match e {
         Easing::CustomBezier { x1, y1, x2, y2 } => (["X1", "Y1", "X2", "Y2"], [x1, y1, x2, y2], [0.01; 4]),
         Easing::CustomSpring { mass, stiffness, damping } => {
@@ -1237,13 +1441,10 @@ fn custom_easing_fields(app: &mut FigApp, ui: &mut Ui, node: NodeId, k: usize, e
         for i in 0..count {
             let (Some(name), Some(v), Some(step)) = (names.get(i), vals.get(i), steps.get(i)) else { continue };
             let lead = if count == 4 { Lead::Text(name) } else { Lead::None };
-            let edit =
-                widgets::number_field(ui, Id::unique(("proto_ease", node, k, i)), lead, Some((v * 100.0).round() / 100.0), "", w, *step).map(|e| {
-                    match e {
-                        FieldEdit::Set(x) => (x, true, false),
-                        FieldEdit::Scrub(x, done) => (x, done, true),
-                    }
-                });
+            let edit = widgets::number_field(ui, key.with(i), lead, Some((v * 100.0).round() / 100.0), "", w, *step).map(|e| match e {
+                FieldEdit::Set(x) => (x, true, false),
+                FieldEdit::Scrub(x, done) => (x, done, true),
+            });
             if let Some((x, done, scrub)) = edit
                 && x.is_finite()
             {
@@ -1251,16 +1452,7 @@ fn custom_easing_fields(app: &mut FigApp, ui: &mut Ui, node: NodeId, k: usize, e
                 if let Some(slot) = nv.get_mut(i) {
                     *slot = x;
                 }
-                let eased = make(nv);
-                if scrub {
-                    let _ = app.session.begin_interaction("Edit");
-                    let _ = app.session.execute("proto.interaction.set", &json!({"ids": targets_for(app, node), "index": k, "easing": eased}));
-                    if done {
-                        let _ = app.session.commit_interaction();
-                    }
-                } else {
-                    patch(app, node, k, json!({"easing": eased}));
-                }
+                set(make(nv), scrub, done);
             }
         }
     });

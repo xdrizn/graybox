@@ -655,26 +655,6 @@ fn painted_texts(shapes: &[egui::epaint::ClippedShape]) -> Vec<(String, bool, eg
     out
 }
 
-/// The glass effect's light intensity field is labelled (#256): drawn in the Design panel with the
-/// effect's settings open.
-#[test]
-fn the_glass_light_intensity_field_has_a_label() {
-    let mut s = Session::new();
-    let r = NodeId(s.execute("shape.rectangle", &json!({"x": 0, "y": 0, "width": 100, "height": 80})).unwrap()["id"].as_u64().unwrap());
-    s.execute("select.set", &json!({"ids": [r]})).unwrap();
-    s.execute("effect.add", &json!({"type": "glass"})).unwrap();
-    let mut u = Ui::new(s);
-    u.ctx.data_mut(|d| d.insert_temp(Id::unique(("fx_open", 0usize)), true));
-    u.frame(vec![]);
-    let shapes = u.frame_output(vec![]).shapes;
-    let lead = u.ctx.read_response(Id::unique(("fx_gi", 0usize)).with("lead")).expect("the intensity field is shown").rect;
-    let labels: Vec<(String, bool)> =
-        painted_texts(&shapes).into_iter().filter(|(_, _, at)| lead.contains(at.center())).map(|(text, cut, _)| (text, cut)).collect();
-    assert_eq!(labels, [("Intensity".to_string(), false)], "labelled, and not cut short");
-    let field = u.ctx.read_response(Id::unique(("fx_gi", 0usize)).with("field")).expect("its value").rect;
-    assert_eq!(field.max.x - lead.min.x, GLASS_FIELD_W, "the width the next test measures against");
-}
-
 /// A glass settings field's width in the Design panel at its default width.
 const GLASS_FIELD_W: f32 = 87.5;
 

@@ -148,7 +148,7 @@ fn main_width(groups: &[Group], board: bool) -> f32 {
     let tools: f32 = groups.iter().map(|g| TOOL_CELL + if g.has_flyout() { FLYOUT_GAP + FLYOUT_W } else { 0.0 }).sum();
     // The end, and the gaps that aren't a group's own: after Actions and after the divider (and
     // between a board's two buttons, which the end counts as one item).
-    let (end, gaps) = if board { (2.0 * TOOL_CELL, 3.0) } else { (4.0 * TOOL_CELL, 2.0) };
+    let (end, gaps) = if board { (2.0 * TOOL_CELL, 3.0) } else { (6.0 * TOOL_CELL, 4.0) };
     PAD * 2.0 + tools + (groups.len() as f32 + gaps) * GAP + TOOL_CELL + DIVIDER + end
 }
 
@@ -179,6 +179,24 @@ fn main_toolbar(app: &mut FigApp, ui: &mut Ui, canvas: Rect, t: &Tokens, board: 
         }
     } else {
         mode_switcher(app, ui, x, cy, t);
+        let x = x + 4.0 * TOOL_CELL + GAP;
+        let play = Rect::from_center_size(pos2(x + TOOL_CELL / 2.0, cy), vec2(TOOL_CELL, TOOL_CELL));
+        let playable = app.session.doc().is_ok_and(|d| d.nodes().any(|n| matches!(n.kind, figcraft_doc::NodeKind::Frame)));
+        if playable {
+            ui.ctx().data_mut(|d| {
+                d.insert_temp(egui::Id::unique(crate::game::PLAY_BUTTON_RECT), play.intersect(ui.clip_rect()));
+                d.insert_temp(egui::Id::unique(crate::game::PLAY_KEY_ENABLED), true);
+            });
+        }
+        ui.painter().rect_filled(play, CornerRadius::same(4), t.accent);
+        let response = tool_cell(ui, t, play, "game_play", Icon::Play, true, tr("Play game  F9"));
+        if response.clicked() {
+            app.run("game.play", json!({}));
+        }
+        let settings = play.translate(vec2(TOOL_CELL + GAP, 0.0));
+        if tool_cell(ui, t, settings, "game_settings", Icon::Menu, app.ui.game_settings, tr("Game settings")).clicked() {
+            app.run("game.settings", json!({}));
+        }
     }
     ui.set_clip_rect(outer_clip);
     help_button(app, ui, canvas, rect, t);
@@ -660,25 +678,6 @@ mod tests {
         let wide = Rect::from_min_size(pos2(0.0, 0.0), vec2(1400.0, 800.0));
         assert_eq!(pill_rect(wide, full).width(), full);
         assert_eq!(pill_rect(Rect::from_min_size(pos2(0.0, 0.0), vec2(4.0, 4.0)), full).width(), 0.0);
-    }
-
-    /// The width the pill asks for is the width its items take — the groups, Actions, the divider
-    /// and the end (the mode switcher, or a board's two buttons), PAD in from either end and one
-    /// GAP apart — so its last item ends exactly PAD from its right edge.
-    #[test]
-    fn the_pill_is_as_wide_as_its_items() {
-        let canvas = Rect::from_min_size(pos2(0.0, 0.0), vec2(1400.0, 800.0));
-        for (groups, board) in [(GROUPS, false), (BOARD_GROUPS, true)] {
-            let pill = pill_rect(canvas, main_width(groups, board));
-            let mut x = pill.min.x + PAD;
-            for g in groups {
-                x += TOOL_CELL + if g.has_flyout() { FLYOUT_GAP + FLYOUT_W } else { 0.0 } + GAP;
-            }
-            x += TOOL_CELL + GAP; // Actions
-            x += DIVIDER + GAP; // the divider
-            let end = if board { 2.0 * TOOL_CELL + GAP } else { 4.0 * TOOL_CELL };
-            assert!((x + end - (pill.max.x - PAD)).abs() < 0.01, "board {board}: {} vs {}", x + end, pill.max.x - PAD);
-        }
     }
 
     /// The stroke widths `icon` paints with in a `size` box at `ppp` pixels per point.

@@ -8,11 +8,13 @@
 //! live in higher crates.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+pub mod audio;
 pub mod board;
 mod board_route;
 pub mod colors;
 pub mod comments;
 pub mod facilitation;
+pub mod game;
 pub mod geometry;
 pub mod handoff;
 pub mod ids;
@@ -205,6 +207,12 @@ pub struct Document {
     pub styles: Vec<Style>,
     #[serde(default)]
     pub variables: Variables,
+    /// Gameplay bindings, screen roles and event names saved in this file.
+    #[serde(default)]
+    pub game: game::GameSettings,
+    /// Embedded sounds and mix levels saved in this file.
+    #[serde(default)]
+    pub audio: audio::AudioLibrary,
     /// Images by content hash; serialized separately by the format crate.
     #[serde(skip)]
     pub images: BTreeMap<String, ImageData>,
@@ -277,6 +285,8 @@ impl Document {
             next_id: IdAlloc { next: 1, client: 0 },
             styles: Vec::new(),
             variables: Variables::default(),
+            game: game::GameSettings::default(),
+            audio: audio::AudioLibrary::default(),
             images: BTreeMap::new(),
             current_page: None,
             document_colors: Vec::new(),
@@ -1274,7 +1284,12 @@ impl Document {
 fn remap_action(a: &mut proto::Action, map: &BTreeMap<NodeId, NodeId>) {
     use proto::Action::*;
     match a {
-        Navigate { dest, .. } | ScrollTo { dest, .. } | OpenOverlay { dest, .. } | SwapOverlay { dest } | ChangeTo { dest } => {
+        Navigate { dest, .. }
+        | ScrollTo { dest, .. }
+        | OpenOverlay { dest, .. }
+        | SwapOverlay { dest }
+        | ChangeTo { dest }
+        | PlayAnimation { target: dest, .. } => {
             if let Some(m) = map.get(dest) {
                 *dest = *m;
             }

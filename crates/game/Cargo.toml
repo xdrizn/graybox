@@ -9,3 +9,4 @@ description = "Greybox game layer: the simulation of the playable low-poly test 
 workspace = true
 
 [dependencies]
+glam.workspace = true

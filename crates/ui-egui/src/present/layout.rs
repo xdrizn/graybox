@@ -107,16 +107,16 @@ fn body_outset(device: &str, size: Vec2, landscape: bool) -> (f32, f32, f32) {
 /// screen, or without a device to the whole area (shown at 100%).
 pub(super) fn layout(p: &mut Presenter, area: Rect, chrome: Chrome) -> Option<Layout> {
     let settings = page_settings(p.doc.as_ref()?, p.current);
-    let (device, landscape) = (settings.device(), settings.landscape());
+    let (device, landscape) = if p.game.is_some() { (None, false) } else { (settings.device(), settings.landscape()) };
     let fills = settings.responsive && device.is_none();
     let whole_area = (f64::from(area.width().round()), f64::from(area.height().round()));
     p.respond_to(settings.responsive.then(|| device.map_or(whole_area, |d| (d.width, d.height))));
     let disp = p.display()?;
-    let fb = disp.world_bounds(p.current)?;
+    let fb = p.placement_bounds(p.current)?;
     let view = if chrome.pane { PresentView::default() } else { p.view };
     // Custom sizes are just a screen: no body.
     let body = device.filter(|d| view.device_frame && !d.colors.is_empty());
-    let pad = if !fills && matches!(view.scale, PresentScale::Fit | PresentScale::Actual) { chrome.pad } else { 0.0 };
+    let pad = if p.game.is_none() && !fills && matches!(view.scale, PresentScale::Fit | PresentScale::Actual) { chrome.pad } else { 0.0 };
     let avail = area.shrink(pad);
     let (sw, sh) = device.map_or((fb.width(), fb.height()), |d| (d.width, d.height));
     // The screen at `scale`, the body's outsets around it and the whole size.
@@ -140,7 +140,7 @@ pub(super) fn layout(p: &mut Presenter, area: Rect, chrome: Chrome) -> Option<La
     if body.is_some() {
         scale *= factor(outer(scale).3);
     }
-    let max = if view.scale == PresentScale::Fit { 1.0 } else { 16.0 };
+    let max = if view.scale == PresentScale::Fit && p.game.is_none() { 1.0 } else { 16.0 };
     let scale = if scale.is_finite() { scale.clamp(0.01, max) } else { 0.01 };
     let (size, x, top, whole) = outer(scale);
     p.zoom = scale;
@@ -159,7 +159,7 @@ pub(super) fn layout(p: &mut Presenter, area: Rect, chrome: Chrome) -> Option<La
     let screen = Rect::from_min_size(min + vec2(x, top), size);
     let place = Place::centered(fb, screen.center(), scale);
     let place_overlay = |o: &OverlayState| {
-        let ob = disp.world_bounds(o.id)?;
+        let ob = p.placement_bounds(o.id)?;
         let size = vec2((ob.width() * scale) as f32, (ob.height() * scale) as f32);
         let offset = o.offset.map(|[x, y]| vec2((x * scale) as f32, (y * scale) as f32));
         let r = anchored_overlay_rect(o.position, o.anchor_to, screen, size, o.anchor.map(|a| place.rect(a)), offset);

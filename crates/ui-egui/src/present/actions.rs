@@ -160,6 +160,7 @@ impl Presenter {
                     easing,
                 });
                 self.hovered.clear();
+                self.rev += 1;
                 true
             }
             Action::SwapOverlay { dest } => {
@@ -191,6 +192,7 @@ impl Presenter {
                     }),
                 }
                 self.hovered.clear();
+                self.rev += 1;
                 true
             }
             Action::CloseOverlay => self.close_overlay(now),
@@ -237,6 +239,31 @@ impl Presenter {
                     self.settle(&before);
                 }
                 set
+            }
+            Action::GamePause { paused } => {
+                let Some(play) = self.game.as_mut() else { return false };
+                play.game.paused = *paused;
+                true
+            }
+            Action::GameCursor { captured } => {
+                let Some(play) = self.game.as_mut() else { return false };
+                play.captured = *captured;
+                true
+            }
+            Action::PlaySound { sound, volume } => {
+                if !doc.audio.sounds.contains_key(sound) || !volume.is_finite() || !(0.0..=1.0).contains(volume) {
+                    return false;
+                }
+                self.sound_requests.push((sound.clone(), *volume));
+                true
+            }
+            Action::PlayAnimation { target, preset, duration_ms, easing } => {
+                let target = crate::game::animation::target_for(&doc, node, *target);
+                if !self.animations.start(&doc, target, *preset, *duration_ms, *easing, now) {
+                    return false;
+                }
+                self.rev += 1;
+                true
             }
             Action::Conditional { blocks } => {
                 if depth >= figcraft_doc::proto::MAX_ACTION_DEPTH {
@@ -294,4 +321,173 @@ pub(super) fn texture_scale(ctx: &egui::Context, bounds: figcraft_geom::Rect, px
 /// The first interaction index on `id` whose trigger satisfies `want`.
 pub(super) fn find_trigger(doc: &Document, id: NodeId, want: impl Fn(&Trigger) -> bool) -> Option<usize> {
     doc.node(id)?.interactions.iter().position(|it| want(&it.trigger))
+}
+
+#[cfg(test)]
+mod layer_animation_tests {
+    use super::*;
+    use figcraft_doc::proto::{AnimationPreset, Interaction};
+    use std::sync::Arc;
+
+    fn scene() -> (Arc<Document>, NodeId, NodeId) {
+        let mut doc = Document::new("Layer animation");
+        let page = doc.first_page().unwrap();
+        let frame = doc.create(page, NodeKind::Frame, "Screen", 50.0, 50.0, 200.0, 100.0).unwrap();
+        let child = doc.create(frame, NodeKind::Rectangle, "Child", 20.0, 20.0, 20.0, 20.0).unwrap();
+        doc.node_mut(child).unwrap().opacity = 0.8;
+        doc.node_mut(frame).unwrap().interactions.push(Interaction {
+            trigger: Trigger::GameEvent { event: "tomou-dano".into() },
+            actions: vec![Action::PlayAnimation { target: child, preset: AnimationPreset::FadeOut, duration_ms: 1000, easing: Easing::Linear }],
+            transition: Transition::Instant,
+            duration_ms: 300,
+            easing: Easing::EaseOut,
+            delay_ms: 0,
+        });
+        (Arc::new(doc), frame, child)
+    }
+
+    #[test]
+    fn fired_animation_changes_display_only_and_restores_latest_runtime_state() {
+        let (source, frame, child) = scene();
+        let mut player = Presenter::new(frame);
+        player.sync(&source, 0.0);
+        assert!(player.fire(frame, 0, None, 0.0));
+        let ctx = egui::Context::default();
+        player.animate_layers(&ctx, 0.5, false);
+        assert!((player.display().unwrap().node(child).unwrap().opacity - 0.4).abs() < 1e-6);
+        assert_eq!(source.node(child).unwrap().opacity, 0.8);
+        assert_eq!(player.design.as_ref().unwrap().node(child).unwrap().opacity, 0.8);
+        player.design.as_mut().unwrap().node_mut(child).unwrap().opacity = 0.6;
+        player.relayout();
+        assert!((player.display().unwrap().node(child).unwrap().opacity - 0.3).abs() < 1e-6);
+        assert!(player.fire(frame, 0, None, 0.5));
+        player.animate_layers(&ctx, 0.5, false);
+        assert_eq!(player.display().unwrap().node(child).unwrap().opacity, 0.6, "retrigger starts afresh, not from the prior faded snapshot");
+        let active_revision = player.rev;
+        player.animate_layers(&ctx, 1.6, false);
+        assert!(player.rev > active_revision, "expiration invalidates the final animated texture");
+        assert_eq!(player.display().unwrap().node(child).unwrap().opacity, 0.6);
+        let restored_revision = player.rev;
+        player.animate_layers(&ctx, 2.0, false);
+        assert_eq!(player.rev, restored_revision, "idle effects stop invalidating textures");
+    }
+
+    #[test]
+    fn frame_animation_moves_content_without_recentering_the_viewport() {
+        use crate::present::layout::{FULL, layout};
+        let (source, frame, _) = scene();
+        let mut player = Presenter::new(frame);
+        player.sync(&source, 0.0);
+        let area = Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
+        let resting = layout(&mut player, area, FULL).unwrap();
+        let action = Action::PlayAnimation { target: frame, preset: AnimationPreset::SlideInLeft, duration_ms: 1000, easing: Easing::Linear };
+        assert!(player.perform(&action, frame, Transition::Instant, 0.0, Easing::Linear, None, 0.0));
+        let ctx = egui::Context::default();
+        player.animate_layers(&ctx, 0.5, false);
+        let moving = layout(&mut player, area, FULL).unwrap();
+        assert_eq!(resting.screen, moving.screen);
+        assert_eq!(resting.scale, moving.scale);
+        let resting_bounds = resting.disp.world_bounds(frame).unwrap();
+        let moving_bounds = moving.disp.world_bounds(frame).unwrap();
+        assert!((resting.place.rect(resting_bounds).min.x - moving.place.rect(moving_bounds).min.x - 100.0 * moving.scale as f32).abs() < 1e-3);
+    }
+
+    #[test]
+    fn overlay_effect_keeps_anchor_and_game_transparency_is_temporary() {
+        use crate::present::layout::{FULL, layout};
+        let (source, frame, _) = scene();
+        let mut doc = (*source).clone();
+        let page = doc.first_page().unwrap();
+        let overlay = doc.create(page, NodeKind::Frame, "Overlay", 400.0, 0.0, 100.0, 80.0).unwrap();
+        for target in [frame, overlay] {
+            doc.node_mut(target).unwrap().fills = vec![figcraft_color::Paint::solid(figcraft_color::Color::WHITE)];
+        }
+        let source = Arc::new(doc);
+        let mut player = Presenter::new(frame);
+        player.game = Some(crate::game::Play::new());
+        player.sync(&source, 0.0);
+        let open = Action::OpenOverlay {
+            dest: overlay,
+            position: OverlayPosition::TopRight,
+            close_on_outside: true,
+            background: None,
+            offset: None,
+            anchor: OverlayAnchor::Screen,
+        };
+        player.perform(&open, frame, Transition::Instant, 0.0, Easing::Linear, None, 0.0);
+        let area = Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
+        let resting = layout(&mut player, area, FULL).unwrap();
+        assert!(resting.disp.node(frame).unwrap().fills.is_empty());
+        assert!(!resting.disp.node(overlay).unwrap().fills.is_empty());
+        assert!(!source.node(frame).unwrap().fills.is_empty());
+        let action = Action::PlayAnimation { target: overlay, preset: AnimationPreset::ScalePop, duration_ms: 1000, easing: Easing::Linear };
+        player.perform(&action, overlay, Transition::Instant, 0.0, Easing::Linear, None, 0.0);
+        player.animate_layers(&egui::Context::default(), 0.0, false);
+        let moving = layout(&mut player, area, FULL).unwrap();
+        assert_eq!(resting.overlays[0].2, moving.overlays[0].2, "effects do not resize/reanchor their overlay");
+        assert!(moving.disp.world_bounds(overlay).unwrap().width() < resting.disp.world_bounds(overlay).unwrap().width());
+    }
+
+    #[test]
+    fn game_actions_pause_and_release_without_mutating_the_document() {
+        let (source, frame, _) = scene();
+        let mut player = Presenter::new(frame);
+        player.game = Some(crate::game::Play::new());
+        player.sync(&source, 0.0);
+        for paused in [true, false] {
+            assert!(player.perform(&Action::GamePause { paused }, frame, Transition::Instant, 0.0, Easing::Linear, None, 0.0));
+            assert_eq!(player.game.as_ref().unwrap().game.paused, paused);
+        }
+        for captured in [false, true] {
+            assert!(player.perform(&Action::GameCursor { captured }, frame, Transition::Instant, 0.0, Easing::Linear, None, 0.0));
+            assert_eq!(player.game.as_ref().unwrap().captured, captured);
+        }
+        assert_eq!(player.design.as_ref().unwrap().node(frame), source.node(frame));
+    }
+
+    #[test]
+    fn menu_hud_filters_preserve_selected_subtrees_and_restore_after_close() {
+        use figcraft_doc::game::ScreenRole;
+        let (source, frame, _) = scene();
+        let mut doc = (*source).clone();
+        let page = doc.first_page().unwrap();
+        let group = doc.create(frame, NodeKind::Group, "Stats", 0.0, 0.0, 100.0, 50.0).unwrap();
+        let selected = doc.create(group, NodeKind::Group, "Keep", 0.0, 0.0, 30.0, 30.0).unwrap();
+        let selected_child = doc.create(selected, NodeKind::Rectangle, "Inside", 0.0, 0.0, 10.0, 10.0).unwrap();
+        let hidden = doc.create(group, NodeKind::Rectangle, "Other", 40.0, 0.0, 20.0, 20.0).unwrap();
+        let menu = doc.create(page, NodeKind::Frame, "Inventory", 400.0, 0.0, 100.0, 80.0).unwrap();
+        let death = doc.create(page, NodeKind::Frame, "Death", 600.0, 0.0, 100.0, 80.0).unwrap();
+        doc.game.screens.insert(frame, ScreenRole::Hud.defaults());
+        let mut inventory = ScreenRole::Inventory.defaults();
+        inventory.hud_layers = vec![selected];
+        doc.game.screens.insert(menu, inventory);
+        doc.game.screens.insert(death, ScreenRole::Death.defaults());
+        let source = Arc::new(doc);
+        let mut player = Presenter::new(frame);
+        player.game = Some(crate::game::Play::new());
+        player.sync(&source, 0.0);
+        let open = |dest| Action::OpenOverlay {
+            dest,
+            position: OverlayPosition::Center,
+            close_on_outside: true,
+            background: None,
+            offset: None,
+            anchor: OverlayAnchor::Screen,
+        };
+        player.perform(&open(menu), frame, Transition::Instant, 0.0, Easing::Linear, None, 0.0);
+        let display = player.display().unwrap();
+        for kept in [frame, group, selected, selected_child, menu] {
+            assert!(display.node(kept).unwrap().visible, "selected nodes, their ancestors, descendants and overlays stay visible");
+        }
+        assert!(!display.node(hidden).unwrap().visible);
+        assert!(source.node(hidden).unwrap().visible);
+        player.close_overlay(0.1);
+        assert!(player.display().unwrap().node(hidden).unwrap().visible, "closing the menu invalidates filtered display");
+        player.perform(&open(death), frame, Transition::Instant, 0.0, Easing::Linear, None, 0.2);
+        let display = player.display().unwrap();
+        assert!(!display.node(frame).unwrap().visible);
+        assert!(display.node(death).unwrap().visible);
+        player.close_overlay(0.3);
+        assert!(player.display().unwrap().node(frame).unwrap().visible);
+    }
 }

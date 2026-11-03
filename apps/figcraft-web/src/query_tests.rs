@@ -1,6 +1,6 @@
 //! `#join=` and `?control` in the page's URL, and the server the page names for itself.
 
-use crate::query::{control, join_link, page_server};
+use crate::query::{control, join_link, page_server, play};
 
 #[test]
 fn join_takes_the_rest_of_the_fragment() {
@@ -48,4 +48,19 @@ fn a_page_names_its_own_server_without_a_key() {
     {
         assert_eq!(page_server(bad), None, "{bad:?} is ignored");
     }
+}
+
+#[test]
+fn play_is_an_exact_query_flag_not_an_invitation_parameter() {
+    for query in ["?play", "play", "?webgl&play", "?control&play=1", "?play="] {
+        assert!(play(query), "{query}");
+    }
+    for query in ["", "?", "?display", "?replay&player=1", "?x=play", "?%70lay", "#play", "?x=1#play"] {
+        assert!(!play(query), "{query}");
+    }
+    let invitation = "figcraft%3A%2F%2Fjoin%3Fhost%3Dlocalhost%3A47900%26file%3Df%26token%3Dsecret";
+    assert_eq!(join_link(&format!("#join={invitation}")), Some(invitation));
+    assert!(!play("?join=figcraft%3A%2F%2Fjoin%3Fplay"), "the invitation isn't a page flag");
+    assert!(!play("?x=1#join=figcraft://join?host=h&file=f&token=play"));
+    assert!(!play("?x=1#join=figcraft://join?host=h&file=f&token=secret&play"), "a fragment entry cannot enable Play");
 }

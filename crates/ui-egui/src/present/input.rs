@@ -370,7 +370,7 @@ pub(super) fn input(p: &mut Presenter, ctx: &egui::Context, l: &Layout, mode: In
             }
             continue;
         }
-        if player_key(p, ctx, l, key, mods, pane, now) || step_frames(p, ctx, key, mods, now) {
+        if p.game.is_none() && (player_key(p, ctx, l, key, mods, pane, now) || step_frames(p, ctx, key, mods, now)) {
             return;
         }
     }

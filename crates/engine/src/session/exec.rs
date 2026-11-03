@@ -6,11 +6,23 @@ use super::{
 /// Whether a command, or a batch wrapping one, imports a file passed as Base64 `data`.
 fn command_carries_import_bytes(id: &str, params: &Value) -> bool {
     match id {
-        "file.import" | "image.replace" => params::get(params, "data").is_some(),
+        "file.import" | "image.replace" | "audio.import" => params::get(params, "data").is_some(),
         "command.batch" => params.get("commands").and_then(Value::as_array).is_some_and(|commands| {
             commands.iter().any(|c| {
                 c.get("command").and_then(Value::as_str).zip(c.get("params")).is_some_and(|(id, params)| command_carries_import_bytes(id, params))
             })
+        }),
+        _ => false,
+    }
+}
+
+fn command_carries_audio_bytes(id: &str, params: &Value) -> bool {
+    match id {
+        "audio.import" => params.get("data").is_some(),
+        "command.batch" => params.get("commands").and_then(Value::as_array).is_some_and(|commands| {
+            commands
+                .iter()
+                .any(|c| c.get("command").and_then(Value::as_str).zip(c.get("params")).is_some_and(|(id, p)| command_carries_audio_bytes(id, p)))
         }),
         _ => false,
     }
@@ -118,7 +130,7 @@ impl Session {
                 self.after_command(spec, before);
                 self.apply_view_prefs();
                 if spec.history && id != "edit.repeat" {
-                    self.last_command = Some((id.to_string(), params.clone()));
+                    self.last_command = if command_carries_audio_bytes(id, params) { None } else { Some((id.to_string(), params.clone())) };
                 }
                 // Imported bytes already live in the document: a Base64 copy in the log would stay
                 // for the whole session.

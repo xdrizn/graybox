@@ -67,6 +67,10 @@ impl<'d> Exporter<'d> {
                 event.push(("keyTrigger", o(vec![("keyCodes", arr(codes.into_iter().map(int).collect())), ("triggerDevice", device)])));
                 "ON_KEY_DOWN"
             }
+            Trigger::GameEvent { .. } => {
+                self.warn("game event triggers have no .fig equivalent and were left out");
+                return None;
+            }
         };
         // A mouse trigger's delay is the event's timeout.
         if it.delay_secs() > 0.0 {
@@ -122,6 +126,10 @@ impl<'d> Exporter<'d> {
             Action::OpenUrl { url, .. } => Some(o(vec![("connectionType", e("URL")), ("connectionURL", s(url))])),
             Action::SetVariable { .. } | Action::SetVariableMode { .. } | Action::Conditional { .. } => {
                 self.warn("variable and conditional prototype actions were left out");
+                None
+            }
+            Action::GamePause { .. } | Action::GameCursor { .. } | Action::PlaySound { .. } | Action::PlayAnimation { .. } => {
+                self.warn("game, sound and layer-animation actions have no .fig equivalent and were left out");
                 None
             }
         }

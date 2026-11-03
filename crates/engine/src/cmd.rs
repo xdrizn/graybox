@@ -1,12 +1,15 @@
 //! The command registry. Each area module exposes `specs()`; [`all_commands`] collects them once.
 
 pub mod arrange;
+pub mod audio;
 pub mod comment;
 pub mod component;
 pub mod create;
 pub mod edit;
 pub mod facilitate;
 pub mod file;
+pub mod game;
+pub mod game_share;
 pub mod image;
 pub mod layout;
 pub mod library;
@@ -95,6 +98,9 @@ fn registry() -> &'static Registry {
         list.extend(library::specs());
         list.extend(proto::specs());
         list.extend(proto_actions::specs());
+        list.extend(game::specs());
+        list.extend(game_share::specs());
+        list.extend(audio::specs());
         list.extend(comment::specs());
         list.extend(crate::vectoredit::specs());
         list.extend(crate::shapebuilder::specs());

@@ -104,10 +104,10 @@ fn craft_fonts(dir: &std::path::Path, manifest_rel: &str, wasm: bool, embed_cjk:
         if cjk && !embed_cjk {
             continue;
         }
-        // Web builds have a size budget: Inter, Noto Sans Georgian (small, for the Georgian UI), only the
-        // SemiBold wordmark, and optionally Noto Sans CJK (every CJK script, for CJK UI text).
+        // Web builds retain the editor's optional Greybox typography alongside Inter fallback,
+        // Georgian UI, the SemiBold wordmark, and optional CJK UI text.
         let wordmark = *family == "Archivo" && *style == "SemiBold";
-        if wasm && !matches!(*family, "Inter" | "Noto Sans Georgian") && !wordmark && !cjk {
+        if wasm && !matches!(*family, "Inter" | "Noto Sans Georgian" | "Space Grotesk" | "JetBrains Mono") && !wordmark && !cjk {
             continue;
         }
         let path = dir.join(file).canonicalize().map_err(|e| format!("{file}: {e}"))?;
@@ -172,6 +172,29 @@ mod tests {
         assert!(native.faces.iter().any(|(family, _)| family == "Carlito"));
         assert!(native.faces.iter().any(|(family, _)| family == "Liberation Serif"));
         assert!(input_fonts(Some(&f.0), true, true, false).is_ok());
+    }
+
+    /// Optional Greybox typography survives the same web filtering as the fallback UI faces.
+    #[test]
+    fn greybox_fonts_are_optional_and_available_on_native_and_web() {
+        let f = Fixture::new();
+        f.manifest(
+            "latin-manifest.txt",
+            &[
+                ("Space Grotesk", "Regular"),
+                ("Space Grotesk", "Medium"),
+                ("Space Grotesk", "Bold"),
+                ("JetBrains Mono", "Regular"),
+                ("Unrelated", "Regular"),
+            ],
+        );
+        for wasm in [false, true] {
+            let catalog = craft_fonts(&f.0, "fonts/latin-manifest.txt", wasm, false).unwrap();
+            for family in ["Space Grotesk", "JetBrains Mono"] {
+                assert!(catalog.faces.iter().any(|(f, _)| f == family));
+            }
+            assert_eq!(catalog.faces.len(), if wasm { 4 } else { 5 });
+        }
     }
 
     /// Asserts required web input rejects a catalog missing Inter Regular or Inter SemiBold.

@@ -44,6 +44,7 @@ mod actions;
 mod chrome;
 mod device;
 mod draw;
+mod game;
 mod input;
 mod layout;
 mod navigate;
@@ -261,6 +262,8 @@ struct Temp {
 }
 
 pub struct Presenter {
+    /// Greybox game state; absent for the ordinary prototype presenter.
+    pub game: Option<crate::game::Play>,
     pub current: NodeId,
     pub history: Vec<Visit>,
     pub overlays: Vec<OverlayState>,
@@ -283,6 +286,8 @@ pub struct Presenter {
     display: Option<(u64, Document)>,
     scroll_anim: Option<ScrollAnim>,
     anim: Option<Anim>,
+    animations: crate::game::animation::Animations,
+    pub(crate) sound_requests: Vec<(String, f32)>,
     anim_tex: Option<egui::TextureHandle>,
     temp: Option<Temp>,
     textures: HashMap<NodeId, FrameTex>,
@@ -342,6 +347,19 @@ pub struct Presenter {
 }
 
 impl Presenter {
+    pub fn drain_sounds(&mut self) -> impl Iterator<Item = (String, f32)> + '_ {
+        self.sound_requests.drain(..)
+    }
+
+    /// Advance temporary layer effects without changing the prototype's designed state.
+    pub(crate) fn animate_layers(&mut self, ctx: &egui::Context, now: f64, reduce_motion: bool) {
+        self.clock = now;
+        if self.animations.advance(now, reduce_motion) {
+            self.rev += 1;
+            ctx.request_repaint();
+        }
+    }
+
     /// The frame the presentation started from (Restart goes back there).
     pub fn start(&self) -> NodeId {
         self.start
@@ -349,6 +367,7 @@ impl Presenter {
 
     pub fn new(start: NodeId) -> Self {
         Self {
+            game: None,
             current: start,
             history: Vec::new(),
             overlays: Vec::new(),
@@ -364,6 +383,8 @@ impl Presenter {
             display: None,
             scroll_anim: None,
             anim: None,
+            animations: crate::game::animation::Animations::default(),
+            sound_requests: Vec::new(),
             anim_tex: None,
             temp: None,
             textures: HashMap::new(),

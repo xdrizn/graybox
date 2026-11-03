@@ -290,7 +290,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "version.autosave",
             "Autosave version",
-            "{}  save an automatic checkpoint when the document has unsaved changes since the last version (with `pref.autoSave` on: changes made since it was opened); the app does this every 30 minutes; keeps the newest 20 autosaves → {saved, version?}",
+            "{}  save an automatic checkpoint when the document has unsaved changes since the last version (with `pref.autoSave` on: changes made since it was opened); the app does this every 2 minutes; keeps the newest 20 autosaves → {saved, version?}",
             false,
             autosave
         ),

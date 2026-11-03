@@ -36,7 +36,7 @@ pub struct Prefs {
     /// A mouse wheel zooms the canvas about the pointer, and Cmd/Ctrl+wheel scrolls it (off: the
     /// other way round). Trackpads are unchanged.
     pub scroll_wheel_zoom: bool,
-    /// "system" by default; an explicit "light" or "dark" choice stays saved.
+    /// "dark" by default; an explicit "system" or "light" choice stays saved.
     pub theme: String,
     /// The widths of the main window's left and right panels (the interface keeps them within its
     /// limits; other windows have their own while they are open).
@@ -136,14 +136,15 @@ impl Default for Prefs {
             number_keys_opacity: true,
             show_dimensions: true,
             scroll_wheel_zoom: false,
-            theme: "system".into(),
+            theme: "dark".into(),
             panel_widths: (240.0, 240.0),
             pages_height: None,
             language: "system".into(),
             user_name: cmd::comment::DEFAULT_AUTHOR.into(),
             reduce_motion: false,
             ui_scale: 1.0,
-            auto_save: false,
+            // Greybox (G0.3, docs/game/STATUS.md › Upstream hooks): on by default.
+            auto_save: true,
             start_on_home: false,
             invite_links: None,
             plugins: Vec::new(),

@@ -11,6 +11,7 @@ impl Presenter {
             self.closing.push((now - (1.0 - shown) * o.dur, o));
         }
         self.hovered.clear();
+        self.rev += 1;
         true
     }
 
@@ -23,6 +24,8 @@ impl Presenter {
         }
         let first = self.source.is_none();
         self.source = Some(doc.clone());
+        self.animations.clear();
+        self.sound_requests.clear();
         let copy = Document::clone(doc);
         self.original = Some(copy.clone());
         self.design = Some(copy);
@@ -89,11 +92,23 @@ impl Presenter {
         }
     }
 
+    /// Layout stays anchored to designed bounds, not an effect's moving/scaling bounds.
+    pub(super) fn placement_bounds(&self, id: NodeId) -> Option<figcraft_geom::Rect> {
+        let doc = self.display.as_ref().filter(|(rev, _)| *rev == self.rev).map(|(_, doc)| doc).or(self.doc.as_ref())?;
+        if id == self.current
+            && let Some((w, h)) = viewport(doc, id)
+        {
+            return Some(figcraft_geom::transform_rect_bbox(doc.world_transform(id), figcraft_geom::Rect::new(0.0, 0.0, w, h)));
+        }
+        doc.world_bounds(id)
+    }
+
     /// The player's document with scroll offsets applied and the presented frame sized to the
     /// device's screen (cached per revision).
     pub(crate) fn display(&mut self) -> Option<Document> {
         if let Some((r, d)) = &self.display
             && *r == self.rev
+            && !self.animations.active()
         {
             return Some(d.clone());
         }
@@ -102,7 +117,45 @@ impl Presenter {
         if let Some(vp) = viewport(doc, self.current) {
             fit_viewport(&mut d, self.current, vp);
         }
+        if self.game.is_some()
+            && let Some(root) = d.node_mut(self.current)
+        {
+            root.fills.clear();
+            root.strokes.clear();
+            root.effects.clear();
+        }
+        if self.game.is_some() {
+            let hud_root = doc.game.screens.get(&self.current).is_none_or(|s| s.role == figcraft_doc::game::ScreenRole::Hud);
+            let active = self.overlays.last().map_or(self.current, |o| o.id);
+            if hud_root && let Some(screen) = doc.game.screens.get(&active).or_else(|| doc.game.screens.get(&self.current)) {
+                if !screen.hud_visible {
+                    if let Some(root) = d.node_mut(self.current) {
+                        root.visible = false;
+                    }
+                } else if !screen.hud_layers.is_empty() {
+                    let mut keep = std::collections::HashSet::new();
+                    keep.insert(self.current);
+                    for selected in &screen.hud_layers {
+                        keep.extend(doc.subtree(*selected));
+                        keep.extend(doc.ancestors(*selected));
+                    }
+                    for id in doc.subtree(self.current) {
+                        let in_overlay =
+                            self.overlays.iter().chain(self.closing.iter().map(|(_, o)| o)).any(|o| o.id == id || doc.is_ancestor(o.id, id));
+                        if !keep.contains(&id)
+                            && !in_overlay
+                            && let Some(layer) = d.node_mut(id)
+                        {
+                            layer.visible = false;
+                        }
+                    }
+                }
+            }
+        }
+        // Keep placement geometry before effects (including viewport fitting and scroll offsets).
+        // The animated copy itself is never cached: its transforms must be sampled every frame.
         self.display = Some((self.rev, d.clone()));
+        self.animations.apply(&mut d, self.clock);
         Some(d)
     }
 
@@ -139,6 +192,7 @@ impl Presenter {
             "zoom": self.zoom,
             "flinging": self.fling.is_some(),
             "gamepad": self.uses_pads,
+            "game": self.game.as_ref().map(|g| g.inspect()),
             "linkNotice": self.link_notice.as_ref().map(|(url, ..)| url),
         })
     }
@@ -204,6 +258,8 @@ impl Presenter {
     pub fn restart(&mut self, start: NodeId, now: f64) {
         self.start = start;
         self.current = start;
+        self.animations.clear();
+        self.sound_requests.clear();
         self.sections.clear();
         self.history.clear();
         self.overlays.clear();

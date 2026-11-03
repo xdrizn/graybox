@@ -15,6 +15,7 @@ MIT OR Apache-2.0. No third-party icon sets are used.
 | `docs/brand/artcraft-logo.svg`, `docs/brand/artcraft-logo.png`, `docs/brand/artcraft-logo-white.svg`, `docs/brand/artcraft-logo-white.png`, `docs/brand/artcraft-mark.svg`, `docs/brand/artcraft-mark.png`, `docs/brand/artcraft-mark-black.svg`, `docs/brand/artcraft-mark-black.png` | ArtCraft Team | ArtCraft brand kit | ArtCraft brand terms (`docs/brand/LICENSE-brand.txt`), not open source | Trademarks; unmodified use within FigCraft only |
 | `docs/images/` (all screenshots and exports: `shot-*.png`, `art-*.png`) | FigCraft contributors | Screenshots of FigCraft showing synthetic demo documents made in FigCraft, and PNG exports of those documents by FigCraft's renderer | MIT OR Apache-2.0 | No third-party artwork |
 | `examples/*.figcraft` | FigCraft contributors | Synthetic demo documents built through FigCraft's command API; invented copy, shapes and vectors drawn from scratch, no images or embedded fonts | MIT OR Apache-2.0 | Text uses Inter (OFL, from craft-fonts or the system); no third-party artwork |
+| `crates/engine/src/cmd/audio-test.ogg`, `crates/engine/src/cmd/audio-test.mp3` | Greybox contributors | Original synthetic 880 Hz sine tone (30 ms), generated with FFmpeg's sine source | MIT OR Apache-2.0 | Audio decoding regression fixtures; no recordings or third-party product content |
 
 ## Fonts (build input, not in this repository)
 
@@ -29,6 +30,8 @@ Release builds embed fonts from the optional craft-fonts build input
 | Roboto, Montserrat, Lato, Open Sans, Poppins, Nunito Sans, Merriweather, Playfair Display, Carlito, Caladea | SIL Open Font License 1.1 | Google Fonts / upstream repositories (see craft-fonts) |
 | Liberation Sans, Serif, Mono | SIL Open Font License 1.1 | https://github.com/liberationfonts |
 | BIZ UDPGothic, BIZ UDMincho, Shippori Mincho, Noto Sans Arabic, Noto Sans Georgian | SIL Open Font License 1.1 | Google Fonts (see craft-fonts) |
+| Space Grotesk | SIL Open Font License 1.1 | https://github.com/floriankarsten/space-grotesk |
+| JetBrains Mono | SIL Open Font License 1.1 | https://github.com/JetBrains/JetBrainsMono |
 
 The central catalog also contains Adobe-authored Source Sans 3 and Source Serif 4.
 FigCraft filters both families from every build in accordance with its asset policy.

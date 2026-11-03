@@ -33,6 +33,7 @@ pub fn start() {
             return;
         };
         let mut options = eframe::WebOptions::default();
+        options.depth_buffer = 0;
         // `?webgl`: force the WebGL2 backend (troubleshooting, and headless browsers whose WebGPU
         // adapter request returns nothing).
         if query().contains("webgl")
@@ -47,6 +48,10 @@ pub fn start() {
                 Box::new(|cc| {
                     if let Some(rs) = &cc.wgpu_render_state {
                         log::info!("figcraft-web: wgpu backend {:?}", rs.adapter.get_info().backend);
+                        figcraft_ui_egui::game::renderer::configure(rs, 1, None);
+                        if let Err(e) = crate::game_input::install(&cc.egui_ctx) {
+                            log::error!("Game browser input unavailable: {e:?}");
+                        }
                     }
                     let reduce_motion = web_sys::window().and_then(|w| w.match_media("(prefers-reduced-motion: reduce)").ok().flatten());
                     let mut session = Session::new();
@@ -67,9 +72,16 @@ pub fn start() {
                     }
                     // `#join=<link>`: join that session, as opening an invite link does on the desktop.
                     let hash = web_sys::window().and_then(|w| w.location().hash().ok()).unwrap_or_default();
+                    let mut pending_play = None;
                     if let Some(link) = crate::query::join_link(&hash) {
                         let link = js_sys::decode_uri_component(link).ok().and_then(|s| s.as_string()).unwrap_or_else(|| link.to_string());
-                        figcraft_ui_egui::live::open_invite(&mut fig, &link);
+                        if crate::query::play(&query()) {
+                            pending_play = fig
+                                .run("collab.join", serde_json::json!({"link":link}))
+                                .and_then(|result| result.get("session").and_then(serde_json::Value::as_u64));
+                        } else {
+                            figcraft_ui_egui::live::open_invite(&mut fig, &link);
+                        }
                     }
                     // `?control`: `window.figcraft`, the page's control channel (crate::api), opt-in.
                     if crate::query::control(&query()) {
@@ -78,7 +90,7 @@ pub fn start() {
                             log::error!("couldn't install window.figcraft: {e:?}");
                         }
                     }
-                    Ok(Box::new(WebShell { fig }))
+                    Ok(Box::new(WebShell { fig, next_keep: figcraft_ui_egui::AUTOSAVE_SECS, pending_play }))
                 }),
             )
             .await;
@@ -117,6 +129,17 @@ fn restore_unsaved(session: &mut Session) -> usize {
     crate::recovery::restore(session, kept)
 }
 
+/// Greybox (G0.3): keep the files with unsaved changes in the page's storage now; none clears it.
+fn keep_unsaved_now() {
+    let Some(storage) = local_storage() else { return };
+    let files = UNSAVED.with(|u| u.try_borrow().map(|u| u.files()).unwrap_or_default());
+    if files.is_empty() {
+        let _ = storage.remove_item(RECOVERY_KEY);
+    } else {
+        crate::recovery::store(files, |v| storage.set_item(RECOVERY_KEY, v).is_ok());
+    }
+}
+
 /// Say on the page that it stopped (the canvas stays as it was).
 fn show_stopped(text: &str) {
     let Some(document) = web_sys::window().and_then(|w| w.document()) else { return };
@@ -143,6 +166,10 @@ fn query() -> String {
 
 struct WebShell {
     fig: FigApp,
+    /// Greybox (G0.3, docs/game/STATUS.md › Upstream hooks): when (UI clock) the files with
+    /// unsaved changes are next kept in the page's storage, as a crash would keep them.
+    next_keep: f64,
+    pending_play: Option<u64>,
 }
 
 impl eframe::App for WebShell {
@@ -154,6 +181,13 @@ impl eframe::App for WebShell {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Every frame, hidden or not, starts here: what the last one left is what a panic keeps.
         UNSAVED.with(|u| u.try_borrow_mut().map(|mut u| u.follow(&self.fig.session))).ok();
+        // Greybox (G0.3): and every two minutes too, so closing the tab or a power cut loses at
+        // most that much of a file never downloaded.
+        let now = ctx.input(|i| i.time);
+        if now >= self.next_keep {
+            self.next_keep = now + figcraft_ui_egui::AUTOSAVE_SECS;
+            keep_unsaved_now();
+        }
         figcraft_ui_egui::windows::guard(&mut self.fig, ctx, |fig| fig.background_tick(ctx));
     }
 
@@ -170,6 +204,21 @@ impl eframe::App for WebShell {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.fig.control_queue.extend(crate::api::take_requests());
         self.fig.ui(ui);
+        if let Some(join) = self.pending_play {
+            let live = self.fig.session.live();
+            let ready = live.id == join
+                && live.status == figcraft_engine::live::Status::Live
+                && live.syncing()
+                && self.fig.session.ds().is_ok_and(|d| live.doc_uid == Some(d.uid));
+            if ready {
+                self.pending_play = None;
+                if live.info.as_ref().is_some_and(|info| info.access == figcraft_engine::live::Access::View) {
+                    self.fig.run("game.play", serde_json::json!({}));
+                } else {
+                    self.fig.toast("Browser Play links must grant view-only access");
+                }
+            }
+        }
         crate::api::poll_replies();
         // The fonts on this computer that text asked for this frame are read; once one is in,
         // auto-sizing text measured in a fallback fits it.
@@ -256,19 +305,54 @@ impl Services for WebServices {
     /// The Gamepad API's controllers with the standard mapping (its button order is the layout's;
     /// others are skipped). Browsers list controllers once one of their buttons is pressed.
     fn gamepad_held(&mut self) -> u32 {
-        let Some(pads) = web_sys::window().and_then(|w| w.navigator().get_gamepads().ok()) else { return 0 };
-        let mut held = 0;
+        self.gamepad_state().buttons
+    }
+    fn gamepad_state(&mut self) -> figcraft_ui_egui::GamepadState {
+        let mut state = figcraft_ui_egui::GamepadState::default();
+        let Some(pads) = web_sys::window().and_then(|w| w.navigator().get_gamepads().ok()) else { return state };
         for pad in pads.iter().filter_map(|p| p.dyn_into::<web_sys::Gamepad>().ok()) {
-            if pad.mapping() != web_sys::GamepadMappingType::Standard {
+            if !pad.connected() || pad.mapping() != web_sys::GamepadMappingType::Standard {
                 continue;
             }
-            for (i, b) in pad.buttons().iter().take(32).enumerate() {
-                if b.dyn_into::<web_sys::GamepadButton>().is_ok_and(|b| b.pressed()) {
-                    held |= 1 << i;
+            let mut buttons = 0;
+            for (i, button) in pad.buttons().iter().take(17).enumerate() {
+                if button.dyn_into::<web_sys::GamepadButton>().is_ok_and(|b| b.pressed()) {
+                    buttons |= 1 << i;
                 }
             }
+            let axes = std::array::from_fn(|i| {
+                let value = pad.axes().get(i as u32).as_f64().unwrap_or(0.0) as f32;
+                if !value.is_finite() || value.abs() < 0.15 { 0.0 } else { value.signum() * ((value.abs() - 0.15) / 0.85).min(1.0) }
+            });
+            if !state.connected || buttons != 0 || axes.iter().any(|v| *v != 0.0) {
+                state.axes = axes;
+                let name = pad.id().to_ascii_lowercase();
+                state.playstation = name.contains("playstation") || name.contains("dualsense") || name.contains("dualshock");
+            }
+            state.connected = true;
+            state.buttons |= buttons;
         }
-        held
+        state
+    }
+    fn game_enter(&mut self) -> Result<(), String> {
+        crate::game_input::enter();
+        Ok(())
+    }
+    fn game_leave(&mut self) {
+        crate::game_input::leave();
+    }
+    fn game_cursor(&mut self, captured: bool) -> Result<(), String> {
+        crate::game_input::cursor(captured);
+        Ok(())
+    }
+    fn game_capture_allowed(&mut self, allowed: bool) {
+        crate::game_input::capture_allowed(allowed);
+    }
+    fn game_cursor_locked(&self) -> Option<bool> {
+        Some(crate::game_input::locked())
+    }
+    fn game_mouse_delta(&mut self) -> Option<[f32; 2]> {
+        Some(crate::game_input::mouse_delta())
     }
     /// Local Font Access (`window.queryLocalFonts`, Chromium), not asked yet.
     fn can_ask_for_local_fonts(&self) -> bool {
@@ -278,6 +362,7 @@ impl Services for WebServices {
         crate::local_fonts::ask(self.ctx.clone());
     }
 }
+
 
 /// The file picked in the browser's file picker (`accept`: the extensions it offers), with its
 /// name; `None` when the picker is cancelled, `Some(Err)` with what to tell the user when the file

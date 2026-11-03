@@ -1325,7 +1325,7 @@ closing or saving a version ends the preview first, and `version.list` marks the
 `previewing`. Indexes are validated
 (a negative or out-of-range index is an error). A file keeps at most 100 versions.
 `version.autosave` saves an automatic checkpoint (`auto: true`, named "Autosave") when the document
-has unsaved changes since its last version; the app runs it every 30 minutes for each open document,
+has unsaved changes since its last version; the app runs it every 2 minutes for each open document,
 and a file keeps the newest 20 autosaves (user versions are never dropped for them). Merging a
 branch adds the main file as it was (an autosave, when it changed since its last version) and then
 `Merged “<branch>”`. `file.versionHistory` returns the same list and opens the panel in the app.

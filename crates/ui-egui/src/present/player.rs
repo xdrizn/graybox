@@ -16,13 +16,16 @@ use super::{
 pub(super) fn player(p: &mut Presenter, ui: &mut Ui, rect: Rect, now: f64, chrome: Chrome) -> Option<BarAction> {
     let ctx = ui.ctx().clone();
     p.clock = now;
+    p.animate_layers(&ctx, now, ctx.global_style().animation_time == 0.0);
     // Hide UI (the full-window presenter only): no bar, the prototype takes the whole window.
     let hidden = p.view.hide_ui && !chrome.pane;
     let bar = Rect::from_min_size(rect.min, vec2(rect.width(), if hidden { 0.0 } else { chrome.bar_h }));
     let area = Rect::from_min_max(pos2(rect.min.x, bar.max.y), rect.max);
     let bg = crate::theme::doc_c32(ui.ctx(), p.doc.as_ref().map(|d| page_settings(d, p.current)).unwrap_or_default().background);
     let r = chrome.round;
-    ui.painter().rect_filled(area, CornerRadius { nw: 0, ne: 0, sw: r, se: r }, bg);
+    if p.game.is_none() {
+        ui.painter().rect_filled(area, CornerRadius { nw: 0, ne: 0, sw: r, se: r }, bg);
+    }
     let action = if hidden { None } else { top_bar(p, ui, bar, now, chrome) };
     if action == Some(BarAction::Restart) {
         p.restart(p.start, now);

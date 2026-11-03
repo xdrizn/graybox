@@ -33,6 +33,9 @@ pub enum Trigger {
     KeyPress {
         key: String,
     },
+    GameEvent {
+        event: String,
+    },
 }
 
 impl Trigger {
@@ -50,6 +53,7 @@ impl Trigger {
             // A controller button names itself ("Gamepad A").
             Trigger::KeyPress { key } if is_gamepad_button(key) => key.clone(),
             Trigger::KeyPress { key } => format!("Key/Gamepad {key}"),
+            Trigger::GameEvent { event } => format!("Game event {event}"),
         }
     }
 
@@ -321,6 +325,90 @@ impl Easing {
             }
             Easing::CustomBezier { x1, y1, x2, y2 } => cubic_bezier(t, x1, y1, x2, y2),
         }
+    }
+}
+
+/// Temporary layer effects; the designed state is restored after playback.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AnimationPreset {
+    #[default]
+    FadeIn,
+    FadeOut,
+    SlideInLeft,
+    SlideInRight,
+    SlideInTop,
+    SlideInBottom,
+    SlideOutLeft,
+    SlideOutRight,
+    SlideOutTop,
+    SlideOutBottom,
+    ScalePop,
+    Pulse,
+    Shake,
+    Bounce,
+    Blink,
+}
+
+impl AnimationPreset {
+    pub const ALL: [Self; 15] = [
+        Self::FadeIn,
+        Self::FadeOut,
+        Self::SlideInLeft,
+        Self::SlideInRight,
+        Self::SlideInTop,
+        Self::SlideInBottom,
+        Self::SlideOutLeft,
+        Self::SlideOutRight,
+        Self::SlideOutTop,
+        Self::SlideOutBottom,
+        Self::ScalePop,
+        Self::Pulse,
+        Self::Shake,
+        Self::Bounce,
+        Self::Blink,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::FadeIn => "Fade in",
+            Self::FadeOut => "Fade out",
+            Self::SlideInLeft => "Slide in left",
+            Self::SlideInRight => "Slide in right",
+            Self::SlideInTop => "Slide in top",
+            Self::SlideInBottom => "Slide in bottom",
+            Self::SlideOutLeft => "Slide out left",
+            Self::SlideOutRight => "Slide out right",
+            Self::SlideOutTop => "Slide out top",
+            Self::SlideOutBottom => "Slide out bottom",
+            Self::ScalePop => "Scale pop",
+            Self::Pulse => "Pulse",
+            Self::Shake => "Shake",
+            Self::Bounce => "Bounce",
+            Self::Blink => "Blink",
+        }
+    }
+}
+
+pub const MAX_ANIMATION_MS: u32 = 60_000;
+
+/// Reject malformed custom curves rather than silently substituting another animation.
+pub fn valid_easing(e: Easing) -> bool {
+    match e {
+        Easing::CustomBezier { x1, y1, x2, y2 } => {
+            [x1, y1, x2, y2].iter().all(|v| v.is_finite())
+                && (0.0..=1.0).contains(&x1)
+                && (0.0..=1.0).contains(&x2)
+                && (-10.0..=10.0).contains(&y1)
+                && (-10.0..=10.0).contains(&y2)
+        }
+        Easing::CustomSpring { mass, stiffness, damping } => {
+            [mass, stiffness, damping].iter().all(|v| v.is_finite())
+                && (0.01..=10_000.0).contains(&mass)
+                && (0.01..=1_000_000.0).contains(&stiffness)
+                && (0.0..=1_000_000.0).contains(&damping)
+        }
+        _ => true,
     }
 }
 
@@ -633,6 +721,23 @@ pub enum Action {
         collection: CollectionId,
         mode: ModeId,
     },
+    GamePause {
+        paused: bool,
+    },
+    GameCursor {
+        captured: bool,
+    },
+    PlaySound {
+        sound: String,
+        volume: f32,
+    },
+    #[serde(rename_all = "camelCase")]
+    PlayAnimation {
+        target: NodeId,
+        preset: AnimationPreset,
+        duration_ms: u32,
+        easing: Easing,
+    },
     /// If / else if / else: the actions of the first block whose condition holds run (a block
     /// without a condition is the "else").
     Conditional {
@@ -743,6 +848,10 @@ impl Action {
             Action::SetVariable { .. } => "Set variable",
             Action::SetVariableMode { .. } => "Set variable mode",
             Action::Conditional { .. } => "Conditional",
+            Action::GamePause { .. } => "Pause game",
+            Action::GameCursor { .. } => "Capture cursor",
+            Action::PlaySound { .. } => "Play sound",
+            Action::PlayAnimation { .. } => "Play animation",
         }
     }
 
@@ -768,6 +877,7 @@ impl Action {
             | Action::OpenOverlay { dest, .. }
             | Action::SwapOverlay { dest }
             | Action::ChangeTo { dest } => Some(*dest),
+            Action::PlayAnimation { target, .. } => Some(*target),
             _ => None,
         }
     }

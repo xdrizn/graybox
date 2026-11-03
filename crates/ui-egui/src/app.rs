@@ -210,6 +210,10 @@ impl FigApp {
     /// One frame of the window drawing now.
     pub(crate) fn frame(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
+        ctx.data_mut(|d| {
+            d.insert_temp(egui::Id::unique(crate::game::PLAY_BUTTON_RECT), egui::Rect::NOTHING);
+            d.insert_temp(egui::Id::unique(crate::game::PLAY_KEY_ENABLED), false);
+        });
         // Bind this input batch before controls or pointer input can replace its composing
         // target/caret. Outgoing IME receipts run after mutation and cannot authorize it.
         let ime_input = shortcuts::ImeInputBaseline::capture(self);
@@ -226,6 +230,12 @@ impl FigApp {
         self.poll_dialog(&ctx);
         // Control requests run first so their results reflect this frame.
         crate::control::drain(self, &ctx);
+        if let Some(error) = crate::game::audio::take_error(&ctx) {
+            self.toast(error);
+        }
+        if let Some(error) = ctx.data_mut(|d| d.remove_temp::<String>(egui::Id::unique(crate::game::BROWSER_ERROR))) {
+            self.toast(error);
+        }
         windows::requests(self, &ctx);
         selection_spacing::sync(self, &ctx);
         // Before any widget: the navigation keys (F6, Tab, arrows, Escape) move the keyboard.
@@ -241,7 +251,9 @@ impl FigApp {
         self.sync_dev_mode();
         self.end_pen_outside_design();
         tabs::relink_presents(self);
-        tabs::tab_bar(self, ui);
+        if !self.ui.present.as_ref().is_some_and(|p| p.game.is_some()) {
+            tabs::tab_bar(self, ui);
+        }
         // Control/window work and this pass's physical tab click may have replaced the owner.
         // A shared field ID in that replacement must never consume the old commit marker.
         let field_save = shortcuts::revalidate_field_save(self, &ctx, field_save);
@@ -392,6 +404,7 @@ impl FigApp {
         style_picker::show(self, &ctx);
         self.end_unwanted_text_preview(&ctx);
         self.end_pen_outside_design();
+        crate::game::settings_window(self, &ctx);
         dialogs::show(self, &ctx);
         updates_ui::show(self, &ctx);
         self.toast_ui(&ctx);

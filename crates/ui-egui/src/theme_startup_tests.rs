@@ -1,7 +1,7 @@
 //! Startup and system-theme changes through the real UI frame, before any settling frames.
 
 use egui::{Context, RawInput, Theme};
-use figcraft_engine::{Prefs, Session};
+use figcraft_engine::Session;
 use serde_json::json;
 
 use crate::{FigApp, NoServices, Services, theme::Tokens};
@@ -9,29 +9,6 @@ use crate::{FigApp, NoServices, Services, theme::Tokens};
 fn frame(ctx: &Context, app: &mut FigApp, system: Option<Theme>) {
     let mut output = ctx.run_ui(RawInput { system_theme: system, ..Default::default() }, |ui| app.ui(ui));
     output.textures_delta.clear();
-}
-
-#[test]
-fn fresh_app_uses_system_dark_theme_on_its_first_frame() {
-    let ctx = Context::default();
-    let mut app = FigApp::new(Session::empty(), Box::new(NoServices));
-    frame(&ctx, &mut app, Some(Theme::Dark));
-    assert!(app.ui.dark, "a first run must use the OS dark theme before drawing");
-    assert_eq!(Tokens::get(&ctx), Tokens::dark());
-    assert_eq!(app.session.prefs.theme, "system", "following the OS must remain a preference, not a saved snapshot");
-}
-
-#[test]
-fn first_run_and_preferences_without_a_theme_follow_system_light() {
-    for prefs in [Prefs::default(), serde_json::from_value(json!({"nudge_small": 2})).unwrap()] {
-        let ctx = Context::default();
-        let mut session = Session::empty();
-        session.prefs = prefs;
-        let mut app = FigApp::new(session, Box::new(NoServices));
-        frame(&ctx, &mut app, Some(Theme::Light));
-        assert_eq!(app.session.prefs.theme, "system");
-        assert_eq!(Tokens::get(&ctx), Tokens::light());
-    }
 }
 
 #[test]

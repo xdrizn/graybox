@@ -1055,13 +1055,19 @@ fn ui_input(app: &mut FigApp, ctx: &Context, p: &Value) -> Result<Value, String>
         let mods = egui::Modifiers { alt: b(e, "alt"), ctrl: command, shift: b(e, "shift"), mac_cmd: false, command };
         if let Some(p) = e.get("move").and_then(pos) {
             events.push(egui::Event::PointerMoved(p));
+        } else if let Some(delta) = e.get("motion").and_then(pos) {
+            events.push(egui::Event::MouseMoved(delta.to_vec2()));
         } else if let Some((p, pressed)) = e.get("down").and_then(pos).map(|p| (p, true)).or_else(|| e.get("up").and_then(pos).map(|p| (p, false))) {
             events.push(egui::Event::PointerMoved(p));
             events.push(egui::Event::PointerButton { pos: p, button, pressed, modifiers: mods });
         } else if let Some(k) = e.get("key").and_then(Value::as_str) {
             let key = egui::Key::from_name(k).ok_or_else(|| format!("unknown key `{k}`"))?;
-            for pressed in [true, false] {
-                events.push(egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers: mods });
+            if let Some(pressed) = e.get("pressed").and_then(Value::as_bool) {
+                events.push(egui::Event::Key { key, physical_key: Some(key), pressed, repeat: false, modifiers: mods });
+            } else {
+                for pressed in [true, false] {
+                    events.push(egui::Event::Key { key, physical_key: Some(key), pressed, repeat: false, modifiers: mods });
+                }
             }
         } else if let Some(t) = e.get("text").and_then(Value::as_str) {
             events.push(egui::Event::Text(t.to_string()));

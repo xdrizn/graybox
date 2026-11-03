@@ -1,5 +1,6 @@
-/// How often open documents get an autosave checkpoint (seconds).
-pub const AUTOSAVE_SECS: f64 = 30.0 * 60.0;
+/// How often open documents get an autosave checkpoint (seconds). Greybox (G0.3,
+/// docs/game/STATUS.md › Upstream hooks): every two minutes (upstream: 30).
+pub const AUTOSAVE_SECS: f64 = 2.0 * 60.0;
 
 /// Most changed layers whose names are checked for CJK scripts one by one (beyond: all of them).
 pub(crate) const CJK_CHANGES: usize = 10_000;

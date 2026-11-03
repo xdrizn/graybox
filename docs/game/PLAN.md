@@ -20,7 +20,7 @@ defaults, and work the same on desktop and in the browser build.
 
 ### G0 — Setup
 - [x] `crates/game` (pure simulation, L2) and `crates/ui-egui/src/game/` skeleton; registered in
-  `cargo xtask layers`; `cargo xtask ci` green, wasm builds.
+  `cargo xtask layers`; native and wasm checks pass (pre-existing test failures: see STATUS.md).
 - [x] `docs/game/STATUS.md` kept up to date, with the list of upstream hook points.
 - [ ] Auto-save: on by default; checkpoint and recovery copy every **2 minutes** (also for files
   not saved yet).

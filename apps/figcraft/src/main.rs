@@ -266,7 +266,15 @@ fn main() -> eframe::Result {
     if let Some(icon) = icon {
         viewport = viewport.with_icon(icon);
     }
-    let mut options = eframe::NativeOptions { viewport, renderer: eframe::Renderer::Wgpu, ..Default::default() };
+    let mut options = eframe::NativeOptions {
+        viewport,
+        renderer: eframe::Renderer::Wgpu,
+        // The game owns its scene depth buffer; egui's compositing pass is single-sampled.
+        multisampling: 0,
+        depth_buffer: 0,
+        stencil_buffer: 0,
+        ..Default::default()
+    };
     let graphics = graphics::Plan::configure(&mut options.wgpu_options);
     // Counts the frames drawn, which tells a window that failed starting up from one that ran.
     let window = ctx_slot.clone();
@@ -283,6 +291,7 @@ fn main() -> eframe::Result {
         Box::new(|cc| {
             if let Some(state) = &cc.wgpu_render_state {
                 graphics.opened(&state.adapter.get_info());
+                figcraft_ui_egui::game::renderer::configure(state, 1, None);
             }
             with_app(|fig| fig.services.set_egui_context(&cc.egui_ctx));
             // winit's own Quit (⌘Q) ends the process through `terminate:` without ever asking the

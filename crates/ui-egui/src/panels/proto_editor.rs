@@ -90,7 +90,7 @@ impl Cx<'_> {
 const INDENT: f32 = 12.0;
 
 /// The kinds an action can be, as its menus list them (a separator before each in `GROUPS`).
-const ACTIONS: [&str; 11] = [
+const ACTIONS: [&str; 15] = [
     tr_noop("Navigate to"),
     tr_noop("Change to"),
     tr_noop("Back"),
@@ -102,8 +102,12 @@ const ACTIONS: [&str; 11] = [
     tr_noop("Set variable"),
     tr_noop("Set variable mode"),
     tr_noop("Conditional"),
+    tr_noop("Pause game"),
+    tr_noop("Capture cursor"),
+    tr_noop("Play sound"),
+    tr_noop("Play animation"),
 ];
-const GROUPS: [usize; 5] = [2, 4, 5, 8, 10];
+const GROUPS: [usize; 6] = [2, 4, 5, 8, 10, 11];
 
 /// The action kinds as menu items; the one picked.
 fn action_menu(ui: &mut Ui) -> Option<&'static str> {
@@ -125,6 +129,7 @@ fn unavailable(label: &str) -> &'static str {
         "Change to" => tr("Change to needs a layer inside a variant"),
         "Set variable" => tr("Create a variable first"),
         "Set variable mode" => tr("Create a variable collection first"),
+        "Play sound" => tr("Import a sound in the Game panel first"),
         _ => tr("There's no destination for that action"),
     }
 }

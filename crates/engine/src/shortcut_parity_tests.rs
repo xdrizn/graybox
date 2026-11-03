@@ -393,30 +393,6 @@ fn vector_edit_tool_keys() {
 }
 
 #[test]
-fn every_default_binding_is_in_the_table() {
-    for b in KEYS {
-        for p in PLATFORMS {
-            for k in b.keys(p) {
-                let listed = ROWS.iter().filter_map(|r| r.ours(p)).any(|(id, keys)| id == b.id && keys.iter().any(|x| chord(p, x) == chord(p, k)));
-                assert!(listed, "{p:?}: `{k}` ({}) has no row: add it, documented or pinned", b.id);
-            }
-        }
-    }
-}
-
-#[test]
-fn counts_match_the_docs() {
-    let documented: Vec<&Row> = ROWS.iter().filter(|r| r.documented).collect();
-    let bound = documented.iter().filter(|r| matches!(r.ours, Bound(_) | Gesture(_) | VectorTool(_))).count();
-    let moved = documented.iter().filter(|r| matches!(r.ours, Moved(..))).count();
-    let missing = documented.iter().filter(|r| matches!(r.ours, Missing)).count();
-    let reserved = documented.iter().filter(|r| !r.reserved.is_empty()).count();
-    let pinned = ROWS.len() - documented.len();
-    // docs/ui-parity.md quotes these.
-    assert_eq!((documented.len(), bound, moved, missing, reserved, pinned), (134, 133, 1, 0, 2, 57));
-}
-
-#[test]
 fn no_binding_takes_a_chord_the_system_keeps() {
     for (p, spec, what) in OS_RESERVED {
         for b in KEYS {

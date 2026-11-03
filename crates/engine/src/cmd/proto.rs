@@ -16,7 +16,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "proto.interaction.add",
             "Add interaction",
-            "{id?, trigger? {type: onClick|onHover|onPress|onDrag|mouseEnter|mouseLeave|mouseDown|mouseUp|afterDelay {ms}|keyPress {key (a key or a combination: Shift+K, Ctrl+Alt+Delete; or a controller button: Gamepad A|B|X|Y|LB|RB|LT|RT|View|Menu|LS|RS|Up|Down|Left|Right|Home)}}, action {type: navigate {preserveScroll?}|back|scrollTo {offset? [x, y] (where the layer ends up from the top-left)}|openOverlay {position?, anchor? screen|triggerInside|triggerOutside (default screen; the trigger ones measure the position preset on the layer that opens the overlay: outside puts top presets above it and bottom presets below it, edges lined up), offset? [x, y] (position manual: the overlay's top-left from the top-left of the layer that opens it; without it, right below that layer), close_on_outside? (default true), background?}|swapOverlay|closeOverlay|openUrl {url, openInNewTab? (default true; false opens it in place of the prototype where the viewer's tab can go there: the web build)}|changeTo|setVariable {variable, value | expression (text, e.g. \"count + 1\")}|setVariableMode {collection, mode}|conditional {blocks [{condition? | expression? (text, e.g. \"count >= 3\"), actions}]}, dest?}, actions? [..], dest? (without action: a click-navigate to it), transition? {type: instant|dissolve|smartAnimate|moveIn|moveOut|push|slideIn|slideOut, direction?: left|right|top|bottom}, durationMs? | duration_ms?, easing? linear|easeIn|easeOut|easeInOut|easeInBack|easeOutBack|easeInOutBack|gentle|quick|bouncy|slow|{customBezier {x1, y1, x2, y2}}|{customSpring {mass, stiffness, damping}}, delayMs? | delay_ms? (mouse enter, leave, down and up: how long after the gesture the actions run, up to 600000)} — or {id, dest} for a click-navigate. Returns {index}",
+            "{id?, trigger? {type: onClick|onHover|onPress|onDrag|mouseEnter|mouseLeave|mouseDown|mouseUp|afterDelay {ms}|keyPress {key (a key combination or Gamepad A|B|X|Y|LB|RB|LT|RT|View|Menu|LS|RS|Up|Down|Left|Right|Home)}|gameEvent {event (canonical game event or configured alias, 1–128 bytes)}}, action {type: navigate {dest, preserveScroll?}|back|scrollTo {dest, offset? [x,y]}|openOverlay {dest, position?, anchor? screen|triggerInside|triggerOutside, offset? [x,y], close_on_outside? (default true), background?}|swapOverlay {dest}|closeOverlay|openUrl {url, openInNewTab? (default true)}|changeTo {dest}|setVariable {variable, value | expression (text)}|setVariableMode {collection, mode}|conditional {blocks [{condition? | expression?, actions}]}|gamePause {paused: bool}|gameCursor {captured: bool}|playSound {sound (document audio sound id), volume (0..1)}|playAnimation {target (layer id), preset: fadeIn|fadeOut|slideInLeft|slideInRight|slideInTop|slideInBottom|slideOutLeft|slideOutRight|slideOutTop|slideOutBottom|scalePop|pulse|shake|bounce|blink, durationMs (1..60000), easing}}, actions? [..], dest? (without action: click-navigate), transition? {type: instant|dissolve|smartAnimate|moveIn|moveOut|push|slideIn|slideOut, direction?: left|right|top|bottom}, durationMs? | duration_ms?, easing? linear|easeIn|easeOut|easeInOut|easeInBack|easeOutBack|easeInOutBack|gentle|quick|bouncy|slow|{customBezier {x1,y1,x2,y2}}|{customSpring {mass,stiffness,damping}}, delayMs? | delay_ms? (mouse gestures: 0..600000)}. Layer animations are temporary, restore designed state on completion and restart on retrigger. Springs settle using their parameters. Returns {index}",
             true,
             add
         ),
@@ -122,6 +122,13 @@ pub fn specs() -> Vec<CommandSpec> {
             "{start? (frame id; default: the selected frame, else the first flow, else the first frame)}",
             false,
             |s, p| { open_player(s, p, "proto.present", "present") }
+        ),
+        spec!(
+            "game.play",
+            "Play game",
+            "{start? (frame id; default as proto.present)}  play the frame above the FPS test scene; F10 returns to the editor",
+            false,
+            |s, p| open_player(s, p, "game.play", "game.play")
         ),
         spec!(
             "proto.preview",
@@ -294,12 +301,46 @@ fn open_player(s: &mut Session, p: &Value, cmd: &str, ui: &str) -> Result<Value>
 
 /// Every node an action points at must exist.
 fn check_dests(cmd: &str, s: &Session, it: &Interaction) -> Result<()> {
+    if let Trigger::GameEvent { event } = &it.trigger
+        && (event.trim().is_empty() || event.len() > 128 || event.chars().any(char::is_control))
+    {
+        return Err(bad(cmd, "gameEvent.event: 1–128 bytes without control characters"));
+    }
     check_action_dests(cmd, s.doc()?, &it.actions)
 }
 
 /// Every node `actions` (and what they nest) point at must exist in `doc`.
 pub(crate) fn check_action_dests(cmd: &str, doc: &Document, actions: &[Action]) -> Result<()> {
     for a in figcraft_doc::proto::walk(actions) {
+        match a {
+            Action::PlaySound { sound, volume } => {
+                if !volume.is_finite() || !(0.0..=1.0).contains(volume) {
+                    return Err(bad(cmd, "playSound.volume: finite number in 0..1"));
+                }
+                if !doc.audio.sounds.contains_key(sound) {
+                    return Err(bad(cmd, format!("sound `{sound}` doesn't exist")));
+                }
+            }
+            Action::PlayAnimation { target, duration_ms, easing, .. } => {
+                if *duration_ms == 0 || *duration_ms > figcraft_doc::proto::MAX_ANIMATION_MS {
+                    return Err(bad(cmd, "playAnimation.durationMs: whole milliseconds in 1..60000"));
+                }
+                if !figcraft_doc::proto::valid_easing(*easing) {
+                    return Err(bad(cmd, "playAnimation.easing: invalid bezier or spring parameters"));
+                }
+                if let Some(n) = doc.node(*target) {
+                    if matches!(n.kind, NodeKind::Page { .. }) {
+                        return Err(bad(cmd, "playAnimation.target must be a layer, not a page"));
+                    }
+                    if ![n.width, n.height, f64::from(n.opacity)].iter().all(|v| v.is_finite())
+                        || !n.transform.as_coeffs().iter().all(|v| v.is_finite())
+                    {
+                        return Err(bad(cmd, "playAnimation.target must have finite geometry and opacity"));
+                    }
+                }
+            }
+            _ => {}
+        }
         if let Some(d) = a.dest()
             && !doc.contains(d)
         {
@@ -467,6 +508,80 @@ mod tests {
     use super::*;
     use crate::params::id_of;
     use figcraft_doc::proto::{Direction, Overflow, ScrollPosition};
+
+    #[test]
+    fn game_triggers_and_actions_roundtrip_and_reject_invalid_parameters() {
+        let mut s = Session::new();
+        let target = frame(&mut s, 0.0);
+        let valid = [
+            json!({"type": "gamePause", "paused": true}),
+            json!({"type": "gameCursor", "captured": false}),
+            json!({"type": "playAnimation", "target": target, "preset": "slideOutBottom", "durationMs": 300, "easing": "easeOut"}),
+        ];
+        for action in valid {
+            s.execute("proto.interaction.add", &json!({"id": target, "trigger": {"type": "gameEvent", "event": "tomou-dano"}, "action": action}))
+                .unwrap();
+        }
+        let interactions = &s.doc().unwrap().node(target).unwrap().interactions;
+        assert_eq!(interactions[0].trigger, Trigger::GameEvent { event: "tomou-dano".into() });
+        assert_eq!(serde_json::to_value(&interactions[1].actions[0]).unwrap(), json!({"type": "gameCursor", "captured": false}));
+        assert_eq!(serde_json::to_value(&interactions[2].actions[0]).unwrap()["durationMs"], 300);
+        for action in [
+            json!({"type": "gamePause", "paused": "yes"}),
+            json!({"type": "gameCursor"}),
+            json!({"type": "playSound", "sound": "missing", "volume": 1.0}),
+            json!({"type": "playAnimation", "target": target, "preset": "missing", "durationMs": 100, "easing": "linear"}),
+            json!({"type": "playAnimation", "target": target, "preset": "pulse", "durationMs": 0, "easing": "linear"}),
+            json!({"type": "playAnimation", "target": target, "preset": "pulse", "durationMs": 60_001, "easing": "linear"}),
+            json!({"type": "playAnimation", "target": target, "preset": "pulse", "durationMs": 3.5, "easing": "linear"}),
+            json!({"type": "playAnimation", "target": target, "preset": "pulse", "duration_ms": 100, "easing": "linear"}),
+            json!({"type": "playAnimation", "target": target, "preset": "pulse", "durationMs": 100, "easing": {"customBezier": {"x1": 2, "y1": 0, "x2": 0.5, "y2": 1}}}),
+            json!({"type": "playAnimation", "target": target, "preset": "pulse", "durationMs": 100, "easing": {"customSpring": {"mass": -1, "stiffness": 100, "damping": 10}}}),
+            json!({"type": "playAnimation", "target": NodeId(u64::MAX), "preset": "pulse", "durationMs": 100, "easing": "linear"}),
+            json!({"type": "playAnimation", "target": s.page().unwrap(), "preset": "pulse", "durationMs": 100, "easing": "linear"}),
+        ] {
+            assert!(s.execute("proto.interaction.add", &json!({"id": target, "action": action})).is_err(), "{action}");
+            assert!(s.execute("proto.action.set", &json!({"id": target, "index": 0, "path": [0], "action": action})).is_err(), "{action}");
+        }
+        for event in ["", " ", "bad\\nname", &"x".repeat(129)] {
+            let event = event.replace("\\n", "\n");
+            assert!(
+                s.execute("proto.interaction.set", &json!({"id": target, "index": 0, "trigger": {"type": "gameEvent", "event": event}})).is_err()
+            );
+        }
+        assert_eq!(s.doc().unwrap().node(target).unwrap().interactions.len(), 3);
+    }
+
+    #[test]
+    fn sound_action_volume_and_nested_animation_validation() {
+        let mut s = Session::new();
+        let target = frame(&mut s, 0.0);
+        s.doc_mut().unwrap().audio.sounds.insert(
+            "click".into(),
+            figcraft_doc::audio::Sound {
+                name: "Click".into(),
+                data: "".into(),
+                format: figcraft_doc::audio::AudioFormat::Wav,
+                volume: 1.0,
+                group: "UI".into(),
+            },
+        );
+        s.execute("proto.interaction.add", &json!({"id": target, "action": {"type": "playSound", "sound": "click", "volume": 0.5}})).unwrap();
+        let stored = &s.doc().unwrap().node(target).unwrap().interactions[0].actions[0];
+        assert_eq!(serde_json::to_value(stored).unwrap(), json!({"type": "playSound", "sound": "click", "volume": 0.5}));
+        for volume in [json!(-0.1), json!(1.1), Value::Null, json!("loud")] {
+            assert!(
+                s.execute(
+                    "proto.action.set",
+                    &json!({"id": target, "index": 0, "path": [0], "action": {"type": "playSound", "sound": "click", "volume": volume}})
+                )
+                .is_err()
+            );
+        }
+        let nested = json!({"type": "conditional", "blocks": [{"actions": [{"type": "playAnimation", "target": target, "preset": "shake", "durationMs": 0, "easing": "linear"}]}]});
+        assert!(s.execute("proto.interaction.set", &json!({"id": target, "index": 0, "action": nested})).is_err());
+        assert_eq!(s.doc().unwrap().node(target).unwrap().interactions[0].actions[0], Action::PlaySound { sound: "click".into(), volume: 0.5 });
+    }
 
     fn frame(s: &mut Session, x: f64) -> NodeId {
         let r = s.execute("node.create", &json!({"type": "frame", "x": x, "y": 0, "width": 100, "height": 200})).unwrap();

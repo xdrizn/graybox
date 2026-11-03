@@ -3,6 +3,15 @@ use super::{Arc, FigApp, Future, PathBuf, Pin, Session, Value, Wake, i18n, json}
 pub const MAX_CLIPBOARD_PNG_BYTES: usize = 256 * 1024 * 1024;
 
 /// Platform services the app crate provides (file dialogs, clipboard, URLs).
+/// A standard-layout controller sample. Axes: left X/Y, right X/Y; positive Y points down.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct GamepadState {
+    pub buttons: u32,
+    pub axes: [f32; 4],
+    pub connected: bool,
+    pub playstation: bool,
+}
+
 pub trait Services {
     fn pick_open(&mut self, _title: &str, _exts: &[&str]) -> DialogFuture {
         Box::pin(std::future::ready(None))
@@ -77,6 +86,25 @@ pub trait Services {
     /// player asks every frame while its prototype has gamepad triggers.
     fn gamepad_held(&mut self) -> u32 {
         0
+    }
+    fn gamepad_state(&mut self) -> GamepadState {
+        GamepadState { buttons: self.gamepad_held(), ..Default::default() }
+    }
+    /// Browser hosts request pointer lock; native hosts receive viewport commands.
+    fn game_cursor(&mut self, _captured: bool) -> Result<(), String> {
+        Ok(())
+    }
+    fn game_enter(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+    fn game_leave(&mut self) {}
+    /// Whether a scene click may capture the pointer (false while a game menu owns it).
+    fn game_capture_allowed(&mut self, _allowed: bool) {}
+    fn game_cursor_locked(&self) -> Option<bool> {
+        None
+    }
+    fn game_mouse_delta(&mut self) -> Option<[f32; 2]> {
+        None
     }
     /// The fonts installed on this computer can be asked for and haven't been (the browser's Local
     /// Font Access; the desktop app sees them anyway).
