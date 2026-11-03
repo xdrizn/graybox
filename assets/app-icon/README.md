@@ -1,41 +1,29 @@
-# FigCraft app icon
+# Graybox app icon
 
-A **chameleon**: an engraving portrait in profile with a curled tail, in the Crafting Apps'
-owl-template framing (full-bleed field, head and body filling the tile, body running off the edges).
+A pixel-grid **G** inside an orange selection frame with corner handles, on a black tile with a
+faint grid: a design tool's selection over a game-style glyph.
 
 ## Palette
 
-Exactly three colours:
-
 | Colour | Hex | Used for |
 |---|---|---|
-| Ink | `#0b0b0c` | line work and contours |
-| Paper | `#efe9dc` | the figure |
-| FigCraft green (app colour) | `#02da96` | the full-bleed field |
+| Black | `#000000` | the tile |
+| White at 20 % | `#ffffff` | grid lines |
+| Orange | `#ff5a00` | selection frame, handles, the G (frame fill at 15 %) |
+| Light grey | `#d9d9d9` | the G's bar |
 
 ## Geometry
 
-A 512-unit tile (`viewBox="0 0 512 512"`), rounded square with `rx=112`, no border. The macOS
-renders pad it onto Apple's 824/1024 icon grid; Windows and Linux use the tile edge to edge, with
-its rounded corners, like the other Crafting Apps.
+Drawn on a 1697-unit tile with `rx=274`. `figcraft.svg` wraps it in the 512-unit
+`viewBox="0 0 512 512"` that `cargo xtask icon` expects (scale 0.301709). The macOS renders pad it
+onto Apple's 824/1024 icon grid; Windows and Linux use the tile edge to edge.
 
 ## Provenance
 
-The owner's original engraving-style drawing (1500 px, keyed to the palette), supplied for
-FigCraft and vectorised. The source
-image is not kept in this repo. License: see `LICENSE.txt`.
+The project owner's original design (Adriel, INDIRECT), supplied as SVG and used unchanged inside
+the scale wrapper. License: see `LICENSE.txt`.
 
 ## Files
 
-- `figcraft.svg`: canonical master (traced at 1500 px, the source's size).
-- `figcraft-small.svg`: lighter trace (traced at 1024 px); also the hicolor scalable icon.
-- `figcraft-<size>.png` (16–1024): renders on the macOS grid; `packaging/macos/package.sh` builds
-  the `.icns` from them.
-- `figcraft.ico`: Windows icon, 16–256 px, embedded in the `.exe` by `apps/figcraft/build.rs`.
-- `hicolor/<size>/apps/ai.storyteller.figcraft.png` (16–512) and `hicolor/scalable/...svg`:
-  Linux icon theme; the 256 px one is also the runtime window icon off macOS.
-
-## Regenerate
-
-Replace `figcraft.svg` (and `figcraft-small.svg`), then run `cargo xtask icon`. It needs `resvg`
-(`cargo install resvg`).
+- `figcraft.svg`: canonical master. `figcraft-small.svg`: the same drawing (scalable theme icon).
+- `figcraft-<size>.png`, `figcraft.ico`, `hicolor/`: rendered by `cargo xtask icon` (needs `resvg`).
