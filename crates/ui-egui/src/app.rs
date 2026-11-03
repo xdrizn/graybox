@@ -404,7 +404,6 @@ impl FigApp {
         style_picker::show(self, &ctx);
         self.end_unwanted_text_preview(&ctx);
         self.end_pen_outside_design();
-        crate::game::settings_window(self, &ctx);
         dialogs::show(self, &ctx);
         updates_ui::show(self, &ctx);
         self.toast_ui(&ctx);

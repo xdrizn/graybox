@@ -124,34 +124,6 @@ impl Presenter {
             root.strokes.clear();
             root.effects.clear();
         }
-        if self.game.is_some() {
-            let hud_root = doc.game.screens.get(&self.current).is_none_or(|s| s.role == figcraft_doc::game::ScreenRole::Hud);
-            let active = self.overlays.last().map_or(self.current, |o| o.id);
-            if hud_root && let Some(screen) = doc.game.screens.get(&active).or_else(|| doc.game.screens.get(&self.current)) {
-                if !screen.hud_visible {
-                    if let Some(root) = d.node_mut(self.current) {
-                        root.visible = false;
-                    }
-                } else if !screen.hud_layers.is_empty() {
-                    let mut keep = std::collections::HashSet::new();
-                    keep.insert(self.current);
-                    for selected in &screen.hud_layers {
-                        keep.extend(doc.subtree(*selected));
-                        keep.extend(doc.ancestors(*selected));
-                    }
-                    for id in doc.subtree(self.current) {
-                        let in_overlay =
-                            self.overlays.iter().chain(self.closing.iter().map(|(_, o)| o)).any(|o| o.id == id || doc.is_ancestor(o.id, id));
-                        if !keep.contains(&id)
-                            && !in_overlay
-                            && let Some(layer) = d.node_mut(id)
-                        {
-                            layer.visible = false;
-                        }
-                    }
-                }
-            }
-        }
         // Keep placement geometry before effects (including viewport fitting and scroll offsets).
         // The animated copy itself is never cached: its transforms must be sampled every frame.
         self.display = Some((self.rev, d.clone()));

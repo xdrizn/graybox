@@ -242,12 +242,12 @@ impl Presenter {
             }
             Action::GamePause { paused } => {
                 let Some(play) = self.game.as_mut() else { return false };
-                play.game.paused = *paused;
+                play.pending.push(crate::game::GameSet::Pause(*paused));
                 true
             }
             Action::GameCursor { captured } => {
                 let Some(play) = self.game.as_mut() else { return false };
-                play.captured = *captured;
+                play.pending.push(crate::game::GameSet::Cursor(*captured));
                 true
             }
             Action::PlaySound { sound, volume } => {
@@ -436,32 +436,24 @@ mod layer_animation_tests {
         player.sync(&source, 0.0);
         for paused in [true, false] {
             assert!(player.perform(&Action::GamePause { paused }, frame, Transition::Instant, 0.0, Easing::Linear, None, 0.0));
+            player.game.as_mut().unwrap().settle(&[]);
             assert_eq!(player.game.as_ref().unwrap().game.paused, paused);
         }
         for captured in [false, true] {
             assert!(player.perform(&Action::GameCursor { captured }, frame, Transition::Instant, 0.0, Easing::Linear, None, 0.0));
+            player.game.as_mut().unwrap().settle(&[]);
             assert_eq!(player.game.as_ref().unwrap().captured, captured);
         }
         assert_eq!(player.design.as_ref().unwrap().node(frame), source.node(frame));
     }
 
     #[test]
-    fn menu_hud_filters_preserve_selected_subtrees_and_restore_after_close() {
-        use figcraft_doc::game::ScreenRole;
+    fn pause_and_cursor_set_with_an_overlay_come_back_when_it_closes() {
         let (source, frame, _) = scene();
         let mut doc = (*source).clone();
         let page = doc.first_page().unwrap();
-        let group = doc.create(frame, NodeKind::Group, "Stats", 0.0, 0.0, 100.0, 50.0).unwrap();
-        let selected = doc.create(group, NodeKind::Group, "Keep", 0.0, 0.0, 30.0, 30.0).unwrap();
-        let selected_child = doc.create(selected, NodeKind::Rectangle, "Inside", 0.0, 0.0, 10.0, 10.0).unwrap();
-        let hidden = doc.create(group, NodeKind::Rectangle, "Other", 40.0, 0.0, 20.0, 20.0).unwrap();
-        let menu = doc.create(page, NodeKind::Frame, "Inventory", 400.0, 0.0, 100.0, 80.0).unwrap();
-        let death = doc.create(page, NodeKind::Frame, "Death", 600.0, 0.0, 100.0, 80.0).unwrap();
-        doc.game.screens.insert(frame, ScreenRole::Hud.defaults());
-        let mut inventory = ScreenRole::Inventory.defaults();
-        inventory.hud_layers = vec![selected];
-        doc.game.screens.insert(menu, inventory);
-        doc.game.screens.insert(death, ScreenRole::Death.defaults());
+        let menu = doc.create(page, NodeKind::Frame, "Any screen", 400.0, 0.0, 100.0, 80.0).unwrap();
+        let inner = doc.create(page, NodeKind::Frame, "Nested", 600.0, 0.0, 100.0, 80.0).unwrap();
         let source = Arc::new(doc);
         let mut player = Presenter::new(frame);
         player.game = Some(crate::game::Play::new());
@@ -474,20 +466,28 @@ mod layer_animation_tests {
             offset: None,
             anchor: OverlayAnchor::Screen,
         };
-        player.perform(&open(menu), frame, Transition::Instant, 0.0, Easing::Linear, None, 0.0);
-        let display = player.display().unwrap();
-        for kept in [frame, group, selected, selected_child, menu] {
-            assert!(display.node(kept).unwrap().visible, "selected nodes, their ancestors, descendants and overlays stay visible");
-        }
-        assert!(!display.node(hidden).unwrap().visible);
-        assert!(source.node(hidden).unwrap().visible);
-        player.close_overlay(0.1);
-        assert!(player.display().unwrap().node(hidden).unwrap().visible, "closing the menu invalidates filtered display");
-        player.perform(&open(death), frame, Transition::Instant, 0.0, Easing::Linear, None, 0.2);
-        let display = player.display().unwrap();
-        assert!(!display.node(frame).unwrap().visible);
-        assert!(display.node(death).unwrap().visible);
-        player.close_overlay(0.3);
-        assert!(player.display().unwrap().node(frame).unwrap().visible);
+        let run = |player: &mut Presenter, actions: &[Action]| {
+            for a in actions {
+                player.perform(a, frame, Transition::Instant, 0.0, Easing::Linear, None, 0.0);
+            }
+            let open: Vec<_> = player.overlays.iter().map(|o| o.id).collect();
+            player.game.as_mut().unwrap().settle(&open);
+        };
+        let state = |player: &Presenter| {
+            let play = player.game.as_ref().unwrap();
+            (play.game.paused, play.captured)
+        };
+        // Actions before the overlay in the list still belong to it.
+        run(&mut player, &[Action::GamePause { paused: true }, Action::GameCursor { captured: false }, open(menu)]);
+        assert_eq!(state(&player), (true, false));
+        run(&mut player, &[open(inner), Action::GameCursor { captured: true }]);
+        assert_eq!(state(&player), (true, true));
+        run(&mut player, &[Action::CloseOverlay]);
+        assert_eq!(state(&player), (true, false), "closing the nested overlay undoes only its own change");
+        run(&mut player, &[Action::CloseOverlay]);
+        assert_eq!(state(&player), (false, true), "closing the menu, however it closes, resumes the game");
+        // Without an overlay the change stays.
+        run(&mut player, &[Action::GamePause { paused: true }]);
+        assert_eq!(state(&player), (true, true));
     }
 }

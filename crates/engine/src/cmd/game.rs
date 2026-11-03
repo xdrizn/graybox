@@ -3,27 +3,20 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use figcraft_color::{Color, Paint};
-use figcraft_doc::game::{ACTIONS, EVENT_NAMES, GameSettings, ScreenRole, validate_keys};
-use figcraft_doc::proto::{Action, Interaction, Trigger};
+use figcraft_doc::game::{ACTIONS, EVENT_NAMES, GameSettings, validate_keys};
+use figcraft_doc::proto::{Action, Easing, Interaction, OverlayAnchor, OverlayPosition, Transition, Trigger};
 use figcraft_doc::{Collection, Document, Mode, Node, NodeId, NodeKind, TextData, Variable, VariableValue};
 use figcraft_geom::Affine;
 use serde_json::{Value, json};
 
 use super::{CommandSpec, ok};
-use crate::params::{req_string, targets};
+use crate::params::req_string;
 use crate::{Result, Session, bad, spec};
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         spec!("game.setup", "Set up game variables", "{} → {variables}", true, setup),
         spec!("game.bind", "Edit game bindings", "{action?, keys? ([input names]), reset? (restore every default binding)}", true, bind),
-        spec!(
-            "game.screen",
-            "Set game screen role",
-            "{ids?, role? (hud|inventory|pause|map|death|custom; resets defaults), keys?, pause?, release_cursor?, overlay?, hud_visible?, hudLayers? ([HUD descendant ids]; [] means all)}",
-            true,
-            screen
-        ),
         spec!("game.event.rename", "Rename game event", "{event (canonical name), name (event alias)}", true, rename_event),
         spec!("game.settings", "Game settings", "{}", false, |s, _| {
             s.doc()?;
@@ -173,81 +166,6 @@ fn bind(s: &mut Session, p: &Value) -> Result<Value> {
     ok()
 }
 
-fn role(value: &Value) -> Result<ScreenRole> {
-    serde_json::from_value(value.clone()).map_err(|_| bad("game.screen", "role must be hud, inventory, pause, map, death or custom"))
-}
-
-fn screen(s: &mut Session, p: &Value) -> Result<Value> {
-    let cmd = "game.screen";
-    if p.get("id").is_some() {
-        crate::params::req_id(cmd, p, "id")?;
-    }
-    let ids = targets(s, p);
-    if ids.is_empty() || ids.len() > 4096 {
-        return Err(bad(cmd, "Select one or more frames"));
-    }
-    if let Some(raw) = p.get("ids")
-        && raw.as_array().is_none_or(|a| a.len() != ids.len())
-    {
-        return Err(bad(cmd, "ids must contain valid frame ids"));
-    }
-    let chosen = p.get("role").map(role).transpose()?;
-    let mut settings = s.doc()?.game.clone();
-    for id in &ids {
-        if !s.doc()?.node(*id).is_some_and(|n| matches!(n.kind, NodeKind::Frame)) {
-            return Err(bad(cmd, format!("{id} is not a frame")));
-        }
-        let mut config = chosen.map(ScreenRole::defaults).or_else(|| settings.screens.get(id).cloned()).unwrap_or_default();
-        if let Some(value) = p.get("keys") {
-            config.keys = keys(cmd, value)?;
-        }
-        if let Some(value) = p.get("hudLayers") {
-            let raw = value.as_array().filter(|a| a.len() <= 4096).ok_or_else(|| bad(cmd, "hudLayers must be an array of at most 4096 layer ids"))?;
-            config.hud_layers =
-                raw.iter().map(|v| crate::params::id_of(v).ok_or_else(|| bad(cmd, "hudLayers must contain layer ids"))).collect::<Result<_>>()?;
-            let unique: BTreeSet<_> = config.hud_layers.iter().collect();
-            if unique.len() != config.hud_layers.len() {
-                return Err(bad(cmd, "hudLayers contains duplicate layers"));
-            }
-        }
-        for (name, dest) in [
-            ("pause", &mut config.pause),
-            ("release_cursor", &mut config.release_cursor),
-            ("overlay", &mut config.overlay),
-            ("hud_visible", &mut config.hud_visible),
-        ] {
-            if let Some(value) = p.get(name) {
-                *dest = value.as_bool().ok_or_else(|| bad(cmd, format!("{name} must be true or false")))?;
-            }
-        }
-        settings.screens.insert(*id, config);
-    }
-    for config in settings.screens.values() {
-        for layer in &config.hud_layers {
-            if s.doc()?.node(*layer).is_none()
-                || !s.doc()?.ancestors(*layer).iter().any(|ancestor| settings.screens.get(ancestor).is_some_and(|c| c.role == ScreenRole::Hud))
-            {
-                return Err(bad(cmd, format!("{layer} must be inside a HUD frame")));
-            }
-        }
-    }
-    settings.validate().map_err(|e| bad(cmd, e))?;
-    // Two openable screens sharing a key would be ambiguous. The HUD has no open key.
-    let mut used = BTreeMap::new();
-    for (id, screen) in &settings.screens {
-        if screen.role == ScreenRole::Hud || s.doc()?.node(*id).is_none() {
-            continue;
-        }
-        for key in &screen.keys {
-            if let Some(other) = used.insert(key, id) {
-                return Err(bad(cmd, format!("{key} already opens screen {other}")));
-            }
-        }
-    }
-    s.doc_mut()?.game = settings;
-    Ok(json!({"ids": ids}))
-}
-
 fn rename_event(s: &mut Session, p: &Value) -> Result<Value> {
     let cmd = "game.event.rename";
     let event = req_string(cmd, p, "event")?;
@@ -311,41 +229,68 @@ fn close_button(doc: &mut Document, parent: NodeId, label: &str, y: f64) -> Resu
     Ok(id)
 }
 
+fn interaction(trigger: Trigger, actions: Vec<Action>, transition: Transition, duration_ms: u32) -> Interaction {
+    Interaction { trigger, actions, transition, duration_ms, easing: Easing::EaseOut, delay_ms: 0 }
+}
+
+fn open_menu(dest: NodeId, close_on_outside: bool) -> Vec<Action> {
+    vec![
+        Action::OpenOverlay {
+            dest,
+            position: OverlayPosition::Center,
+            close_on_outside,
+            background: None,
+            offset: None,
+            anchor: OverlayAnchor::Screen,
+        },
+        Action::GamePause { paused: true },
+        Action::GameCursor { captured: false },
+    ]
+}
+
+/// The kit's screens are examples of what plain interactions can do: keys and controller buttons
+/// open and close them, game events show and hide the death screen. Nothing here is special to
+/// these frames; every interaction is editable in the Prototype tab.
+fn example_interactions(doc: &mut Document, hud: NodeId, inventory: NodeId, pause: NodeId, map: NodeId, death: NodeId) -> Result<()> {
+    let key = |key: &str| Trigger::KeyPress { key: key.into() };
+    let event = |event: &str| Trigger::GameEvent { event: event.into() };
+    let fade = Transition::Dissolve;
+    let mut add_to = |id: NodeId, list: Vec<Interaction>| -> Result<()> {
+        doc.get_mut(id)?.interactions.extend(list);
+        Ok(())
+    };
+    let mut on_hud = Vec::new();
+    for (screen, keys) in [(inventory, ["Tab", "Gamepad View"]), (pause, ["Escape", "Gamepad Menu"]), (map, ["M", "Gamepad Up"])] {
+        for k in keys {
+            on_hud.push(interaction(key(k), open_menu(screen, true), fade, 150));
+        }
+        add_to(screen, keys.iter().map(|k| interaction(key(k), vec![Action::CloseOverlay], fade, 150)).collect())?;
+    }
+    on_hud.push(interaction(event("vida-zero"), open_menu(death, false), fade, 400));
+    add_to(hud, on_hud)?;
+    add_to(death, vec![interaction(event("renasceu"), vec![Action::CloseOverlay], fade, 200)])
+}
+
 fn starter_kit(s: &mut Session, _: &Value) -> Result<Value> {
     let cmd = "game.starterKit";
     check_variables(s.doc()?, cmd)?;
-    let doc = s.doc()?;
-    for role in [ScreenRole::Inventory, ScreenRole::Pause, ScreenRole::Map] {
-        let defaults = role.defaults();
-        if doc.game.screens.iter().any(|(id, screen)| doc.node(*id).is_some() && screen.keys.iter().any(|key| defaults.keys.contains(key))) {
-            return Err(bad(cmd, "A screen already uses starter-kit inputs. Clear its open keys or create the kit in a new file."));
-        }
-    }
     let page = s.page()?;
     let doc = s.doc_mut()?;
     ensure_variables(doc);
     let vars = variable_ids(doc);
     let mut frames = BTreeMap::new();
-    for (index, (name, role)) in [
-        ("hud", ScreenRole::Hud),
-        ("inventory", ScreenRole::Inventory),
-        ("pause", ScreenRole::Pause),
-        ("map", ScreenRole::Map),
-        ("death", ScreenRole::Death),
-    ]
-    .into_iter()
-    .enumerate()
+    for (index, (name, label)) in
+        [("hud", "HUD"), ("inventory", "Inventory"), ("pause", "Pause"), ("map", "Map"), ("death", "Death")].into_iter().enumerate()
     {
         let frame = add(
             doc,
             page,
             NodeKind::Frame,
-            &format!("Game / {}", role.label()),
+            &format!("Game / {label}"),
             [(index % 3) as f64 * 1360.0, (index / 3) as f64 * 800.0, 1280.0, 720.0],
             false,
             false,
         )?;
-        doc.game.screens.insert(frame, role.defaults());
         frames.insert(name, frame);
     }
     let frame_id = |name: &str| frames.get(name).copied().ok_or_else(|| bad(cmd, "Missing starter frame"));
@@ -439,6 +384,7 @@ fn starter_kit(s: &mut Session, _: &Value) -> Result<Value> {
         wire(doc, grid, "Cell", [f64::from(i % 3) * 96.0, f64::from(i / 3) * 96.0, 80.0, 80.0])?;
     }
     components.push(grid);
+    example_interactions(doc, hud, inventory, pause, map, death)?;
     let result = json!({"hud": hud, "inventory": inventory, "pause": pause, "map": map, "death": death, "components": components, "variables": vars});
     s.set_selection(vec![hud]);
     Ok(result)

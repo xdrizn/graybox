@@ -210,7 +210,11 @@ impl FigApp {
                         }
                     }
                 }
-                "game.settings" => self.ui.game_settings = true,
+                "game.settings" => {
+                    // Game settings live in the Prototype tab, shown when nothing is selected.
+                    self.run("select.none", json!({}));
+                    self.ui.right_tab = RightTab::Prototype;
+                }
                 "present.options" => {
                     let v = &mut self.ui.present_view;
                     if let Some(s) = r.data.get("scale").and_then(|s| s.as_str()).and_then(present::PresentScale::parse) {

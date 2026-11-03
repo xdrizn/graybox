@@ -349,6 +349,7 @@ pub fn prototype(app: &mut FigApp, ui: &mut Ui) {
         flows_overview(app, ui, &doc, page);
         widgets::separator(ui);
         settings(app, ui, &doc, page);
+        crate::game::prototype_section(app, ui);
         return;
     }
     let first = sel.first().copied().unwrap_or(NodeId(0));
@@ -815,13 +816,6 @@ fn trigger_rows(app: &mut FigApp, ui: &mut Ui, node: NodeId, k: usize, it: &Inte
                         }
                     }
                 });
-            });
-            row(ui, 32.0, |ui| {
-                if let Some(event) = widgets::text_field(ui, Id::unique(("proto_event", node, k)), event, ui.available_width(), tr("Event name"))
-                    && !event.trim().is_empty()
-                {
-                    patch(app, node, k, json!({"trigger": {"type": "gameEvent", "event": event.trim()}}));
-                }
             });
         }
         Trigger::MouseEnter | Trigger::MouseLeave | Trigger::MouseDown | Trigger::MouseUp => {

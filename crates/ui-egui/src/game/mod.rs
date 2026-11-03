@@ -28,13 +28,29 @@ pub struct Play {
     pub(crate) captured: bool,
     pub(crate) entered: bool,
     pub(crate) was_fullscreen: bool,
-    pub(crate) role_paused: bool,
-    pub(crate) role_released: bool,
     pub(crate) applied_capture: Option<bool>,
     pub(crate) capture_requested_at: f64,
-    pub(crate) paused_before_role: bool,
     pub(crate) pads_held: u32,
     pub(crate) variable_ids: std::collections::BTreeMap<String, String>,
+    /// Pause game / cursor actions run this frame, applied by [`Play::settle`].
+    pub(crate) pending: Vec<GameSet>,
+    /// What each open overlay changed, undone when it closes (oldest first).
+    holds: Vec<Hold>,
+}
+
+/// A game action from a prototype interaction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GameSet {
+    Pause(bool),
+    Cursor(bool),
+}
+
+/// The pause and cursor state from before an overlay changed them.
+#[derive(Clone, Copy, Debug)]
+struct Hold {
+    overlay: figcraft_doc::NodeId,
+    paused: Option<bool>,
+    captured: Option<bool>,
 }
 
 impl Play {
@@ -50,6 +66,46 @@ impl Play {
             self.last = Some(now);
         }
         self.game.advance(dt)
+    }
+
+    /// Apply this frame's Pause game / cursor actions. With an overlay open they belong to the top
+    /// one: when it closes (however it closes) the game goes back to how it was before it.
+    /// `open` lists the open overlays, bottom first.
+    pub(crate) fn settle(&mut self, open: &[figcraft_doc::NodeId]) {
+        while let Some(i) = self.holds.iter().rposition(|h| !open.contains(&h.overlay)) {
+            let hold = self.holds.remove(i);
+            if let Some(paused) = hold.paused {
+                self.game.paused = paused;
+            }
+            if let Some(captured) = hold.captured {
+                self.captured = captured;
+            }
+        }
+        for set in std::mem::take(&mut self.pending) {
+            let hold = match open.last() {
+                Some(&top) => {
+                    if !self.holds.iter().any(|h| h.overlay == top) {
+                        self.holds.push(Hold { overlay: top, paused: None, captured: None });
+                    }
+                    self.holds.iter_mut().find(|h| h.overlay == top)
+                }
+                None => None,
+            };
+            match set {
+                GameSet::Pause(paused) => {
+                    if let Some(hold) = hold {
+                        hold.paused.get_or_insert(self.game.paused);
+                    }
+                    self.game.paused = paused;
+                }
+                GameSet::Cursor(captured) => {
+                    if let Some(hold) = hold {
+                        hold.captured.get_or_insert(self.captured);
+                    }
+                    self.captured = captured;
+                }
+            }
+        }
     }
 
     pub fn game(&self) -> &Game {
@@ -71,27 +127,22 @@ impl Play {
     }
 }
 
-pub(crate) fn settings_window(app: &mut crate::FigApp, ctx: &egui::Context) {
-    if !app.ui.game_settings {
-        return;
-    }
-    let mut open = true;
-    egui::Window::new(crate::i18n::tr("Game settings"))
-        .id(egui::Id::unique("greybox_game_settings"))
-        .open(&mut open)
-        .default_width(540.0)
-        .default_height(650.0)
-        .max_height((ctx.content_rect().height() - 80.0).max(200.0))
-        .default_pos(ctx.content_rect().center() - egui::vec2(270.0, 325.0))
-        .resizable(true)
-        .show(ctx, |ui| {
-            egui::ScrollArea::vertical().max_height(680.0).show(ui, |ui| {
-                editor::show(app, ui);
-                ui.separator();
-                audio::show(app, ui);
-                ui.separator();
-                share::show(app, ui);
-            });
+/// The file's game settings, at the end of the Prototype tab when nothing is selected (beside
+/// upstream's prototype settings). Each part folds away; all are closed at first.
+pub(crate) fn prototype_section(app: &mut crate::FigApp, ui: &mut egui::Ui) {
+    crate::widgets::separator(ui);
+    type Part = fn(&mut crate::FigApp, &mut egui::Ui);
+    let parts: [(&str, Part); 5] = [
+        ("Game controls", editor::controls),
+        ("Game events", editor::events),
+        ("Sounds", audio::show),
+        ("Share Play link", share::show),
+        ("Example screens", editor::examples),
+    ];
+    for (title, show) in parts {
+        egui::CollapsingHeader::new(title).id_salt(("greybox_prototype_section", title)).default_open(false).show(ui, |ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(8.0, 6.0);
+            show(app, ui);
         });
-    app.ui.game_settings = open;
+    }
 }

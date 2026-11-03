@@ -2,8 +2,7 @@
 use super::{Presenter, layout::FULL};
 use crate::{FigApp, game};
 use egui::{Align2, Context, CursorGrab, Key, Rect, Ui, ViewportCommand, pos2, vec2};
-use figcraft_doc::game::{ScreenConfig, ScreenRole};
-use figcraft_doc::proto::{Action, Easing, OverlayAnchor, OverlayPosition, Transition, Trigger};
+use figcraft_doc::proto::Trigger;
 use figcraft_doc::{NodeId, VariableValue};
 
 pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
@@ -56,9 +55,9 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
             play.captured = false;
         }
     }
-    role_keys(&mut p, &ctx, pressed, now);
-    apply_policy(&mut p);
-    app.services.game_capture_allowed(p.overlays.is_empty() && p.game.as_ref().is_some_and(|g| !g.role_released));
+    settle(&mut p);
+    escape_frees_cursor(&mut p, &ctx);
+    app.services.game_capture_allowed(p.game.as_ref().is_some_and(|g| g.captured || p.overlays.is_empty()));
     if let (Some(play), Some(doc)) = (&mut p.game, &p.design) {
         if p.overlays.is_empty() && ctx.input(|i| i.pointer.primary_pressed()) {
             play.captured = true;
@@ -88,16 +87,9 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
     publish(&mut p);
     let events = p.game.as_mut().map(|play| play.game.drain_events()).unwrap_or_default();
     for event in events {
-        let name = event.name();
-        if name == "vida-zero" {
-            open_death(&mut p, now);
-        }
-        if name == "renasceu" {
-            close_death(&mut p, now);
-        }
-        dispatch(&mut p, name, now);
+        dispatch(&mut p, event.name(), now);
     }
-    apply_policy(&mut p);
+    settle(&mut p);
     let captured = p.game.as_ref().is_some_and(|g| g.captured);
     if p.game.as_ref().is_some_and(|g| g.applied_capture != Some(captured)) {
         set_cursor(app, &ctx, captured);
@@ -144,77 +136,29 @@ fn leave(app: &mut FigApp, ctx: &Context, p: Presenter) {
     }
 }
 
-fn role_keys(p: &mut Presenter, ctx: &Context, pads: u32, now: f64) {
-    let chosen = p.design.as_ref().and_then(|doc| {
-        doc.game.screens.iter().find_map(|(id, config)| {
-            let pressed = ctx.input(|i| config.keys.iter().any(|key| game::input::binding(i, key, pads, true)));
-            (pressed && config.role != ScreenRole::Hud && config.role != ScreenRole::Death).then(|| (*id, config.clone()))
-        })
+/// Apply the Pause game / cursor actions the prototype ran; see [`game::Play::settle`].
+fn settle(p: &mut Presenter) {
+    let open: Vec<NodeId> = p.overlays.iter().map(|o| o.id).collect();
+    if let Some(play) = &mut p.game {
+        play.settle(&open);
+    }
+}
+
+/// Escape frees the mouse while no screen is open, unless the prototype uses Escape itself
+/// (a pause menu, say: its interaction decides). F10 always leaves Play.
+fn escape_frees_cursor(p: &mut Presenter, ctx: &Context) {
+    if !p.overlays.is_empty() || !ctx.input(|i| i.key_pressed(Key::Escape)) {
+        return;
+    }
+    let uses_escape = p.doc.as_ref().is_some_and(|doc| {
+        doc.subtree(p.current)
+            .into_iter()
+            .filter_map(|id| doc.node(id))
+            .any(|n| n.interactions.iter().any(|it| matches!(&it.trigger, Trigger::KeyPress { key } if key == "Escape")))
     });
-    if let Some((id, config)) = chosen {
-        if p.overlays.last().is_some_and(|o| o.id == id) {
-            p.close_overlay(now);
-        } else {
-            open(p, id, &config, now);
-        }
-    } else if ctx.input(|i| i.key_pressed(Key::Escape)) {
-        if !p.overlays.is_empty() {
-            p.close_overlay(now);
-        } else if let Some(play) = &mut p.game {
-            play.captured = false;
-        }
-    }
-}
-
-fn open(p: &mut Presenter, id: NodeId, config: &ScreenConfig, now: f64) {
-    let action = if config.overlay {
-        Action::OpenOverlay {
-            dest: id,
-            position: OverlayPosition::Center,
-            close_on_outside: config.role != ScreenRole::Death,
-            background: None,
-            offset: None,
-            anchor: OverlayAnchor::Screen,
-        }
-    } else {
-        Action::Navigate { dest: id, preserve_scroll: false }
-    };
-    p.perform(&action, p.current, Transition::Dissolve, 0.15, Easing::EaseOut, None, now);
-    dispatch(p, "tela-abriu", now);
-}
-
-fn open_death(p: &mut Presenter, now: f64) {
-    let death = p.design.as_ref().and_then(|d| d.game.screens.iter().find(|(_, c)| c.role == ScreenRole::Death).map(|(id, c)| (*id, c.clone())));
-    if let Some((id, c)) = death {
-        open(p, id, &c, now);
-    }
-}
-
-fn close_death(p: &mut Presenter, now: f64) {
-    while p.overlays.last().is_some_and(|o| p.design.as_ref().and_then(|d| d.game.screens.get(&o.id)).is_some_and(|c| c.role == ScreenRole::Death)) {
-        p.close_overlay(now);
-    }
-}
-
-fn apply_policy(p: &mut Presenter) {
-    let active = p.overlays.last().map_or(p.current, |o| o.id);
-    let policy = p.design.as_ref().and_then(|d| d.game.screens.get(&active));
-    let Some(play) = &mut p.game else { return };
-    let pause = policy.is_some_and(|c| c.pause);
-    if pause && !play.role_paused {
-        play.paused_before_role = play.game.paused;
-        play.game.paused = true;
-    } else if !pause && play.role_paused {
-        play.game.paused = play.paused_before_role;
-    }
-    play.role_paused = pause;
-    let release = policy.is_some_and(|c| c.release_cursor);
-    if release {
+    if !uses_escape && let Some(play) = &mut p.game {
         play.captured = false;
-    } else if play.role_released {
-        play.captured = true;
     }
-    play.role_released = release;
 }
 
 fn dispatch(p: &mut Presenter, canonical: &str, now: f64) {

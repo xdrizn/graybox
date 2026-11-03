@@ -456,7 +456,6 @@ pub struct UiState {
     /// A message at the bottom of the window and how long it has been showing.
     pub toast: Option<(String, ToastClock)>,
     pub present: Option<present::Presenter>,
-    pub game_settings: bool,
     pub presents: Vec<present::PresentTab>,
     /// The tab shown last. It is on screen while `present` has a value.
     pub present_active: Option<u64>,
@@ -646,7 +645,6 @@ impl Default for UiState {
             icon_gallery: false,
             toast: None,
             present: None,
-            game_settings: false,
             presents: Vec::new(),
             present_active: None,
             present_next: 1,

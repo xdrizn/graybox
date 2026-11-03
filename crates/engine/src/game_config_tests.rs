@@ -1,7 +1,8 @@
-//! Behavioral coverage for persistent game input, screen roles and bound starter-kit nodes.
+//! Behavioral coverage for persistent game input and the starter kit (plain frames, interactions and bound nodes).
 
-use figcraft_doc::game::{GameSettings, ScreenConfig, ScreenRole};
-use figcraft_doc::{Document, NodeId, NodeKind, VariableValue};
+use figcraft_doc::game::GameSettings;
+use figcraft_doc::proto::{Action, Trigger};
+use figcraft_doc::{Document, NodeKind, VariableValue};
 use serde_json::{Value, json};
 
 use crate::{
@@ -12,9 +13,6 @@ use crate::{
 
 fn ex(s: &mut Session, command: &str, params: Value) -> Value {
     s.execute(command, &params).unwrap()
-}
-fn frame(s: &mut Session) -> NodeId {
-    id_of(&ex(s, "frame.create", json!({"width": 1280, "height": 720}))["id"]).unwrap()
 }
 
 #[test]
@@ -43,36 +41,17 @@ fn bindings_are_valid_by_default_and_reject_conflicts_atomically() {
 }
 
 #[test]
-fn role_defaults_overrides_and_hud_layer_selection_are_undoable() {
-    let mut s = Session::new();
-    let hud = frame(&mut s);
-    ex(&mut s, "game.screen", json!({"id": hud, "role": "hud"}));
-    let layer = id_of(&ex(&mut s, "shape.rectangle", json!({"parent": hud, "width": 80, "height": 20}))["id"]).unwrap();
-    let menu = frame(&mut s);
-    ex(&mut s, "game.screen", json!({"id": menu, "role": "inventory"}));
-    assert_eq!(s.doc().unwrap().game.screens[&menu], ScreenRole::Inventory.defaults());
-    ex(&mut s, "game.screen", json!({"id": menu, "pause": false, "release_cursor": false, "hudLayers": [layer]}));
-    let config = &s.doc().unwrap().game.screens[&menu];
-    assert!(!config.pause && !config.release_cursor && config.overlay && config.hud_visible);
-    assert_eq!(config.hud_layers, vec![layer]);
-    let before = s.doc().unwrap().game.clone();
-    assert!(s.execute("game.screen", &json!({"id": menu, "hudLayers": [menu]})).is_err());
-    assert!(s.execute("game.screen", &json!({"id": menu, "pause": "no"})).is_err());
-    assert!(s.execute("game.screen", &json!({"id": layer, "role": "pause"})).is_err());
-    assert_eq!(s.doc().unwrap().game, before);
-    ex(&mut s, "edit.undo", json!({}));
-    assert_eq!(s.doc().unwrap().game.screens[&menu], ScreenRole::Inventory.defaults());
-    ex(&mut s, "game.screen", json!({"id": menu, "role": "pause"}));
-    assert_eq!(s.doc().unwrap().game.screens[&menu], ScreenRole::Pause.defaults());
-    let partial: ScreenConfig = serde_json::from_value(json!({"role": "death"})).unwrap();
-    assert_eq!(partial, ScreenRole::Death.defaults());
+fn files_with_early_screen_roles_and_menu_bindings_still_open() {
+    let mut value = serde_json::to_value(GameSettings::default()).unwrap();
+    value["screens"] = json!({"5": {"role": "inventory", "keys": ["Tab"]}});
+    value["bindings"]["inventory"] = json!(["Tab", "Gamepad View"]);
+    let loaded: GameSettings = serde_json::from_value(value).unwrap();
+    assert_eq!(loaded, GameSettings::default());
 }
 
 #[test]
 fn native_archive_preserves_config_and_old_files_receive_defaults() {
     let mut s = Session::new();
-    let menu = frame(&mut s);
-    ex(&mut s, "game.screen", json!({"id": menu, "role": "map", "hud_visible": false}));
     ex(&mut s, "game.bind", json!({"action": "heal", "keys": ["Z", "Gamepad Down"]}));
     ex(&mut s, "game.event.rename", json!({"event": "tomou-dano", "name": "damage-received"}));
     let bytes = figcraft_format::save_bytes(s.doc().unwrap(), None).unwrap();
@@ -140,22 +119,32 @@ fn misbound_game_variables_are_not_retyped_or_published() {
 }
 
 #[test]
-fn starter_kit_has_real_roles_components_and_live_variable_bindings() {
+fn starter_kit_screens_are_plain_frames_driven_by_interactions() {
     let mut s = Session::new();
     let before = s.doc().unwrap().clone();
     let kit = ex(&mut s, "game.starterKit", json!({}));
     let ids = variable_ids(s.doc().unwrap());
-    for (name, role) in [
-        ("hud", ScreenRole::Hud),
-        ("inventory", ScreenRole::Inventory),
-        ("pause", ScreenRole::Pause),
-        ("map", ScreenRole::Map),
-        ("death", ScreenRole::Death),
-    ] {
-        let id = id_of(&kit[name]).unwrap();
-        assert!(matches!(s.doc().unwrap().node(id).unwrap().kind, NodeKind::Frame));
-        assert_eq!(s.doc().unwrap().game.screens[&id], role.defaults());
+    let screen = |name: &str| id_of(&kit[name]).unwrap();
+    for name in ["hud", "inventory", "pause", "map", "death"] {
+        assert!(matches!(s.doc().unwrap().node(screen(name)).unwrap().kind, NodeKind::Frame));
     }
+    let doc = s.doc().unwrap();
+    let opens = |from: &str, trigger: Trigger, to: &str| {
+        doc.node(screen(from)).unwrap().interactions.iter().any(|it| {
+            it.trigger == trigger
+                && matches!(it.actions.first(), Some(Action::OpenOverlay { dest, .. }) if *dest == screen(to))
+                && it.actions.contains(&Action::GamePause { paused: true })
+        })
+    };
+    let key = |k: &str| Trigger::KeyPress { key: k.into() };
+    assert!(opens("hud", key("Tab"), "inventory") && opens("hud", key("Gamepad View"), "inventory"));
+    assert!(opens("hud", key("Escape"), "pause") && opens("hud", key("M"), "map"));
+    assert!(opens("hud", Trigger::GameEvent { event: "vida-zero".into() }, "death"));
+    let closes = |on: &str, trigger: Trigger| {
+        doc.node(screen(on)).unwrap().interactions.iter().any(|it| it.trigger == trigger && it.actions == [Action::CloseOverlay])
+    };
+    assert!(closes("inventory", key("Tab")) && closes("pause", key("Gamepad Menu")) && closes("map", key("M")));
+    assert!(closes("death", Trigger::GameEvent { event: "renasceu".into() }));
     for id in kit["components"].as_array().unwrap() {
         let node = s.doc().unwrap().node(id_of(id).unwrap()).unwrap();
         assert!(matches!(node.kind, NodeKind::Component { .. }));

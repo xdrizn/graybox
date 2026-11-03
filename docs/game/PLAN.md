@@ -66,16 +66,16 @@ plain wgpu in egui, no Bevy).
 **No fixed screen types.** Any frame is a game screen; what it does is plain prototype
 interactions in the Prototype tab (owner's decision, 2026-11-03). HUD, Inventory, Pause, Map and
 Death are only *examples* in the starter kit, never required.
-- [ ] No screen roles in the file: opening a screen is a normal interaction (key/gamepad or game
+- [x] No screen roles in the file: opening a screen is a normal interaction (key/gamepad or game
   event trigger → Open overlay / Navigate), with its own transition, position and sound.
-- [ ] Pause game / cursor actions run together with Open overlay are undone when that overlay
+- [x] Pause game / cursor actions run together with Open overlay are undone when that overlay
   closes, however it closes (key, Esc, click outside, Close overlay).
-- [ ] Game event trigger picked from a list of the game's events (no typing).
-- [ ] File-level game settings (controls, sounds, share) live in the Prototype tab when nothing is
+- [x] Game event trigger picked from a list of the game's events (no typing).
+- [x] File-level game settings (controls, sounds, share) live in the Prototype tab when nothing is
   selected; no separate floating window.
 - [x] Starter kit file: INDIRECT-style wireframe components (rectangles with white border and white
   inside separated by transparent padding, colours editable) for HUD bars, lists, grids, tabs,
-  buttons. To redo: its example screens must use ordinary interactions only.
+  buttons. Its example screens use ordinary interactions only.
 
 ### G5 — Sound
 - [x] Sound library per file: import WAV/OGG/MP3 into the `.figcraft` file.

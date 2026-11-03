@@ -194,7 +194,7 @@ fn main_toolbar(app: &mut FigApp, ui: &mut Ui, canvas: Rect, t: &Tokens, board: 
             app.run("game.play", json!({}));
         }
         let settings = play.translate(vec2(TOOL_CELL + GAP, 0.0));
-        if tool_cell(ui, t, settings, "game_settings", Icon::Menu, app.ui.game_settings, tr("Game settings")).clicked() {
+        if tool_cell(ui, t, settings, "game_settings", Icon::Menu, false, tr("Game settings")).clicked() {
             app.run("game.settings", json!({}));
         }
     }
