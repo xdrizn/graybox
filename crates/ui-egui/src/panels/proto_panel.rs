@@ -372,6 +372,9 @@ pub fn prototype(app: &mut FigApp, ui: &mut Ui) {
     }
     widgets::separator(ui);
     scroll_section(app, ui, &doc, &sel, &node);
+    if sel.len() == 1 {
+        crate::game::menu_section(app, ui, &doc, &node);
+    }
 }
 
 /// Several layers with different interactions: "+" replaces them all with one click interaction

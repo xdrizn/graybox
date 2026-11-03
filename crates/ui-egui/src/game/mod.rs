@@ -151,3 +151,60 @@ pub(crate) fn prototype_section(app: &mut crate::FigApp, ui: &mut egui::Ui) {
         });
     }
 }
+
+/// Prototype tab, one auto layout frame selected: "Navigable menu" and its options.
+pub(crate) fn menu_section(app: &mut crate::FigApp, ui: &mut egui::Ui, doc: &figcraft_doc::Document, node: &figcraft_doc::Node) {
+    use figcraft_doc::game::DisabledItems;
+    use serde_json::json;
+    if node.layout.is_none() || !node.kind.is_frame_like() {
+        return;
+    }
+    let id = node.id;
+    crate::widgets::separator(ui);
+    crate::widgets::section_header(ui, "Menu navigation", &[], false);
+    let menu = doc.game.menus.get(&id);
+    let set = |app: &mut crate::FigApp, fields: serde_json::Value| {
+        let mut params = json!({"node": id});
+        if let (Some(p), Some(f)) = (params.as_object_mut(), fields.as_object()) {
+            p.extend(f.clone());
+        }
+        app.run("game.menu.set", params);
+    };
+    ui.push_id(("greybox_menu", id), |ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(8.0, 6.0);
+        if crate::widgets::checkbox(ui, menu.is_some(), "Navigable menu") {
+            set(app, json!({"enabled": menu.is_none()}));
+        }
+        let Some(menu) = menu else { return };
+        if crate::widgets::checkbox(ui, menu.wrap, "Loop at the end") {
+            set(app, json!({"wrap": !menu.wrap}));
+        }
+        if crate::widgets::checkbox(ui, menu.remember, "Remember last item") {
+            set(app, json!({"remember": !menu.remember}));
+        }
+        let name = |c: figcraft_doc::NodeId| doc.node(c).map(|n| n.name.clone()).unwrap_or_default();
+        let current = menu.start.map_or_else(|| "First item".to_string(), name);
+        let t = crate::theme::Tokens::get(ui.ctx());
+        crate::widgets::label(ui, "Start at", t.text_secondary);
+        let response = crate::widgets::dropdown(ui, &current, ui.available_width(), None);
+        crate::right::menu_popup(&response).show(|ui| {
+            if crate::right::menu_check(ui, menu.start.is_none(), "First item", "") {
+                set(app, json!({"start": null}));
+                ui.close();
+            }
+            for child in &node.children {
+                if crate::right::menu_check(ui, menu.start == Some(*child), &name(*child), "") {
+                    set(app, json!({"start": child}));
+                    ui.close();
+                }
+            }
+        });
+        crate::widgets::label(ui, "Disabled items", t.text_secondary);
+        for (label, value, wire) in [("Can be focused", DisabledItems::Focus, "focus"), ("Are skipped", DisabledItems::Skip, "skip")] {
+            if crate::widgets::radio(ui, menu.disabled == value, label) {
+                set(app, json!({"disabled": wire}));
+            }
+        }
+        crate::widgets::label(ui, "Items show focus with a State variant (Default, Focused, Pressed, Disabled), else an outline.", t.text_secondary);
+    });
+}

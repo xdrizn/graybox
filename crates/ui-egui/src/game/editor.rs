@@ -2,7 +2,7 @@
 //! layout: every field takes the panel's width.
 
 use egui::{Id, Ui};
-use figcraft_doc::game::{ACTIONS, EVENT_NAMES};
+use figcraft_doc::game::{ACTIONS, EVENT_NAMES, MENU_ACTIONS};
 use serde_json::json;
 
 use crate::right::{menu_check, menu_popup};
@@ -33,15 +33,19 @@ pub fn controls(app: &mut FigApp, ui: &mut Ui) {
                 }
             });
         });
-        for action in ACTIONS {
-            let current = doc.game.bindings.get(action).map(|keys| keys.join(", ")).unwrap_or_default();
+        let rows = ACTIONS.iter().map(|a| (*a, &doc.game.bindings)).chain(MENU_ACTIONS.iter().map(|a| (*a, &doc.game.menu_bindings)));
+        for (action, bindings) in rows {
+            if action == MENU_ACTIONS[0] {
+                widgets::label(ui, "Menus (navigable menus in Play)", tokens.text_secondary);
+            }
+            let current = bindings.get(action).map(|keys| keys.join(", ")).unwrap_or_default();
             widgets::label(ui, action_label(action), tokens.text);
             if let Some(value) =
                 widgets::text_field_named(ui, Id::unique(("game_binding", uid, action)), &current, ui.available_width(), action_label(action))
             {
                 app.run("game.bind", json!({"action": action, "keys": split_keys(&value)}));
             }
-            if let Some(keys) = doc.game.bindings.get(action) {
+            if let Some(keys) = bindings.get(action) {
                 let labels: Vec<_> = keys.iter().filter_map(|key| controller_label(key, playstation)).collect();
                 if !labels.is_empty() {
                     widgets::label(ui, &labels.join(" / "), tokens.text_secondary);
@@ -147,6 +151,12 @@ fn action_label(action: &str) -> &str {
         "reload" => "Reload",
         "heal" => "Heal",
         "respawn" => "Respawn",
+        "menu-up" => "Menu up",
+        "menu-down" => "Menu down",
+        "menu-left" => "Menu left",
+        "menu-right" => "Menu right",
+        "menu-confirm" => "Confirm",
+        "menu-back" => "Back",
         _ => action,
     }
 }
