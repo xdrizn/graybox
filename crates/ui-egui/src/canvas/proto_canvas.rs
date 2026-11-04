@@ -77,6 +77,8 @@ pub(crate) fn sources(ctx: &egui::Context, doc: &Arc<Document>, page: NodeId) ->
 
 fn noodles(app: &FigApp, ctx: &egui::Context, doc: &Arc<Document>, page: NodeId) -> Vec<Noodle> {
     let mut out = Vec::new();
+    // Graybox: with a screen selected, only its connections (in or out).
+    let selection = app.session.ds().map(|d| d.selection.clone()).unwrap_or_default();
     for &id in sources(ctx, doc, page).iter() {
         let Some(n) = doc.node(id) else { continue };
         let Some(from) = screen_rect(app, doc, id) else { continue };
@@ -84,7 +86,7 @@ fn noodles(app: &FigApp, ctx: &egui::Context, doc: &Arc<Document>, page: NodeId)
             let Some(dest) = figcraft_doc::proto::walk(&it.actions).find_map(|a| a.dest()) else { continue };
             // Change-to targets are variants; draw to them as they are.
             let Some(to) = screen_rect(app, doc, dest) else { continue };
-            if doc.page_of(dest) != Some(page) {
+            if doc.page_of(dest) != Some(page) || !crate::game::proto_targets::shows_connection(doc, &selection, id, dest) {
                 continue;
             }
             out.push(Noodle { source: id, index: k, pts: curve_between(from, to) });

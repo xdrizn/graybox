@@ -15,6 +15,17 @@ pub fn variant_at(doc: &Document, source: NodeId, pt: Point) -> Option<NodeId> {
     variants.into_iter().rev().filter(|v| *v != own).find(|v| doc.world_bounds(*v).is_some_and(|b| b.contains(pt)))
 }
 
+/// With something selected, the canvas only draws the connections of the selected screens: those
+/// leaving them (from any layer inside) or arriving at them. Nothing selected: all of the page's.
+pub fn shows_connection(doc: &Document, selection: &[NodeId], source: NodeId, dest: NodeId) -> bool {
+    if selection.is_empty() {
+        return true;
+    }
+    let screen = |id: NodeId| doc.top_level_frame(id).unwrap_or(id);
+    let (from, to) = (screen(source), screen(dest));
+    selection.iter().map(|s| screen(*s)).any(|s| s == from || s == to)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -37,5 +48,19 @@ mod tests {
         assert_eq!(variant_at(doc, main, centre(main)), None, "not to itself");
         let outside = Point::new(centre(other).x + 10_000.0, centre(other).y);
         assert_eq!(variant_at(doc, main, outside), None);
+    }
+
+    #[test]
+    fn only_the_selected_screens_connections_show() {
+        let mut s = figcraft_engine::Session::new();
+        let id = |v: serde_json::Value| figcraft_engine::params::id_of(&v["id"]).unwrap();
+        let [a, b, c] = [0.0, 400.0, 800.0].map(|x| id(s.execute("frame.create", &json!({"x": x, "width": 300, "height": 300})).unwrap()));
+        let button = id(s.execute("shape.rectangle", &json!({"parent": a, "width": 20, "height": 20})).unwrap());
+        let doc = s.doc().unwrap();
+        assert!(shows_connection(doc, &[], button, b), "nothing selected: every connection");
+        assert!(shows_connection(doc, &[a], button, b), "leaving the selected screen, from a layer in it");
+        assert!(shows_connection(doc, &[b], button, b), "arriving at the selected screen");
+        assert!(!shows_connection(doc, &[c], button, b), "another screen's connection is hidden");
+        assert!(shows_connection(doc, &[button], button, b), "a selected layer counts as its screen");
     }
 }
