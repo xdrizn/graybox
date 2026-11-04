@@ -107,7 +107,7 @@ fn state_of(doc: &Document, component: NodeId) -> Option<String> {
 }
 
 /// The variant of `component`'s set with the same properties but `State=value`.
-fn state_variant(doc: &Document, component: NodeId, value: &str) -> Option<NodeId> {
+pub(crate) fn state_variant(doc: &Document, component: NodeId, value: &str) -> Option<NodeId> {
     let c = doc.node(component)?;
     let set = c.parent?;
     if !matches!(doc.node(set)?.kind, NodeKind::ComponentSet { .. }) {

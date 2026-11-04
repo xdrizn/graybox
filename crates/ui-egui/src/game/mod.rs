@@ -7,6 +7,7 @@ pub mod audio;
 pub mod brand;
 pub mod components;
 pub mod editor;
+pub mod hotbar;
 pub(crate) mod input;
 pub mod map;
 pub mod menu;
@@ -45,6 +46,8 @@ pub struct Play {
     pub(crate) volume: f32,
     /// Focus in the navigable menu the open screen owns.
     pub(crate) menu: menu::Focus,
+    /// The selected slot of each hotbar (Play only).
+    pub(crate) hotbars: hotbar::Selection,
     /// How far each map is moved and zoomed (Play only).
     pub(crate) maps: std::collections::BTreeMap<figcraft_doc::NodeId, map::View>,
 }

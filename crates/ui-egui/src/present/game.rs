@@ -72,6 +72,7 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
     let menu_active = menu_input.is_some_and(|input| menu_step(&mut p, &input, now));
     map_step(&mut p, &ctx, held, [pad.axes[0], pad.axes[1], pad.axes[3]]);
     named_inputs(&mut p, &ctx, pressed, now);
+    hotbar_step(&mut p, &ctx, pressed);
     settle(&mut p);
     // Graybox: a screen can show the game paused or no game behind it; then the mouse stays free.
     let behind = background(&p);
@@ -183,6 +184,57 @@ fn bar_widths(p: &Presenter) -> Vec<(NodeId, f64)> {
         if max > 0.0 && value.is_finite() { (value / max).clamp(0.0, 1.0) } else { 0.0 }
     };
     original.game.bars.iter().filter_map(|(id, name)| original.node(*id).map(|n| (*id, (n.width * share(name)).max(0.001)))).collect()
+}
+
+/// Hotbars on the screen: keys 1-9, the wheel (unless a map is open) and LB / RB select a slot; the
+/// selected one shows its Focused variant. The player keeps moving meanwhile.
+fn hotbar_step(p: &mut Presenter, ctx: &Context, pads: u32) {
+    let (Some(doc), Some(original)) = (p.doc.as_ref(), p.original.as_ref()) else { return };
+    let mut roots = vec![p.current];
+    roots.extend(p.overlays.iter().map(|o| o.id));
+    let bars = game::hotbar::in_view(doc, &roots);
+    if bars.is_empty() {
+        return;
+    }
+    let top = p.overlays.last().map_or(p.current, |o| o.id);
+    let map_open = game::map::active(doc, top).is_some();
+    let bit = |name: &str| figcraft_doc::proto::GAMEPAD_BUTTONS.iter().position(|n| *n == name).is_some_and(|i| pads & (1 << i) != 0);
+    let input = ctx.input(|i| {
+        let wheel: f32 = i.events.iter().filter_map(|e| if let egui::Event::MouseWheel { delta, .. } = e { Some(delta.y) } else { None }).sum();
+        let mut step = 0;
+        if !map_open && wheel.abs() > 0.01 {
+            step += if wheel < 0.0 { 1 } else { -1 };
+        }
+        step += i32::from(bit("Gamepad RB")) - i32::from(bit("Gamepad LB"));
+        game::hotbar::HotbarInput { slot: game::hotbar::digit(i), step }
+    });
+    let Some(play) = p.game.as_mut() else { return };
+    let mut looks = Vec::new();
+    for (bar, settings) in &bars {
+        let count = game::menu::items(original, *bar).len();
+        let selected = play.hotbars.get(bar).copied().unwrap_or(0);
+        let next = game::hotbar::step(selected, count, settings, &input);
+        play.hotbars.insert(*bar, next);
+        looks.extend(game::hotbar::looks(original, *bar, next));
+    }
+    let Some(design) = p.design.as_mut() else { return };
+    let stale: Vec<(NodeId, NodeId)> = looks
+        .into_iter()
+        .filter(|(slot, variant)| matches!(design.node(*slot).map(|n| &n.kind), Some(NodeKind::Instance { component, .. }) if component != variant))
+        .collect();
+    if stale.is_empty() {
+        return;
+    }
+    let before = design.clone();
+    for (slot, variant) in stale {
+        if let Some(n) = design.node_mut(slot)
+            && let NodeKind::Instance { component, .. } = &mut n.kind
+        {
+            *component = variant;
+        }
+        figcraft_engine::components::sync_instance(design, slot);
+    }
+    p.settle(&before);
 }
 
 /// The designer's named inputs (T for a watch, E to pick up): a press fires the game event of that
@@ -538,6 +590,50 @@ mod screen_tests {
     }
 
     #[test]
+    fn number_keys_and_shoulders_select_a_hotbar_slot() {
+        use serde_json::json;
+        let mut s = figcraft_engine::Session::new();
+        let ex = |s: &mut figcraft_engine::Session, c: &str, p: serde_json::Value| s.execute(c, &p).unwrap();
+        let id = |v: serde_json::Value| figcraft_engine::params::id_of(&v["id"]).unwrap();
+        let hud = id(ex(&mut s, "frame.create", json!({"width": 1280, "height": 720})));
+        let slot = id(ex(&mut s, "frame.create", json!({"x": 2000, "width": 60, "height": 60, "name": "Slot"})));
+        let main = id(ex(&mut s, "component.create", json!({"ids": [slot]})));
+        ex(&mut s, "node.set", json!({"id": main, "props": {"name": "State=Default"}}));
+        ex(&mut s, "component.addVariant", json!({"id": main}));
+        let set = figcraft_engine::components::variant_set(s.doc().unwrap(), main).unwrap();
+        let focused = *s.doc().unwrap().node(set).unwrap().children.iter().find(|v| **v != main).unwrap();
+        ex(&mut s, "node.set", json!({"id": focused, "props": {"name": "State=Focused"}}));
+        let bar = id(ex(&mut s, "frame.create", json!({"parent": hud, "width": 300, "height": 60, "props": {"layout": "horizontal"}})));
+        let slots: Vec<NodeId> = (0..3).map(|_| id(ex(&mut s, "instance.create", json!({"component": main, "parent": bar})))).collect();
+        ex(&mut s, "game.hotbar.set", json!({"node": bar}));
+        let mut p = Presenter::new(hud);
+        p.game = Some(crate::game::Play::new());
+        p.sync(&Arc::new(s.doc().unwrap().clone()), 0.0);
+        let ctx = egui::Context::default();
+        let shown = |p: &Presenter| -> Vec<NodeId> {
+            slots
+                .iter()
+                .map(|s| match p.design.as_ref().unwrap().node(*s).unwrap().kind {
+                    NodeKind::Instance { component, .. } => component,
+                    _ => NodeId(0),
+                })
+                .collect()
+        };
+        let frame = |p: &mut Presenter, events: Vec<egui::Event>, pads: u32| {
+            let mut out = ctx.run_ui(egui::RawInput { events, ..Default::default() }, |ui| hotbar_step(p, ui.ctx(), pads));
+            out.textures_delta.clear();
+        };
+        frame(&mut p, vec![], 0);
+        assert_eq!(shown(&p), [focused, main, main], "the first slot starts selected");
+        let key = |k| egui::Event::Key { key: k, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() };
+        frame(&mut p, vec![key(egui::Key::Num3)], 0);
+        assert_eq!(shown(&p), [main, main, focused], "key 3 selects the third slot");
+        let rb = figcraft_doc::proto::GAMEPAD_BUTTONS.iter().position(|n| *n == "Gamepad RB").unwrap();
+        frame(&mut p, vec![], 1 << rb);
+        assert_eq!(shown(&p), [focused, main, main], "RB after the last slot loops to the first");
+    }
+
+    #[test]
     fn a_named_input_opens_a_screen_and_on_it_closes_it() {
         use figcraft_doc::proto::{Action, Easing, Interaction, OverlayAnchor, OverlayPosition, Transition};
         let mut doc = figcraft_doc::Document::new("Watch");
@@ -567,7 +663,7 @@ mod screen_tests {
         p.game = Some(crate::game::Play::new());
         p.sync(&Arc::new(doc), 0.0);
         let ctx = egui::Context::default();
-        let mut press = |p: &mut Presenter, key: egui::Key| {
+        let press = |p: &mut Presenter, key: egui::Key| {
             let events = vec![egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }];
             let mut out = ctx.run_ui(egui::RawInput { events, ..Default::default() }, |ui| named_inputs(p, ui.ctx(), 0, 0.0));
             out.textures_delta.clear();

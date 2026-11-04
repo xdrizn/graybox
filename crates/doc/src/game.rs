@@ -99,6 +99,21 @@ impl Default for MapSettings {
     }
 }
 
+/// A row of slots where one is selected (a hotbar): keys 1 to 9 pick a slot, the wheel and LB / RB
+/// step through them, while the player keeps moving.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HotbarSettings {
+    /// Past the last slot, the wheel and LB / RB come back to the first.
+    pub wrap: bool,
+}
+
+impl Default for HotbarSettings {
+    fn default() -> Self {
+        Self { wrap: true }
+    }
+}
+
 /// Game values a "game bar" can follow (health, ammo in the magazine, reserve ammo).
 pub const BAR_VARIABLES: [&str; 3] = ["vida", "municao", "reserva"];
 pub const MAX_SCREEN_SETTINGS: usize = 4096;
@@ -123,6 +138,8 @@ pub struct GameSettings {
     /// The designer's own named inputs (name → keys and buttons). Pressing one fires a game event
     /// of that name, for "Game event" triggers on the screen on top (T opens a watch, E picks up).
     pub inputs: BTreeMap<String, Vec<String>>,
+    /// Auto layout frames that are hotbars.
+    pub hotbars: BTreeMap<NodeId, HotbarSettings>,
 }
 
 #[derive(Deserialize)]
@@ -140,6 +157,7 @@ struct StoredGameSettings {
     bars: BTreeMap<NodeId, String>,
     maps: BTreeMap<NodeId, MapSettings>,
     inputs: BTreeMap<String, Vec<String>>,
+    hotbars: BTreeMap<NodeId, HotbarSettings>,
 }
 
 impl Default for StoredGameSettings {
@@ -156,6 +174,7 @@ impl Default for StoredGameSettings {
             bars: settings.bars,
             maps: settings.maps,
             inputs: settings.inputs,
+            hotbars: settings.hotbars,
         }
     }
 }
@@ -175,6 +194,7 @@ impl TryFrom<StoredGameSettings> for GameSettings {
             bars: stored.bars,
             maps: stored.maps,
             inputs: stored.inputs,
+            hotbars: stored.hotbars,
         };
         settings.validate()?;
         Ok(settings)
@@ -209,6 +229,7 @@ impl Default for GameSettings {
             bars: BTreeMap::new(),
             maps: BTreeMap::new(),
             inputs: default_inputs(),
+            hotbars: BTreeMap::new(),
         }
     }
 }
@@ -264,6 +285,9 @@ impl GameSettings {
             return Err(format!("Use at most {MAX_SCREEN_SETTINGS} game backgrounds and game bars"));
         }
         validate_inputs(&self.inputs, &self.bindings)?;
+        if self.hotbars.len() > MAX_SCREEN_SETTINGS {
+            return Err(format!("Use at most {MAX_SCREEN_SETTINGS} hotbars"));
+        }
         if self.maps.len() > MAX_SCREEN_SETTINGS {
             return Err(format!("Use at most {MAX_SCREEN_SETTINGS} maps"));
         }

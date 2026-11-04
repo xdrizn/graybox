@@ -111,6 +111,9 @@ Death are only *examples* in the starter kit, never required.
 - [x] Maps: pan and zoom with mouse and controller.
 - [x] Same UI font on every PC: Space Grotesk and JetBrains Mono (OFL) embedded from the
   craft-fonts checkout beside the repo; setup in [`FONTS.md`](FONTS.md).
+- [x] Menu navigation and game settings sections padded like the rest of the panel.
+- [x] Named game inputs (T for a watch, E to pick up by default) as Game event triggers.
+- [x] Hotbars: keys 1-9, wheel and LB/RB select a slot.
 - [ ] "Selecting one selects all": not reproduced yet; needs a capture from the owner.
 
 ## Later

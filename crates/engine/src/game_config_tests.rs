@@ -419,3 +419,21 @@ fn named_inputs_start_with_pick_up_and_refuse_clashing_keys() {
     ex(&mut s, "edit.undo", json!({}));
     assert!(s.doc().unwrap().game.inputs.contains_key("watch"));
 }
+
+#[test]
+fn hotbars_need_auto_layout_and_are_undoable() {
+    let mut s = Session::new();
+    let row = id_of(&ex(&mut s, "frame.create", json!({"width": 400, "height": 60, "props": {"layout": "horizontal"}}))["id"]).unwrap();
+    let plain = id_of(&ex(&mut s, "frame.create", json!({"x": 500, "width": 400, "height": 60}))["id"]).unwrap();
+    assert!(s.execute("game.hotbar.set", &json!({"node": plain})).is_err(), "slots come from auto layout");
+    ex(&mut s, "game.hotbar.set", json!({"node": row}));
+    assert!(s.doc().unwrap().game.hotbars[&row].wrap);
+    ex(&mut s, "game.hotbar.set", json!({"node": row, "wrap": false}));
+    assert!(!s.doc().unwrap().game.hotbars[&row].wrap);
+    let bytes = figcraft_format::save_bytes(s.doc().unwrap(), None).unwrap();
+    assert_eq!(figcraft_format::load_bytes(&bytes).unwrap().0.game, s.doc().unwrap().game);
+    ex(&mut s, "game.hotbar.set", json!({"node": row, "enabled": false}));
+    assert!(s.doc().unwrap().game.hotbars.is_empty());
+    ex(&mut s, "edit.undo", json!({}));
+    assert!(s.doc().unwrap().game.hotbars.contains_key(&row));
+}

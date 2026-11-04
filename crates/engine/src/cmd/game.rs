@@ -33,6 +33,13 @@ pub fn specs() -> Vec<CommandSpec> {
             set_background
         ),
         spec!(
+            "game.hotbar.set",
+            "Set hotbar",
+            "{node (auto layout frame), enabled? (bool), wrap? (bool)}  in Play keys 1-9, the wheel and LB/RB select one of its slots",
+            true,
+            set_hotbar
+        ),
+        spec!(
             "game.input.set",
             "Set game input",
             "{name, keys? ([input names]; null removes the input), newName?}  a named input; pressing it in Play fires the game event of that name",
@@ -678,6 +685,33 @@ fn set_input(s: &mut Session, p: &Value) -> Result<Value> {
             settings.inputs.insert(new, keys);
         }
     }
+    settings.validate().map_err(|e| bad(cmd, e))?;
+    s.doc_mut()?.game = settings;
+    ok()
+}
+
+fn set_hotbar(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "game.hotbar.set";
+    let node = crate::params::req_id(cmd, p, "node")?;
+    let doc = s.doc()?;
+    if !doc.node(node).is_some_and(|n| n.kind.is_frame_like() && n.layout.is_some()) {
+        return Err(bad(cmd, "A hotbar is an auto layout frame (its slots are its children)"));
+    }
+    let mut settings = doc.game.clone();
+    let enabled = match p.get("enabled") {
+        None => true,
+        Some(v) => v.as_bool().ok_or_else(|| bad(cmd, "enabled must be true or false"))?,
+    };
+    if enabled {
+        let mut bar = settings.hotbars.get(&node).copied().unwrap_or_default();
+        if let Some(v) = p.get("wrap") {
+            bar.wrap = v.as_bool().ok_or_else(|| bad(cmd, "wrap must be true or false"))?;
+        }
+        settings.hotbars.insert(node, bar);
+    } else {
+        settings.hotbars.remove(&node);
+    }
+    settings.hotbars.retain(|id, _| doc.node(*id).is_some());
     settings.validate().map_err(|e| bad(cmd, e))?;
     s.doc_mut()?.game = settings;
     ok()

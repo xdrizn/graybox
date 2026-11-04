@@ -38,6 +38,9 @@
   in the app (Pause list with ↓, Inventory grid with the D-pad). Spec and plan in `docs/game/specs/`.
 
 ## Decisions
+- Hotbars (owner, 2026-11-04): an auto layout row marked as a hotbar keeps one selected slot in Play:
+  keys 1-9 pick, the wheel (unless a map is open) and LB/RB step, without stopping the player. The
+  selected slot shows its State=Focused variant.
 - Named inputs (owner, 2026-11-04): the designer names keys/buttons (Prototype, nothing selected →
   Game inputs); a press fires the Game event of that name on the screen on top only, so one key
   can open a screen and close it from that screen. Every file starts with `pegar-item` on E /

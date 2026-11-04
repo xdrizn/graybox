@@ -45,6 +45,9 @@ pub fn section(app: &mut FigApp, ui: &mut Ui, doc: &Document, node: &Node) {
         if node.kind.is_frame_like() {
             map_section(app, ui, doc, id);
         }
+        if node.kind.is_frame_like() && node.layout.is_some() {
+            hotbar_section(app, ui, doc, id);
+        }
         widgets::separator(ui);
         widgets::section_header(ui, "Game bar", &[], false);
         let current = doc.game.bars.get(&id).map(String::as_str);
@@ -134,6 +137,31 @@ fn map_section(app: &mut FigApp, ui: &mut Ui, doc: &Document, id: figcraft_doc::
     widgets::note(
         ui,
         "Mouse: drag to move, wheel to zoom. Controller: left stick moves. Works while the mouse is free (a map screen with the game paused).",
+        t.text_secondary,
+    );
+}
+
+/// An auto layout row whose children are slots, one of them selected.
+fn hotbar_section(app: &mut FigApp, ui: &mut Ui, doc: &Document, id: figcraft_doc::NodeId) {
+    let t = Tokens::get(ui.ctx());
+    widgets::separator(ui);
+    widgets::section_header(ui, "Hotbar", &[], false);
+    let bar = doc.game.hotbars.get(&id).copied();
+    row(ui, 28.0, |ui| {
+        if widgets::checkbox(ui, bar.is_some(), "Hotbar: one slot selected") {
+            app.run("game.hotbar.set", json!({"node": id, "enabled": bar.is_none()}));
+        }
+    });
+    if let Some(bar) = bar {
+        row(ui, 28.0, |ui| {
+            if widgets::checkbox(ui, bar.wrap, "Loop at the end") {
+                app.run("game.hotbar.set", json!({"node": id, "wrap": !bar.wrap}));
+            }
+        });
+    }
+    widgets::note(
+        ui,
+        "In Play: keys 1 to 9 pick a slot, the mouse wheel and LB / RB go to the next or previous one, while you keep moving. The selected slot shows its State=Focused variant.",
         t.text_secondary,
     );
 }
