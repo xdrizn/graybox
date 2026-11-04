@@ -210,12 +210,15 @@ fn hotbar_step(p: &mut Presenter, ctx: &Context, pads: u32) {
     });
     let Some(play) = p.game.as_mut() else { return };
     let mut looks = Vec::new();
+    play.hotbar_outline.clear();
     for (bar, settings) in &bars {
         let count = game::menu::items(original, *bar).len();
         let selected = play.hotbars.get(bar).copied().unwrap_or(0);
         let next = game::hotbar::step(selected, count, settings, &input);
         play.hotbars.insert(*bar, next);
-        looks.extend(game::hotbar::looks(original, *bar, next));
+        let (bar_looks, outline) = game::hotbar::looks(original, *bar, next, settings);
+        looks.extend(bar_looks);
+        play.hotbar_outline.extend(outline);
     }
     let Some(design) = p.design.as_mut() else { return };
     let stale: Vec<(NodeId, NodeId)> = looks
@@ -509,6 +512,20 @@ pub(super) fn menu_pointer(p: &mut Presenter, hit: Option<NodeId>, pointer: Opti
 /// After the prototype is drawn: the pointer marks menu items and an item without a State variant
 /// gets a focus outline.
 pub(super) fn menu_overlay(p: &mut Presenter, painter: &egui::Painter, ctx: &Context, l: &super::layout::Layout) {
+    // Graybox: hotbar slots without a selected variant get the same outline.
+    if let Some(play) = p.game.as_ref() {
+        let (_, place, clip) = l.active(p.current);
+        for slot in &play.hotbar_outline {
+            if let Some(b) = l.disp.world_bounds(*slot) {
+                painter.with_clip_rect(clip).rect_stroke(
+                    place.rect(b),
+                    egui::CornerRadius::ZERO,
+                    egui::Stroke::new(2.0, crate::theme::ACCENT),
+                    egui::StrokeKind::Outside,
+                );
+            }
+        }
+    }
     if p.game.as_ref().is_none_or(|g| g.menu.menu.is_none()) {
         return;
     }

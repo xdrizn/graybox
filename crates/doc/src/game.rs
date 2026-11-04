@@ -40,6 +40,28 @@ pub enum DisabledItems {
     Skip,
 }
 
+/// How a menu item or hotbar slot shows a state (focused, selected, pressed, disabled).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum StateLook {
+    /// Found by the variant names (hover, selected, focused, pressed, disabled…), else an outline.
+    #[default]
+    Auto,
+    /// The variant whose `property` is `value` (the other properties kept).
+    Variant { property: String, value: String },
+    /// An orange outline, no variant.
+    Outline,
+}
+
+impl StateLook {
+    fn valid(&self) -> bool {
+        match self {
+            Self::Variant { property, value } => valid_alias(property) && valid_alias(value),
+            _ => true,
+        }
+    }
+}
+
 /// One auto layout frame that is a navigable menu in Play mode.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -51,11 +73,25 @@ pub struct MenuSettings {
     /// Coming back to the menu focuses the item focused last.
     pub remember: bool,
     pub disabled: DisabledItems,
+    /// How the focused item looks.
+    pub focus_look: StateLook,
+    /// How it looks while Confirm is held.
+    pub pressed_look: StateLook,
+    /// Which items are disabled: those whose own variant has this value.
+    pub disabled_look: StateLook,
 }
 
 impl Default for MenuSettings {
     fn default() -> Self {
-        Self { wrap: false, start: None, remember: true, disabled: DisabledItems::Focus }
+        Self {
+            wrap: false,
+            start: None,
+            remember: true,
+            disabled: DisabledItems::Focus,
+            focus_look: StateLook::Auto,
+            pressed_look: StateLook::Auto,
+            disabled_look: StateLook::Auto,
+        }
     }
 }
 
@@ -101,16 +137,18 @@ impl Default for MapSettings {
 
 /// A row of slots where one is selected (a hotbar): keys 1 to 9 pick a slot, the wheel and LB / RB
 /// step through them, while the player keeps moving.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HotbarSettings {
     /// Past the last slot, the wheel and LB / RB come back to the first.
     pub wrap: bool,
+    /// How the selected slot looks.
+    pub selected_look: StateLook,
 }
 
 impl Default for HotbarSettings {
     fn default() -> Self {
-        Self { wrap: true }
+        Self { wrap: true, selected_look: StateLook::Auto }
     }
 }
 
@@ -285,6 +323,11 @@ impl GameSettings {
             return Err(format!("Use at most {MAX_SCREEN_SETTINGS} game backgrounds and game bars"));
         }
         validate_inputs(&self.inputs, &self.bindings)?;
+        let looks_ok = self.hotbars.values().all(|h| h.selected_look.valid())
+            && self.menus.values().all(|m| m.focus_look.valid() && m.pressed_look.valid() && m.disabled_look.valid());
+        if !looks_ok {
+            return Err("A state look names a variant property and value (1 to 80 characters)".into());
+        }
         if self.hotbars.len() > MAX_SCREEN_SETTINGS {
             return Err(format!("Use at most {MAX_SCREEN_SETTINGS} hotbars"));
         }

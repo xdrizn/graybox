@@ -9,6 +9,8 @@ pub mod components;
 pub mod editor;
 pub mod hotbar;
 pub(crate) mod input;
+pub mod look_ui;
+pub mod looks;
 pub mod map;
 pub mod menu;
 pub mod proto_targets;
@@ -48,6 +50,8 @@ pub struct Play {
     pub(crate) menu: menu::Focus,
     /// The selected slot of each hotbar (Play only).
     pub(crate) hotbars: hotbar::Selection,
+    /// Selected hotbar slots that have no selected variant: the player outlines them.
+    pub(crate) hotbar_outline: Vec<figcraft_doc::NodeId>,
     /// How far each map is moved and zoomed (Play only).
     pub(crate) maps: std::collections::BTreeMap<figcraft_doc::NodeId, map::View>,
 }
@@ -225,11 +229,18 @@ pub(crate) fn menu_section(app: &mut crate::FigApp, ui: &mut egui::Ui, doc: &fig
                     set(app, json!({"disabled": wire}));
                 }
             }
-            crate::widgets::label(
-                ui,
-                "Items show focus with a State variant (Default, Focused, Pressed, Disabled), else an outline.",
-                t.text_secondary,
-            );
+            // Graybox: the looks are picked from the items' own variants, no special names needed.
+            let items = menu::items(doc, id);
+            look_ui::warnings(ui, doc, &items, "Item");
+            let component = looks::first_component(doc, &items);
+            let params = |key: &'static str| move |look: serde_json::Value| json!({"node": id, key: look});
+            for (title, look, role, key) in [
+                ("When focused", &menu.focus_look, looks::Role::Selected, "focusLook"),
+                ("When pressed", &menu.pressed_look, looks::Role::Pressed, "pressedLook"),
+                ("Disabled when", &menu.disabled_look, looks::Role::Disabled, "disabledLook"),
+            ] {
+                look_ui::picker(app, ui, doc, title, look, component, role, "game.menu.set", &params(key));
+            }
         })
     });
 }

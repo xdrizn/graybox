@@ -38,6 +38,11 @@
   in the app (Pause list with ↓, Inventory grid with the D-pad). Spec and plan in `docs/game/specs/`.
 
 ## Decisions
+- State looks without special names (owner, 2026-11-04): hotbars and navigable menus show selected /
+  focused / pressed / disabled with a variant the designer picks from the items' own variants
+  ("When selected: Property 1 = hover"), or Auto (found by names like hover, selected, focused,
+  pressed, disabled), or an orange outline. "Create a variant for it" adds one. Warnings say when
+  an item is the original component or not a component copy. Older State=Focused files work on Auto.
 - Hotbars (owner, 2026-11-04): an auto layout row marked as a hotbar keeps one selected slot in Play:
   keys 1-9 pick, the wheel (unless a map is open) and LB/RB step, without stopping the player. The
   selected slot shows its State=Focused variant.

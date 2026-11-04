@@ -1,6 +1,6 @@
 //! Hotbars in Play: an auto layout frame marked as a hotbar has one selected slot. Keys 1 to 9 pick
 //! a slot, the wheel and LB / RB step through them, and the player keeps moving meanwhile. The
-//! selected slot shows its component's `State=Focused` variant (the others their own variant).
+//! selected slot shows the variant picked for it (or one named hover, selected…), else an outline.
 
 use std::collections::BTreeMap;
 
@@ -23,7 +23,7 @@ pub fn in_view(doc: &Document, roots: &[NodeId]) -> Vec<(NodeId, HotbarSettings)
         .iter()
         .filter(|(id, _)| roots.iter().any(|r| *r == **id || doc.is_ancestor(*r, **id)))
         .filter(|(id, _)| doc.node(**id).is_some_and(|n| n.visible))
-        .map(|(id, s)| (*id, *s))
+        .map(|(id, s)| (*id, s.clone()))
         .collect()
 }
 
@@ -42,19 +42,32 @@ pub fn step(selected: usize, count: usize, settings: &HotbarSettings, input: &Ho
     at
 }
 
-/// The variant each slot of `bar` should show: the selected one its `State=Focused` variant, the
-/// others the variant they have in the file (`original`).
-pub fn looks(original: &Document, bar: NodeId, selected: usize) -> Vec<(NodeId, NodeId)> {
+/// The variant each slot of `bar` should show (the selected one its selected look, the others the
+/// variant they have in the file, `original`), and the selected slot when it has no such variant
+/// (the player outlines it).
+pub fn looks(original: &Document, bar: NodeId, selected: usize, settings: &HotbarSettings) -> (Vec<(NodeId, NodeId)>, Option<NodeId>) {
     let slots = super::menu::items(original, bar);
-    slots
+    let mut outline = None;
+    let looks = slots
         .iter()
         .enumerate()
         .filter_map(|(i, slot)| {
-            let NodeKind::Instance { component, .. } = original.node(*slot)?.kind else { return None };
-            let shown = if i == selected { super::menu::state_variant(original, component, "Focused").unwrap_or(component) } else { component };
-            Some((*slot, shown))
+            let component = match original.node(*slot)?.kind {
+                NodeKind::Instance { component, .. } => Some(component),
+                _ => None,
+            };
+            let shown = if i == selected {
+                component.and_then(|c| super::looks::shown(original, c, &settings.selected_look, super::looks::Role::Selected))
+            } else {
+                component
+            };
+            if i == selected && (shown.is_none() || shown == component) {
+                outline = Some(*slot);
+            }
+            Some((*slot, shown.or(component)?))
         })
-        .collect()
+        .collect();
+    (looks, outline)
 }
 
 /// Number keys pressed this frame as a slot index (1 → 0 … 9 → 8).
@@ -82,8 +95,8 @@ mod tests {
 
     #[test]
     fn numbers_pick_and_steps_cycle() {
-        let wrap = HotbarSettings { wrap: true };
-        let stop = HotbarSettings { wrap: false };
+        let wrap = HotbarSettings { wrap: true, ..Default::default() };
+        let stop = HotbarSettings { wrap: false, ..Default::default() };
         assert_eq!(step(0, 5, &wrap, &HotbarInput { slot: Some(3), step: 0 }), 3, "key 4 picks the fourth slot");
         assert_eq!(step(2, 5, &wrap, &HotbarInput { slot: Some(7), step: 0 }), 2, "a key past the last slot does nothing");
         assert_eq!(step(4, 5, &wrap, &HotbarInput { slot: None, step: 1 }), 0, "next from the last wraps");

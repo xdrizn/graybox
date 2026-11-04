@@ -146,7 +146,7 @@ fn hotbar_section(app: &mut FigApp, ui: &mut Ui, doc: &Document, id: figcraft_do
     let t = Tokens::get(ui.ctx());
     widgets::separator(ui);
     widgets::section_header(ui, "Hotbar", &[], false);
-    let bar = doc.game.hotbars.get(&id).copied();
+    let bar = doc.game.hotbars.get(&id).cloned();
     row(ui, 28.0, |ui| {
         if widgets::checkbox(ui, bar.is_some(), "Hotbar: one slot selected") {
             app.run("game.hotbar.set", json!({"node": id, "enabled": bar.is_none()}));
@@ -158,10 +158,25 @@ fn hotbar_section(app: &mut FigApp, ui: &mut Ui, doc: &Document, id: figcraft_do
                 app.run("game.hotbar.set", json!({"node": id, "wrap": !bar.wrap}));
             }
         });
+        let slots = super::menu::items(doc, id);
+        super::look_ui::warnings(ui, doc, &slots, "Slot");
+        let component = super::looks::first_component(doc, &slots);
+        let params = |look: serde_json::Value| json!({"node": id, "selectedLook": look});
+        super::look_ui::picker(
+            app,
+            ui,
+            doc,
+            "When selected",
+            &bar.selected_look,
+            component,
+            super::looks::Role::Selected,
+            "game.hotbar.set",
+            &params,
+        );
     }
     widgets::note(
         ui,
-        "In Play: keys 1 to 9 pick a slot, the mouse wheel and LB / RB go to the next or previous one, while you keep moving. The selected slot shows its State=Focused variant.",
+        "In Play: keys 1 to 9 pick a slot, the mouse wheel and LB / RB go to the next or previous one, while you keep moving.",
         t.text_secondary,
     );
 }

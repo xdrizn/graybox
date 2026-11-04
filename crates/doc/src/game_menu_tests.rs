@@ -35,7 +35,7 @@ fn menu_binding_conflict_within_menu_actions_is_rejected() {
 #[test]
 fn settings_round_trip_with_menus() {
     let mut s = GameSettings::default();
-    s.menus.insert(NodeId(42), MenuSettings { wrap: true, start: Some(NodeId(7)), remember: false, disabled: DisabledItems::Skip });
+    s.menus.insert(NodeId(42), MenuSettings { wrap: true, start: Some(NodeId(7)), remember: false, disabled: DisabledItems::Skip, ..Default::default() });
     s.menus.insert(NodeId(3), MenuSettings::default());
     let json = serde_json::to_string(&s).unwrap();
     let back: GameSettings = serde_json::from_str(&json).unwrap();
@@ -61,4 +61,19 @@ fn too_many_menus_is_rejected() {
     assert!(s.validate().is_err());
     let json = serde_json::to_string(&s).unwrap();
     assert!(serde_json::from_str::<GameSettings>(&json).is_err());
+}
+
+#[test]
+fn state_looks_round_trip_and_reject_junk_names() {
+    use crate::game::{HotbarSettings, StateLook};
+    let mut s = GameSettings::default();
+    let look = StateLook::Variant { property: "Property 1".into(), value: "hover".into() };
+    s.hotbars.insert(NodeId(3), HotbarSettings { wrap: true, selected_look: look.clone() });
+    s.menus.insert(NodeId(4), MenuSettings { focus_look: StateLook::Outline, ..Default::default() });
+    let json = serde_json::to_value(&s).unwrap();
+    assert_eq!(json["hotbars"]["3"]["selected_look"], serde_json::json!({"kind": "variant", "property": "Property 1", "value": "hover"}));
+    assert_eq!(serde_json::from_value::<GameSettings>(json).unwrap(), s);
+    let mut bad = serde_json::to_value(&s).unwrap();
+    bad["hotbars"]["3"]["selected_look"]["value"] = serde_json::json!("");
+    assert!(serde_json::from_value::<GameSettings>(bad).is_err());
 }

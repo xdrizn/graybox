@@ -8,7 +8,6 @@ use egui::InputState;
 use figcraft_doc::game::{DisabledItems, GameSettings};
 use figcraft_doc::proto::KeyMods;
 use figcraft_doc::{Document, LayoutMode, NodeId, NodeKind};
-use figcraft_engine::components::{find_variant, variant_props};
 use figcraft_game::menu::{Dir, MenuGrid, NavOptions, Repeat, first_focusable, step};
 
 /// A stick pushed this far counts as a held direction.
@@ -102,24 +101,6 @@ fn component_of(doc: &Document, item: NodeId) -> Option<NodeId> {
     }
 }
 
-fn state_of(doc: &Document, component: NodeId) -> Option<String> {
-    doc.node(component).and_then(|c| variant_props(&c.name).get("State").cloned())
-}
-
-/// The variant of `component`'s set with the same properties but `State=value`.
-pub(crate) fn state_variant(doc: &Document, component: NodeId, value: &str) -> Option<NodeId> {
-    let c = doc.node(component)?;
-    let set = c.parent?;
-    if !matches!(doc.node(set)?.kind, NodeKind::ComponentSet { .. }) {
-        return None;
-    }
-    let mut wanted = variant_props(&c.name);
-    wanted.get("State")?;
-    wanted.insert("State".into(), value.into());
-    let found = find_variant(doc, set, &wanted)?;
-    (state_of(doc, found).as_deref() == Some(value)).then_some(found)
-}
-
 /// True when a key or controller trigger in `root`'s layers handles input `name`: that
 /// interaction wins and the menu leaves the input alone.
 pub fn layer_takes_input(doc: &Document, root: NodeId, name: &str) -> bool {
@@ -188,8 +169,8 @@ impl Focus {
         }
     }
 
-    fn disabled(&self, doc: &Document, item: NodeId) -> bool {
-        self.own_variant(doc, item).and_then(|v| state_of(doc, v)).as_deref() == Some("Disabled")
+    fn disabled(&self, doc: &Document, item: NodeId, look: &figcraft_doc::game::StateLook) -> bool {
+        self.own_variant(doc, item).is_some_and(|v| super::looks::is(doc, v, look, super::looks::Role::Disabled))
     }
 
     /// Put the swapped item back to its own variant.
@@ -227,7 +208,7 @@ impl Focus {
         let items = items(doc, menu);
         let opts = NavOptions { wrap: settings.wrap, skip_disabled: settings.disabled == DisabledItems::Skip };
         let (columns, column_first) = columns(doc, menu, &items);
-        let grid = MenuGrid { columns, enabled: items.iter().map(|i| !self.disabled(doc, *i)).collect() };
+        let grid = MenuGrid { columns, enabled: items.iter().map(|i| !self.disabled(doc, *i, &settings.disabled_look)).collect() };
         let position = |id: Option<NodeId>| id.and_then(|id| items.iter().position(|i| *i == id));
         let mut index = position(self.pointed.take()).or_else(|| position(self.item));
         if index.is_none() {
@@ -248,7 +229,7 @@ impl Focus {
             self.outline = false;
             return plan;
         };
-        let disabled = self.disabled(doc, item);
+        let disabled = self.disabled(doc, item, &settings.disabled_look);
         if input.confirm && !disabled {
             plan.confirm = Some(item);
             self.pressed = true;
@@ -257,9 +238,17 @@ impl Focus {
             self.pressed = false;
         }
         plan.back = input.back;
-        // Focus look: the State variant, else an outline (a disabled item keeps its own look).
+        // Focus look: the variant the designer picked or one found by its name, else an outline (a
+        // disabled item keeps its own look). Pressed falls back to the focus look.
         let own = self.own_variant(doc, item);
-        let wanted = own.filter(|_| !disabled).and_then(|own| state_variant(doc, own, if self.pressed { "Pressed" } else { "Focused" }));
+        let focus = |own| super::looks::shown(doc, own, &settings.focus_look, super::looks::Role::Selected);
+        let wanted = own.filter(|_| !disabled).and_then(|own| {
+            if self.pressed {
+                super::looks::shown(doc, own, &settings.pressed_look, super::looks::Role::Pressed).or_else(|| focus(own))
+            } else {
+                focus(own)
+            }
+        });
         self.outline = wanted.is_none();
         match (wanted, own) {
             (Some(shown), Some(own)) => {

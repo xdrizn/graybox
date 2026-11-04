@@ -20,7 +20,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "game.menu.set",
             "Set navigable menu",
-            "{node, enabled? (bool), wrap? (bool), start? (child id | null), remember? (bool), disabled? (focus|skip)}",
+            "{node, enabled? (bool), wrap? (bool), start? (child id | null), remember? (bool), disabled? (focus|skip), focusLook? / pressedLook? / disabledLook? {kind: auto|outline|variant, property?, value?}}",
             true,
             menu_set
         ),
@@ -35,7 +35,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "game.hotbar.set",
             "Set hotbar",
-            "{node (auto layout frame), enabled? (bool), wrap? (bool)}  in Play keys 1-9, the wheel and LB/RB select one of its slots",
+            "{node (auto layout frame), enabled? (bool), wrap? (bool), selectedLook? {kind: auto|outline|variant, property?, value?}}  in Play keys 1-9, the wheel and LB/RB select one of its slots",
             true,
             set_hotbar
         ),
@@ -265,6 +265,11 @@ fn menu_set(s: &mut Session, p: &Value) -> Result<Value> {
         }
         if let Some(start) = start {
             menu.start = start;
+        }
+        for (key, dest) in [("focusLook", &mut menu.focus_look), ("pressedLook", &mut menu.pressed_look), ("disabledLook", &mut menu.disabled_look)] {
+            if let Some(v) = p.get(key) {
+                *dest = state_look(cmd, key, v)?;
+            }
         }
     }
     settings.validate().map_err(|e| bad(cmd, e))?;
@@ -703,9 +708,12 @@ fn set_hotbar(s: &mut Session, p: &Value) -> Result<Value> {
         Some(v) => v.as_bool().ok_or_else(|| bad(cmd, "enabled must be true or false"))?,
     };
     if enabled {
-        let mut bar = settings.hotbars.get(&node).copied().unwrap_or_default();
+        let mut bar = settings.hotbars.get(&node).cloned().unwrap_or_default();
         if let Some(v) = p.get("wrap") {
             bar.wrap = v.as_bool().ok_or_else(|| bad(cmd, "wrap must be true or false"))?;
+        }
+        if let Some(v) = p.get("selectedLook") {
+            bar.selected_look = state_look(cmd, "selectedLook", v)?;
         }
         settings.hotbars.insert(node, bar);
     } else {
@@ -715,4 +723,9 @@ fn set_hotbar(s: &mut Session, p: &Value) -> Result<Value> {
     settings.validate().map_err(|e| bad(cmd, e))?;
     s.doc_mut()?.game = settings;
     ok()
+}
+
+/// A state look parameter: `{kind: auto | outline | variant, property?, value?}`.
+fn state_look(cmd: &str, key: &str, v: &Value) -> Result<figcraft_doc::game::StateLook> {
+    serde_json::from_value(v.clone()).map_err(|_| bad(cmd, format!("{key} must be {{kind: auto|outline|variant, property, value}}")))
 }
