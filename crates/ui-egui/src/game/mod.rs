@@ -7,6 +7,7 @@ pub mod audio;
 pub mod brand;
 pub mod components;
 pub mod editor;
+pub mod fonts;
 pub mod hotbar;
 pub(crate) mod input;
 pub mod look_ui;

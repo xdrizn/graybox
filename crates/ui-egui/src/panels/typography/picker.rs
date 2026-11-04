@@ -116,11 +116,21 @@ pub(crate) fn font_picker(
                         rows.push(PickRow::Header(tr("All fonts")));
                     }
                 }
-                if matches.is_empty() {
+                // Graybox: the font store's families this computer doesn't have, downloaded when picked.
+                let catalog: Vec<String> = figcraft_engine::fonts::catalog_families()
+                    .iter()
+                    .filter(|f| (ql.is_empty() || f.to_lowercase().contains(&ql)) && !all.iter().any(|a| a.eq_ignore_ascii_case(f)))
+                    .cloned()
+                    .collect();
+                if matches.is_empty() && catalog.is_empty() {
                     widgets::label(ui, tr("No fonts match"), t.text_tertiary);
                     return Header::default();
                 }
                 rows.extend(matches.into_iter().map(PickRow::Family));
+                if !catalog.is_empty() {
+                    rows.push(PickRow::Header("Google Fonts: downloads when picked"));
+                    rows.extend(catalog.into_iter().map(PickRow::Family));
+                }
                 let family = |i: usize| match rows.get(i) {
                     Some(PickRow::Family(f)) => Some(f.clone()),
                     _ => None,

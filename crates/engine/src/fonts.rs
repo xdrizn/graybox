@@ -81,7 +81,7 @@ pub enum Download {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use download::{allow_downloads, downloads, downloads_allowed, source};
+pub use download::{allow_downloads, catalog_families, downloads, downloads_allowed, source};
 
 /// The browser keeps its built-in fonts: nothing is downloaded there.
 #[cfg(target_arch = "wasm32")]
@@ -98,9 +98,12 @@ mod no_download {
     pub fn allow_downloads() -> std::result::Result<(), String> {
         Err("fonts aren't downloaded in the browser".into())
     }
+    pub fn catalog_families() -> &'static [String] {
+        &[]
+    }
 }
 #[cfg(target_arch = "wasm32")]
-pub use no_download::{allow_downloads, downloads, downloads_allowed, source};
+pub use no_download::{allow_downloads, catalog_families, downloads, downloads_allowed, source};
 
 /// Every string value of variable `id` in any mode, following aliases (each variable once).
 fn string_values(vars: &Variables, id: &str) -> Vec<String> {

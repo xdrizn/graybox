@@ -241,6 +241,8 @@ fn family_row(app: &mut FigApp, ui: &mut Ui, ids: &[NodeId], family: Option<&str
     if let Some(f) = pick.picked {
         remember_family(ui.ctx(), &f);
         apply_style(app, "fontFamily", json!(f));
+        // Graybox: a family picked from the font store's list is downloaded to this computer.
+        crate::game::fonts::fetch(app, &f);
     } else if let Some(h) = pick.hovered.or(pick.highlighted) {
         // The canvas shows the hovered family (or the one the arrow keys are on); closing without
         // picking ends the preview.

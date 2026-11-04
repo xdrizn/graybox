@@ -65,6 +65,18 @@ fn index() -> &'static Index {
     INDEX.get_or_init(|| store(Caller::Agent).map(|s| s.offline_indexes()).unwrap_or_else(|| Index::bundled().unwrap_or_default()))
 }
 
+/// Graybox: every family the font store's indexes offer (Google Fonts, Noto), sorted, for the font
+/// picker's download rows. Read once, no request.
+pub fn catalog_families() -> &'static [String] {
+    static NAMES: OnceLock<Vec<String>> = OnceLock::new();
+    NAMES.get_or_init(|| {
+        let mut names: Vec<String> = index().families().iter().map(|f| f.family.clone()).collect();
+        names.sort_by_key(|n| n.to_lowercase());
+        names.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+        names
+    })
+}
+
 /// The name of the source `family` can be downloaded from (`Google Fonts`, `Noto`), if any.
 pub fn source(family: &str) -> Option<String> {
     let index = index();

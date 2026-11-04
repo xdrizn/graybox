@@ -117,6 +117,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - `apps/figcraft/src/main.rs`: with nothing to open, start in the most recent file that still exists.
 - `crates/ui-egui/src/services.rs` `Services::cursor_screen_pixels` (desktop Windows: `mouse_position`
   crate) and `canvas/input.rs` `import_dropped`: dropped files land under the mouse.
+- `crates/engine/src/fonts/download.rs` `catalog_families` (+ wasm stub in `fonts.rs`); `typography/picker.rs`: the
+  font store's families not installed listed under "Google Fonts: downloads when picked";
+  `typography/fields.rs`: a pick runs `game::fonts::fetch`.
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one
