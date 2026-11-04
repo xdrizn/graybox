@@ -110,6 +110,10 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   game bar) after the menu section.
 - `crates/ui-egui/src/present/navigate.rs` `display`: maps show their content moved and zoomed
   (`game::map::apply`).
+- `crates/engine/src/cmd/arrange.rs` `scale_node`: an instance scaled (itself or inside a scaled frame)
+  gets its "size" override, so a variant change keeps its size (upstream only marked layers inside
+  instances).
+- `crates/ui-egui/src/present/actions.rs` Change to: `cmd::game::keep_instance_size` before the swap.
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one

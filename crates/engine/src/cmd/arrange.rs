@@ -517,6 +517,11 @@ pub fn scale_node(doc: &mut Document, id: NodeId, k: f64) -> Result<()> {
             let c = n.transform.as_coeffs();
             n.transform = Affine::new([c[0], c[1], c[2], c[3], c[4] * k, c[5] * k]);
         }
+        // Graybox: an instance scaled itself or with a frame around it keeps its new size too.
+        let is_instance = matches!(n.kind, NodeKind::Instance { .. });
+        if is_instance && (n.width != w0 || n.height != h0) {
+            n.overrides.insert("size".into());
+        }
         if in_instance.get(depth).copied().unwrap_or(false) {
             if n.width != w0 || n.height != h0 {
                 n.overrides.insert("size".into());

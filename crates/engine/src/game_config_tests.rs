@@ -437,3 +437,38 @@ fn hotbars_need_auto_layout_and_are_undoable() {
     ex(&mut s, "edit.undo", json!({}));
     assert!(s.doc().unwrap().game.hotbars.contains_key(&row));
 }
+
+/// Owner's bug (2026-11-04): instances scaled with the frame around them went back to their
+/// component's size when a prototype changed their variant.
+#[test]
+fn scaled_instances_keep_their_size_when_their_variant_changes() {
+    let mut s = Session::new();
+    let f = id_of(&ex(&mut s, "frame.create", json!({"width": 133, "height": 133}))["id"]).unwrap();
+    let main = id_of(&ex(&mut s, "component.create", json!({"ids": [f]}))["id"]).unwrap();
+    ex(&mut s, "component.addVariant", json!({"id": main}));
+    let set = crate::components::variant_set(s.doc().unwrap(), main).unwrap();
+    let other = *s.doc().unwrap().node(set).unwrap().children.iter().find(|v| **v != main).unwrap();
+    let bar = id_of(&ex(&mut s, "frame.create", json!({"x": 1000, "width": 600, "height": 200}))["id"]).unwrap();
+    let inst = id_of(&ex(&mut s, "instance.create", json!({"component": main, "parent": bar}))["id"]).unwrap();
+    ex(&mut s, "transform.scale", json!({"ids": [bar], "factor": 0.5}));
+    let size = |d: &figcraft_doc::Document| (d.node(inst).unwrap().width, d.node(inst).unwrap().height);
+    assert_eq!(size(s.doc().unwrap()), (66.5, 66.5));
+    assert!(s.doc().unwrap().node(inst).unwrap().overrides.contains("size"), "scaling marks the instance's own size");
+    let swap = |d: &mut figcraft_doc::Document| {
+        crate::cmd::game::keep_instance_size(d, inst);
+        if let Some(n) = d.node_mut(inst)
+            && let figcraft_doc::NodeKind::Instance { component, .. } = &mut n.kind
+        {
+            *component = other;
+        }
+        crate::components::sync_instance(d, inst);
+    };
+    let mut play = s.doc().unwrap().clone();
+    swap(&mut play);
+    assert_eq!(size(&play), (66.5, 66.5), "the new variant keeps the scaled size");
+    // A file scaled before the fix: the size isn't marked, the player still keeps it.
+    let mut old = s.doc().unwrap().clone();
+    old.node_mut(inst).unwrap().overrides.remove("size");
+    swap(&mut old);
+    assert_eq!(size(&old), (66.5, 66.5));
+}

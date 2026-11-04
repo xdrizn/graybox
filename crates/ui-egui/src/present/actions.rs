@@ -213,6 +213,8 @@ impl Presenter {
                 self.begin(tr, dur, easing, now);
                 let Some(d) = self.design.as_mut() else { return false };
                 let before = d.clone();
+                // Graybox: a resized instance keeps its size in the new variant.
+                figcraft_engine::cmd::game::keep_instance_size(d, inst);
                 if let Some(n) = d.node_mut(inst)
                     && let NodeKind::Instance { component, .. } = &mut n.kind
                 {

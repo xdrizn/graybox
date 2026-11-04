@@ -230,6 +230,7 @@ fn hotbar_step(p: &mut Presenter, ctx: &Context, pads: u32) {
     }
     let before = design.clone();
     for (slot, variant) in stale {
+        figcraft_engine::cmd::game::keep_instance_size(design, slot);
         if let Some(n) = design.node_mut(slot)
             && let NodeKind::Instance { component, .. } = &mut n.kind
         {
@@ -476,6 +477,7 @@ pub(super) fn menu_step(p: &mut Presenter, input: &MenuInputs, now: f64) -> bool
     {
         let before = d.clone();
         for (item, variant) in &plan.looks {
+            figcraft_engine::cmd::game::keep_instance_size(d, *item);
             if let Some(n) = d.node_mut(*item)
                 && let NodeKind::Instance { component, .. } = &mut n.kind
             {

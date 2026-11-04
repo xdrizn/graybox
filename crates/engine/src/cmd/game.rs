@@ -729,3 +729,19 @@ fn set_hotbar(s: &mut Session, p: &Value) -> Result<Value> {
 fn state_look(cmd: &str, key: &str, v: &Value) -> Result<figcraft_doc::game::StateLook> {
     serde_json::from_value(v.clone()).map_err(|_| bad(cmd, format!("{key} must be {{kind: auto|outline|variant, property, value}}")))
 }
+
+/// Before an instance changes variant in a prototype: if its size differs from its variant's (it
+/// was resized or scaled without the size being marked as its own, as files from before the scale
+/// fix have), mark it, so the new variant keeps the instance's size.
+pub fn keep_instance_size(doc: &mut Document, inst: NodeId) {
+    let Some(n) = doc.node(inst) else { return };
+    let NodeKind::Instance { component, .. } = n.kind else { return };
+    let Some(main) = doc.node(component) else { return };
+    let resized = (n.width - main.width).abs() > 0.01 || (n.height - main.height).abs() > 0.01;
+    if resized
+        && !n.overrides.contains("size")
+        && let Some(n) = doc.node_mut(inst)
+    {
+        n.overrides.insert("size".into());
+    }
+}
