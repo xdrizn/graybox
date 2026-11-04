@@ -472,3 +472,26 @@ fn scaled_instances_keep_their_size_when_their_variant_changes() {
     swap(&mut old);
     assert_eq!(size(&old), (66.5, 66.5));
 }
+
+/// Sharing carries the font store fonts the text uses (and only those), saved with the file.
+#[test]
+fn shared_files_carry_their_font_store_fonts() {
+    let mut s = Session::new();
+    let text = id_of(&ex(&mut s, "text.create", json!({"x": 0, "y": 0, "text": "Graybox"}))["id"]).unwrap();
+    let family = ["Roboto", "Inter", "Lato", "Open Sans"].into_iter().find(|f| figcraft_text::has_family(f) && crate::fonts::source(f).is_some());
+    let Some(family) = family else {
+        eprintln!("no font store family is installed or built in here: nothing to share");
+        return;
+    };
+    ex(&mut s, "text.style", json!({"id": text, "fontFamily": family}));
+    let fonts = crate::cmd::game::shareable_fonts(s.doc().unwrap());
+    assert_eq!(fonts.keys().collect::<Vec<_>>(), [family], "only the family the text uses");
+    assert!(fonts[family].iter().all(|f| !f.is_empty()));
+    crate::cmd::game::embed_shared_fonts(&mut s).unwrap();
+    assert_eq!(s.doc().unwrap().game.fonts, fonts);
+    let bytes = figcraft_format::save_bytes(s.doc().unwrap(), None).unwrap();
+    assert_eq!(figcraft_format::load_bytes(&bytes).unwrap().0.game.fonts, fonts, "saved with the file");
+    // A family that isn't from the font store (a system font) never travels.
+    ex(&mut s, "text.style", json!({"id": text, "fontFamily": "Graybox Private Font"}));
+    assert!(crate::cmd::game::shareable_fonts(s.doc().unwrap()).is_empty());
+}

@@ -88,6 +88,8 @@ fn share(s: &mut Session, p: &Value) -> Result<Value> {
             ));
         }
     } else {
+        // Graybox: the font store fonts the text uses go with the file, so viewers see them.
+        crate::cmd::game::embed_shared_fonts(s)?;
         let mut args = json!({"via": "online", "access": "view"});
         if p.get("server").is_some() {
             args["server"] = json!(req_string(CMD, p, "server")?);

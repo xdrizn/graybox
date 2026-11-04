@@ -745,3 +745,56 @@ pub fn keep_instance_size(doc: &mut Document, inst: NodeId) {
         n.overrides.insert("size".into());
     }
 }
+
+/// The families the file's text uses that came from the font store (Google Fonts, Noto: free to
+/// share) and are installed here, with their font files as base64. Other fonts never travel.
+pub fn shareable_fonts(doc: &Document) -> BTreeMap<String, Vec<String>> {
+    use base64::Engine as _;
+    let mut used: BTreeSet<String> = BTreeSet::new();
+    for n in doc.nodes() {
+        if let NodeKind::Text(t) = &n.kind {
+            used.extend(t.spans().into_iter().map(|(_, _, st)| st.font_family.trim().to_string()));
+            used.insert(t.style.font_family.trim().to_string());
+        }
+    }
+    let mut out = BTreeMap::new();
+    let mut total = 0usize;
+    for family in used {
+        if family.is_empty() || crate::fonts::source(&family).is_none() || !figcraft_text::has_family(&family) {
+            continue;
+        }
+        let mut files = Vec::new();
+        let mut seen = BTreeSet::new();
+        for style in figcraft_text::family_styles(&family) {
+            let Some(face) = figcraft_text::find_face(&family, &style).filter(|f| f.family.eq_ignore_ascii_case(&family)) else { continue };
+            let data = face.bytes.data();
+            if !seen.insert((data.len(), data.get(..256).map(<[u8]>::to_vec))) {
+                continue;
+            }
+            let text = base64::engine::general_purpose::STANDARD.encode(data);
+            if total + text.len() > figcraft_doc::game::MAX_SHARED_FONT_TEXT || out.len() >= figcraft_doc::game::MAX_SHARED_FONTS {
+                return out;
+            }
+            total += text.len();
+            files.push(text);
+        }
+        if !files.is_empty() {
+            out.insert(family, files);
+        }
+    }
+    out
+}
+
+/// Before sharing: keep the file's shared fonts in step with what its text uses (one edit, only
+/// when they changed).
+pub fn embed_shared_fonts(s: &mut Session) -> Result<()> {
+    let fonts = shareable_fonts(s.doc()?);
+    if fonts == s.doc()?.game.fonts {
+        return Ok(());
+    }
+    let mut settings = s.doc()?.game.clone();
+    settings.fonts = fonts;
+    settings.validate().map_err(|e| bad("game.share", e))?;
+    s.doc_mut()?.game = settings;
+    Ok(())
+}

@@ -35,7 +35,10 @@ fn menu_binding_conflict_within_menu_actions_is_rejected() {
 #[test]
 fn settings_round_trip_with_menus() {
     let mut s = GameSettings::default();
-    s.menus.insert(NodeId(42), MenuSettings { wrap: true, start: Some(NodeId(7)), remember: false, disabled: DisabledItems::Skip, ..Default::default() });
+    s.menus.insert(
+        NodeId(42),
+        MenuSettings { wrap: true, start: Some(NodeId(7)), remember: false, disabled: DisabledItems::Skip, ..Default::default() },
+    );
     s.menus.insert(NodeId(3), MenuSettings::default());
     let json = serde_json::to_string(&s).unwrap();
     let back: GameSettings = serde_json::from_str(&json).unwrap();

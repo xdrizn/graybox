@@ -40,6 +40,10 @@
   bezel image covered the whole screen and hid the items from the pointer).
 
 ## Decisions
+- Fonts (owner, 2026-11-04): Google Fonts / Noto families download to this computer only when picked
+  (font picker's "Google Fonts" rows), never into the repo or the program. Sharing (`game.share`)
+  puts the font store fonts the text uses into the file (`game.fonts`, base64, capped); whoever
+  opens it loads them (`game::fonts::load_shared`, desktop and browser). System fonts never travel.
 - State looks without special names (owner, 2026-11-04): hotbars and navigable menus show selected /
   focused / pressed / disabled with a variant the designer picks from the items' own variants
   ("When selected: Property 1 = hover"), or Auto (found by names like hover, selected, focused,
@@ -122,6 +126,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - `crates/engine/src/fonts/download.rs` `catalog_families` (+ wasm stub in `fonts.rs`); `typography/picker.rs`: the
   font store's families not installed listed under "Google Fonts: downloads when picked";
   `typography/fields.rs`: a pick runs `game::fonts::fetch`.
+- `crates/engine/src/cmd/game_share.rs` `share`: `cmd::game::embed_shared_fonts` before publishing.
+- `crates/ui-egui/src/app.rs` `frame`: `game::fonts::load_shared`.
+- `crates/ui-egui/src/theme.rs` `install_fonts`: Inter stays a fallback behind Space Grotesk (shortcut glyphs).
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one
@@ -132,6 +139,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   prefs, proto model…) without listing them here; to list.
 
 ## Known issues (not ours)
+- With craft-fonts in the build, `components_scale_tests::editing_deep_mains_keeps_every_override_and_matches_a_full_rebuild`
+  fails when the whole engine suite runs in parallel and passes alone (also with the scale fix
+  reverted); `board_tables_tests::a_double_click…` passes now.
 - This machine now builds with `../craft-fonts` (plus the Graybox faces, see FONTS.md); the same three
   engine tests still fail (board tables row growth, .fig font names, example .fig export).
 - Fail on this Windows machine before the G4 rework too: `fig_export_assets_tests::every_example_keeps_its_variables_and_styles`

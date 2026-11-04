@@ -178,6 +178,9 @@ pub struct GameSettings {
     pub inputs: BTreeMap<String, Vec<String>>,
     /// Auto layout frames that are hotbars.
     pub hotbars: BTreeMap<NodeId, HotbarSettings>,
+    /// Font files (base64) of the font store families the file uses, added when it is shared so
+    /// whoever opens it (in the browser too) sees its text as designed. Family → files.
+    pub fonts: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -196,6 +199,7 @@ struct StoredGameSettings {
     maps: BTreeMap<NodeId, MapSettings>,
     inputs: BTreeMap<String, Vec<String>>,
     hotbars: BTreeMap<NodeId, HotbarSettings>,
+    fonts: BTreeMap<String, Vec<String>>,
 }
 
 impl Default for StoredGameSettings {
@@ -213,6 +217,7 @@ impl Default for StoredGameSettings {
             maps: settings.maps,
             inputs: settings.inputs,
             hotbars: settings.hotbars,
+            fonts: settings.fonts,
         }
     }
 }
@@ -233,6 +238,7 @@ impl TryFrom<StoredGameSettings> for GameSettings {
             maps: stored.maps,
             inputs: stored.inputs,
             hotbars: stored.hotbars,
+            fonts: stored.fonts,
         };
         settings.validate()?;
         Ok(settings)
@@ -268,6 +274,7 @@ impl Default for GameSettings {
             maps: BTreeMap::new(),
             inputs: default_inputs(),
             hotbars: BTreeMap::new(),
+            fonts: BTreeMap::new(),
         }
     }
 }
@@ -327,6 +334,10 @@ impl GameSettings {
             && self.menus.values().all(|m| m.focus_look.valid() && m.pressed_look.valid() && m.disabled_look.valid());
         if !looks_ok {
             return Err("A state look names a variant property and value (1 to 80 characters)".into());
+        }
+        let font_bytes: usize = self.fonts.values().flatten().map(String::len).sum();
+        if self.fonts.len() > MAX_SHARED_FONTS || font_bytes > MAX_SHARED_FONT_TEXT || self.fonts.keys().any(|f| !valid_alias(f)) {
+            return Err(format!("Shared fonts: at most {MAX_SHARED_FONTS} families and {} MB", MAX_SHARED_FONT_TEXT / (1024 * 1024)));
         }
         if self.hotbars.len() > MAX_SCREEN_SETTINGS {
             return Err(format!("Use at most {MAX_SCREEN_SETTINGS} hotbars"));
@@ -457,6 +468,9 @@ pub fn validate_keys(keys: &[String]) -> Result<(), String> {
 mod menu_tests;
 
 pub const MAX_INPUTS: usize = 32;
+/// Shared fonts: families, and their files' total size as base64 text.
+pub const MAX_SHARED_FONTS: usize = 32;
+pub const MAX_SHARED_FONT_TEXT: usize = 48 * 1024 * 1024;
 
 /// Named inputs every file starts with.
 pub fn default_inputs() -> BTreeMap<String, Vec<String>> {

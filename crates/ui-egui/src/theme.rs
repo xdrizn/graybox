@@ -354,7 +354,10 @@ pub fn install_fonts(ctx: &Context, system: bool, cjk: u8) {
                 .map(|face| font_data(&face))
         })
     };
-    let regular = face("Space Grotesk", "Regular").or_else(|| find("Inter", "Regular").map(FontData::from_static));
+    let grotesk = face("Space Grotesk", "Regular");
+    // With Space Grotesk as the UI face, Inter (built in) still backs the symbols it lacks.
+    let inter_fallback = grotesk.is_some();
+    let regular = grotesk.or_else(|| find("Inter", "Regular").map(FontData::from_static));
     let semibold = face("Space Grotesk", "Medium")
         .or_else(|| face("Space Grotesk", "SemiBold"))
         .or_else(|| face("Space Grotesk", "Bold"))
@@ -404,7 +407,9 @@ pub fn install_fonts(ctx: &Context, system: bool, cjk: u8) {
     let craft = |last: bool| {
         figcraft_text::CRAFT_FONTS
             .iter()
-            .filter(move |f| f.family != "Inter" && f.style == "Regular" && BUILT_IN.contains(&f.family) && late(f.family) == last)
+            .filter(move |f| {
+                (f.family != "Inter" || inter_fallback) && f.style == "Regular" && BUILT_IN.contains(&f.family) && late(f.family) == last
+            })
             .map(|f| (format!("craft-{}", f.family), FontData::from_static(f.bytes)))
     };
     let mut extra: Vec<(String, FontData)> = craft(false).collect();

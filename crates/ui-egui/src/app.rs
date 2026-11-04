@@ -230,6 +230,8 @@ impl FigApp {
         self.poll_dialog(&ctx);
         // Control requests run first so their results reflect this frame.
         crate::control::drain(self, &ctx);
+        // Graybox: fonts that came inside a shared file.
+        crate::game::fonts::load_shared(self);
         if let Some(error) = crate::game::audio::take_error(&ctx) {
             self.toast(error);
         }
