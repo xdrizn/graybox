@@ -36,12 +36,11 @@ pub fn instance_section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[No
     let Some(n) = doc.node(*id) else { return };
     match &n.kind {
         NodeKind::Instance { .. } => instance_ui(app, ui, doc, n),
-        NodeKind::ComponentSet { description } => {
-            properties_ui(app, ui, doc, n.id);
-            description_ui(app, ui, n.id, description);
-        }
-        NodeKind::Component { description, .. } => {
-            properties_ui(app, ui, doc, variant_set(doc, n.id).unwrap_or(n.id));
+        // Graybox: compact properties for a set or main component, "Current variant" for a variant.
+        NodeKind::ComponentSet { description } | NodeKind::Component { description, .. } => {
+            if !crate::game::components::section(app, ui, doc, n.id) {
+                properties_ui(app, ui, doc, variant_set(doc, n.id).unwrap_or(n.id));
+            }
             description_ui(app, ui, n.id, description);
         }
         _ => {}

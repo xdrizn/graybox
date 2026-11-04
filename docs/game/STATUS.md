@@ -38,6 +38,11 @@
   in the app (Pause list with ↓, Inventory grid with the D-pad). Spec and plan in `docs/game/specs/`.
 
 ## Decisions
+- Component panel like Figma (owner, 2026-11-04): a set lists each property on one compact row
+  that opens its editor; a variant shows only "Current variant" (its own values, changing one
+  renames the variant). Not yet in the compact panel: drag to reorder properties, instance-swap
+  default and preferred components (upstream's matrix had them). Upstream's panel tests run with
+  the compact panel off (`game::components::COMPACT`).
 - Navigable menus (2026-11-03): menu keys live in `menu_bindings`, separate from gameplay keys
   (WASD may move the player and the menu); a menu owns input only while the open screen has one,
   and the player stops moving meanwhile. A key/controller interaction on the open screen for the
@@ -75,6 +80,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - `crates/ui-egui/src/app/commands.rs` `game.settings`: selects nothing and shows the Prototype tab.
 - `crates/ui-egui/src/present/chrome.rs` `finish`: sounds scaled by `Play::volume`.
 - `crates/engine/src/proto_run.rs` `play_interactions`: calls `cmd::game::aim_animations_at_instances`.
+- `crates/ui-egui/src/panels/component_panel.rs` `instance_section`: a set or main component goes to
+  `game::components::section` (compact Properties / Current variant) before upstream's matrix.
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one

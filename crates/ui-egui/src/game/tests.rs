@@ -90,3 +90,55 @@ fn rename_text_stays_centred_on_its_row() {
         assert!((c - expected).abs() < 0.75, "edited text centre {c} vs name centre {expected}");
     }
 }
+
+/// A component set shows its properties compactly; a variant shows only its own values, and
+/// picking another value moves the variant to it (Figma-like "Current variant").
+#[test]
+fn variant_shows_and_changes_only_its_own_value() {
+    use crate::live_tests::{flat, has_text, text_center};
+    use egui::{Event, Modifiers, PointerButton};
+    use serde_json::json;
+    crate::game::components::set_compact(true);
+    let mut s = figcraft_engine::Session::new();
+    let ex = |s: &mut figcraft_engine::Session, c: &str, p: serde_json::Value| s.execute(c, &p).unwrap();
+    let id = |v: &serde_json::Value| figcraft_engine::params::id_of(&v["id"]).unwrap();
+    let frame = id(&ex(&mut s, "frame.create", json!({"width": 100, "height": 40})));
+    let main = id(&ex(&mut s, "component.create", json!({"ids": [frame]})));
+    ex(&mut s, "component.addVariant", json!({"id": main}));
+    let set = figcraft_engine::components::variant_set(s.doc().unwrap(), main).unwrap();
+    let variants = s.doc().unwrap().node(set).unwrap().children.clone();
+    let second = *variants.last().unwrap();
+    s.set_selection(vec![set]);
+    let mut u = crate::layers_drag_tests::Ui::new(s);
+    u.app.ui.right_tab = crate::RightTab::Design;
+    let shapes = flat(&u.frame_output(vec![]).shapes);
+    assert!(has_text(&shapes, "Properties") && has_text(&shapes, "Add variant"));
+    assert!(!has_text(&shapes, "Current variant"));
+    u.app.session.set_selection(vec![second]);
+    let shapes = flat(&u.frame_output(vec![]).shapes);
+    assert!(has_text(&shapes, "Current variant"));
+    assert!(!has_text(&shapes, "Add variant"), "a variant doesn't edit the set's definitions");
+    let name = u.app.session.doc().unwrap().node(second).unwrap().name.clone();
+    let mine = figcraft_engine::components::variant_props(&name);
+    let (prop, value) = mine.iter().next().map(|(k, v)| (k.clone(), v.clone())).unwrap();
+    let click = |u: &mut crate::layers_drag_tests::Ui, text: &str| {
+        let shapes = flat(&u.frame_output(vec![]).shapes);
+        let p = text_center(&shapes, text);
+        for pressed in [true, false] {
+            u.frame(vec![
+                Event::PointerMoved(p),
+                Event::PointerButton { pos: p, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE },
+            ]);
+        }
+        u.frame(vec![]);
+    };
+    // The dropdown shows this variant's value; the menu offers the other one.
+    click(&mut u, &value);
+    let first_name = u.app.session.doc().unwrap().node(variants[0]).unwrap().name.clone();
+    let other = figcraft_engine::components::variant_props(&first_name).get(&prop).cloned().unwrap();
+    let shapes = flat(&u.frame_output(vec![]).shapes);
+    assert!(has_text(&shapes, &other));
+    click(&mut u, &other);
+    let renamed = u.app.session.doc().unwrap().node(second).unwrap().name.clone();
+    assert_eq!(figcraft_engine::components::variant_props(&renamed).get(&prop), Some(&other));
+}

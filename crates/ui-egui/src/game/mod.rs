@@ -5,6 +5,7 @@ use figcraft_game::Game;
 pub mod animation;
 pub mod audio;
 pub mod brand;
+pub mod components;
 pub mod editor;
 pub(crate) mod input;
 pub mod menu;
