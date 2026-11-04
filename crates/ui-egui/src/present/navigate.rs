@@ -124,6 +124,10 @@ impl Presenter {
             root.strokes.clear();
             root.effects.clear();
         }
+        // Graybox: maps show their content moved and zoomed by the player.
+        if let Some(play) = &self.game {
+            crate::game::map::apply(&mut d, &play.maps);
+        }
         // Keep placement geometry before effects (including viewport fitting and scroll offsets).
         // The animated copy itself is never cached: its transforms must be sampled every frame.
         self.display = Some((self.rev, d.clone()));

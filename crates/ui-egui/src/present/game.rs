@@ -70,6 +70,7 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
         ctx.input(|i| game::menu::read_menu(i, &doc.game, held | pressed, pressed, [pad.axes[0], pad.axes[1]], &taken))
     });
     let menu_active = menu_input.is_some_and(|input| menu_step(&mut p, &input, now));
+    map_step(&mut p, &ctx, held, [pad.axes[0], pad.axes[1], pad.axes[3]]);
     settle(&mut p);
     // Graybox: a screen can show the game paused or no game behind it; then the mouse stays free.
     let behind = background(&p);
@@ -181,6 +182,38 @@ fn bar_widths(p: &Presenter) -> Vec<(NodeId, f64)> {
         if max > 0.0 && value.is_finite() { (value / max).clamp(0.0, 1.0) } else { 0.0 }
     };
     original.game.bars.iter().filter_map(|(id, name)| original.node(*id).map(|n| (*id, (n.width * share(name)).max(0.001)))).collect()
+}
+
+/// The map on the screen on top, if any, moves and zooms with the mouse and the controller while the
+/// mouse is free (the game isn't aiming).
+fn map_step(p: &mut Presenter, ctx: &Context, held: u32, axes: [f32; 3]) {
+    let Some(doc) = p.doc.as_ref() else { return };
+    let root = p.overlays.last().map_or(p.current, |o| o.id);
+    let Some((map, settings)) = game::map::active(doc, root) else { return };
+    if p.game.as_ref().is_none_or(|g| g.captured) {
+        return;
+    }
+    let scale = p.shown.as_ref().map_or(1.0, |s| s.1.scale).max(1e-6);
+    let bit = |name: &str| figcraft_doc::proto::GAMEPAD_BUTTONS.iter().position(|n| *n == name).is_some_and(|i| held & (1 << i) != 0);
+    let input = ctx.input(|i| {
+        let drag = if i.pointer.primary_down() { i.pointer.delta() } else { egui::Vec2::ZERO };
+        game::map::MapInput {
+            drag: [f64::from(drag.x) / scale, f64::from(drag.y) / scale],
+            wheel: f64::from(i.smooth_scroll_delta.y),
+            stick: [axes[0], axes[1]],
+            zoom_stick: axes[2],
+            zoom_in: bit("Gamepad RT"),
+            zoom_out: bit("Gamepad RB"),
+            dt: f64::from(i.stable_dt),
+        }
+    });
+    let Some(play) = p.game.as_mut() else { return };
+    let view = play.maps.entry(map).or_default();
+    let before = *view;
+    game::map::step(view, &settings, &input);
+    if *view != before {
+        p.rev += 1;
+    }
 }
 
 /// What the screen on top (an overlay, else the presented frame) shows behind it.
@@ -346,7 +379,6 @@ fn help(p: &Presenter, ui: &Ui, rect: Rect) {
 #[cfg(test)]
 #[path = "game_menu_tests.rs"]
 mod menu_tests;
-
 
 pub(super) use crate::game::menu::MenuInputs;
 

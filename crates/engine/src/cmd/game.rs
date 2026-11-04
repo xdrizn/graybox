@@ -33,6 +33,13 @@ pub fn specs() -> Vec<CommandSpec> {
             set_background
         ),
         spec!(
+            "game.map.set",
+            "Set map",
+            "{node (frame), enabled? (bool), zoomMin? (0.05..1), zoomMax? (1..20), zoomInput? (rightStick|shoulders)}  in Play the frame's content pans and zooms",
+            true,
+            set_map
+        ),
+        spec!(
             "game.bar.set",
             "Set game bar",
             "{node (layer), variable: vida|municao|reserva | null}  in Play the layer's width follows the value's share of its maximum",
@@ -595,6 +602,38 @@ fn set_bar(s: &mut Session, p: &Value) -> Result<Value> {
         }
     }
     settings.bars.retain(|id, _| doc.node(*id).is_some());
+    settings.validate().map_err(|e| bad(cmd, e))?;
+    s.doc_mut()?.game = settings;
+    ok()
+}
+
+fn set_map(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "game.map.set";
+    let node = crate::params::req_id(cmd, p, "node")?;
+    let doc = s.doc()?;
+    if !doc.node(node).is_some_and(|n| n.kind.is_frame_like()) {
+        return Err(bad(cmd, "Choose a frame"));
+    }
+    let mut settings = doc.game.clone();
+    let enabled = match p.get("enabled") {
+        None => settings.maps.contains_key(&node) || p.as_object().is_some_and(|o| o.len() > 1),
+        Some(v) => v.as_bool().ok_or_else(|| bad(cmd, "enabled must be true or false"))?,
+    };
+    if !enabled {
+        settings.maps.remove(&node);
+    } else {
+        let mut map = settings.maps.get(&node).copied().unwrap_or_default();
+        for (key, dest) in [("zoomMin", &mut map.zoom_min), ("zoomMax", &mut map.zoom_max)] {
+            if let Some(v) = p.get(key) {
+                *dest = v.as_f64().ok_or_else(|| bad(cmd, format!("{key} must be a number")))?;
+            }
+        }
+        if let Some(v) = p.get("zoomInput") {
+            map.zoom_input = serde_json::from_value(v.clone()).map_err(|_| bad(cmd, "zoomInput must be rightStick or shoulders"))?;
+        }
+        settings.maps.insert(node, map);
+    }
+    settings.maps.retain(|id, _| doc.node(*id).is_some());
     settings.validate().map_err(|e| bad(cmd, e))?;
     s.doc_mut()?.game = settings;
     ok()

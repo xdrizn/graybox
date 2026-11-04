@@ -38,6 +38,9 @@
   in the app (Pause list with ↓, Inventory grid with the D-pad). Spec and plan in `docs/game/specs/`.
 
 ## Decisions
+- Maps (owner, 2026-11-04): any frame can be a map (Prototype tab). In Play, while the mouse is
+  free, its content pans (mouse drag, left stick) and zooms (wheel; right stick or R2/R1 as chosen),
+  between the chosen limits. The view is Play state only.
 - Game behind a screen (owner, 2026-11-04): per top-level frame, Game running (default) / Game
   paused / No game, decided by the screen on top (overlay, else the frame). Paused and No game
   freeze the simulation and free the mouse. Game bars: a layer follows vida, municao or reserva as
@@ -93,6 +96,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   connections (`game::proto_targets::shows_connection`).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: `game::screen_ui::section` (game behind the screen,
   game bar) after the menu section.
+- `crates/ui-egui/src/present/navigate.rs` `display`: maps show their content moved and zoomed
+  (`game::map::apply`).
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one

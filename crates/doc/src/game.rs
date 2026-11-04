@@ -72,6 +72,33 @@ pub enum GameBackground {
     Hidden,
 }
 
+/// Which controller input zooms a map.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum MapZoomInput {
+    /// Right stick up zooms in, down zooms out.
+    #[default]
+    RightStick,
+    /// RT / R2 zooms in, RB / R1 zooms out.
+    Shoulders,
+}
+
+/// A frame whose content the player moves and zooms in Play (a map): drag and wheel with the
+/// mouse, left stick and the chosen zoom input on a controller.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct MapSettings {
+    pub zoom_min: f64,
+    pub zoom_max: f64,
+    pub zoom_input: MapZoomInput,
+}
+
+impl Default for MapSettings {
+    fn default() -> Self {
+        Self { zoom_min: 0.5, zoom_max: 4.0, zoom_input: MapZoomInput::RightStick }
+    }
+}
+
 /// Game values a "game bar" can follow (health, ammo in the magazine, reserve ammo).
 pub const BAR_VARIABLES: [&str; 3] = ["vida", "municao", "reserva"];
 pub const MAX_SCREEN_SETTINGS: usize = 4096;
@@ -91,6 +118,8 @@ pub struct GameSettings {
     /// Layer → the game variable whose share of its maximum sets the layer's width in Play
     /// (a health bar drawn at any size empties from 100 % to 0 %).
     pub bars: BTreeMap<NodeId, String>,
+    /// Frames whose content pans and zooms in Play.
+    pub maps: BTreeMap<NodeId, MapSettings>,
 }
 
 #[derive(Deserialize)]
@@ -106,6 +135,7 @@ struct StoredGameSettings {
     menu_bindings: BTreeMap<String, Vec<String>>,
     backgrounds: BTreeMap<NodeId, GameBackground>,
     bars: BTreeMap<NodeId, String>,
+    maps: BTreeMap<NodeId, MapSettings>,
 }
 
 impl Default for StoredGameSettings {
@@ -120,6 +150,7 @@ impl Default for StoredGameSettings {
             menu_bindings: settings.menu_bindings,
             backgrounds: settings.backgrounds,
             bars: settings.bars,
+            maps: settings.maps,
         }
     }
 }
@@ -137,6 +168,7 @@ impl TryFrom<StoredGameSettings> for GameSettings {
             menu_bindings: stored.menu_bindings,
             backgrounds: stored.backgrounds,
             bars: stored.bars,
+            maps: stored.maps,
         };
         settings.validate()?;
         Ok(settings)
@@ -169,6 +201,7 @@ impl Default for GameSettings {
             menu_bindings: default_menu_bindings(),
             backgrounds: BTreeMap::new(),
             bars: BTreeMap::new(),
+            maps: BTreeMap::new(),
         }
     }
 }
@@ -222,6 +255,20 @@ impl GameSettings {
         }
         if self.backgrounds.len() > MAX_SCREEN_SETTINGS || self.bars.len() > MAX_SCREEN_SETTINGS {
             return Err(format!("Use at most {MAX_SCREEN_SETTINGS} game backgrounds and game bars"));
+        }
+        if self.maps.len() > MAX_SCREEN_SETTINGS {
+            return Err(format!("Use at most {MAX_SCREEN_SETTINGS} maps"));
+        }
+        for map in self.maps.values() {
+            if !(map.zoom_min.is_finite()
+                && map.zoom_max.is_finite()
+                && 0.05 <= map.zoom_min
+                && map.zoom_min <= 1.0
+                && 1.0 <= map.zoom_max
+                && map.zoom_max <= 20.0)
+            {
+                return Err("Map zoom: minimum 0.05 to 1, maximum 1 to 20".into());
+            }
         }
         if self.bars.values().any(|v| !BAR_VARIABLES.contains(&v.as_str())) {
             return Err("A game bar follows vida, municao or reserva".into());

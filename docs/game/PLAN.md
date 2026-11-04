@@ -101,6 +101,18 @@ Death are only *examples* in the starter kit, never required.
 ### G7 — Share
 - [ ] Share a prototype as a link (web build + upstream server) that opens straight in Play mode.
 
+### G8 — Figma-like editing and screen tools (owner's list, 2026-11-04)
+- [x] Rename fields edit on the same line as the name (file, frame titles).
+- [x] Component panel like Figma: compact Properties for a set, Current variant for a variant.
+- [x] Prototype connections between variants of a set (Change to) from the canvas.
+- [x] Only the selected screen's connections on the canvas.
+- [x] Game behind each screen: running / paused / none.
+- [x] Game bars: a layer's width follows health or ammo as a percentage of its drawn size.
+- [x] Maps: pan and zoom with mouse and controller.
+- [ ] Same UI font on every PC: embed Space Grotesk and JetBrains Mono (OFL) through a fonts
+  directory beside the repo (waits for the owner's go-ahead to download them).
+- [ ] "Selecting one selects all": not reproduced yet; needs a capture from the owner.
+
 ## Later
 Third-person preset, 2D platformer and top-down presets, safe-area guides and resolution presets,
 export package for engines (assets + spec sheet, 9-slice), Godot scene export, Unity plugin,

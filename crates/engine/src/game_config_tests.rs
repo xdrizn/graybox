@@ -368,3 +368,25 @@ fn game_background_and_bars_are_saved_validated_and_undoable() {
     ex(&mut s, "edit.undo", json!({}));
     assert_eq!(s.doc().unwrap().game.bars[&bar], "vida");
 }
+
+#[test]
+fn maps_are_saved_validated_and_undoable() {
+    let mut s = Session::new();
+    let map = id_of(&ex(&mut s, "frame.create", json!({"width": 600, "height": 400}))["id"]).unwrap();
+    ex(&mut s, "game.map.set", json!({"node": map, "enabled": true}));
+    assert_eq!(s.doc().unwrap().game.maps[&map], figcraft_doc::game::MapSettings::default());
+    ex(&mut s, "game.map.set", json!({"node": map, "zoomMax": 8, "zoomInput": "shoulders"}));
+    let game = s.doc().unwrap().game.clone();
+    assert_eq!(game.maps[&map].zoom_max, 8.0);
+    assert_eq!(game.maps[&map].zoom_input, figcraft_doc::game::MapZoomInput::Shoulders);
+    for params in [json!({"node": map, "zoomMax": 0.5}), json!({"node": map, "zoomMin": f64::NAN}), json!({"node": map, "zoomInput": "dpad"})] {
+        assert!(s.execute("game.map.set", &params).is_err(), "{params}");
+        assert_eq!(s.doc().unwrap().game, game);
+    }
+    let bytes = figcraft_format::save_bytes(s.doc().unwrap(), None).unwrap();
+    assert_eq!(figcraft_format::load_bytes(&bytes).unwrap().0.game, game);
+    ex(&mut s, "game.map.set", json!({"node": map, "enabled": false}));
+    assert!(s.doc().unwrap().game.maps.is_empty());
+    ex(&mut s, "edit.undo", json!({}));
+    assert!(s.doc().unwrap().game.maps.contains_key(&map));
+}

@@ -8,6 +8,7 @@ pub mod brand;
 pub mod components;
 pub mod editor;
 pub(crate) mod input;
+pub mod map;
 pub mod menu;
 pub mod proto_targets;
 pub mod renderer;
@@ -44,6 +45,8 @@ pub struct Play {
     pub(crate) volume: f32,
     /// Focus in the navigable menu the open screen owns.
     pub(crate) menu: menu::Focus,
+    /// How far each map is moved and zoomed (Play only).
+    pub(crate) maps: std::collections::BTreeMap<figcraft_doc::NodeId, map::View>,
 }
 
 /// A game action from a prototype interaction.
