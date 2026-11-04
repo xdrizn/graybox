@@ -132,13 +132,17 @@ fn variant_shows_and_changes_only_its_own_value() {
         }
         u.frame(vec![]);
     };
-    // The dropdown shows this variant's value; the menu offers the other one.
+    // The field shows this variant's value; typing renames it, for this variant only.
     click(&mut u, &value);
-    let first_name = u.app.session.doc().unwrap().node(variants[0]).unwrap().name.clone();
-    let other = figcraft_engine::components::variant_props(&first_name).get(&prop).cloned().unwrap();
-    let shapes = flat(&u.frame_output(vec![]).shapes);
-    assert!(has_text(&shapes, &other));
-    click(&mut u, &other);
+    u.frame(vec![Event::Text("Hover".into())]);
+    u.frame(vec![Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }]);
+    u.frame(vec![]);
     let renamed = u.app.session.doc().unwrap().node(second).unwrap().name.clone();
-    assert_eq!(figcraft_engine::components::variant_props(&renamed).get(&prop), Some(&other));
+    assert_eq!(figcraft_engine::components::variant_props(&renamed).get(&prop).map(String::as_str), Some("Hover"));
+    let first_name = u.app.session.doc().unwrap().node(variants[0]).unwrap().name.clone();
+    assert_ne!(
+        figcraft_engine::components::variant_props(&first_name).get(&prop).map(String::as_str),
+        Some("Hover"),
+        "the other variant keeps its value"
+    );
 }

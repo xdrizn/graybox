@@ -245,16 +245,26 @@ fn current_variant(app: &mut FigApp, ui: &mut Ui, doc: &Document, set: NodeId, v
             let (lr, _) = ui.allocate_exact_size(vec2(label_w, widgets::FIELD_H), Sense::hover());
             let shown = widgets::elide_font(ui, k, label_w - 4.0, regular(11.0));
             ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, shown, regular(11.0), t.text_secondary);
-            let w = (ui.available_width() - widgets::PAD_RIGHT).max(60.0);
-            let resp = widgets::dropdown(ui, &current, w, None);
+            let order: Vec<String> = options.iter().map(|(k, _)| k.clone()).collect();
+            let set_value = |app: &mut FigApp, value: &str| {
+                let mut pairs = mine.clone();
+                pairs.insert(k.clone(), value.to_string());
+                app.run("node.set", json!({"id": variant, "props": {"name": variant_name(&pairs, &order)}}));
+            };
+            // Type a new name for this variant's value, or pick one the set already has.
+            let w = (ui.available_width() - widgets::PAD_RIGHT - 28.0).max(48.0);
+            if let Some(typed) = widgets::text_field(ui, Id::unique(("gb_variant_value", variant, k.as_str())), &current, w, "Value")
+                && !typed.trim().is_empty()
+                && typed.trim() != current
+            {
+                set_value(app, typed.trim());
+            }
+            let resp = widgets::dropdown(ui, "", 24.0, None).on_hover_text("Pick a value the set has");
             crate::a11y::combo(&resp, k, &current, crate::a11y::menu_open(&resp));
-            menu_popup(&resp).show(|ui| {
+            menu_popup(&resp).width(160.0).show(|ui| {
                 for v in vals {
                     if menu_item(ui, v, "") && *v != current {
-                        let mut pairs = mine.clone();
-                        pairs.insert(k.clone(), v.clone());
-                        let order: Vec<String> = options.iter().map(|(k, _)| k.clone()).collect();
-                        app.run("node.set", json!({"id": variant, "props": {"name": variant_name(&pairs, &order)}}));
+                        set_value(app, v);
                         ui.close();
                     }
                 }
@@ -264,7 +274,7 @@ fn current_variant(app: &mut FigApp, ui: &mut Ui, doc: &Document, set: NodeId, v
     if !variant_conflicts(doc, set).is_empty() {
         widgets::note(ui, "Another variant already has these values", t.warning);
     }
-    widgets::note(ui, "Select the component set to edit its properties.", t.text_tertiary);
+    widgets::note(ui, "Type to rename this variant's value. Select the component set to add or remove properties.", t.text_tertiary);
 }
 
 fn type_icon(d: &PropDef) -> Icon {
