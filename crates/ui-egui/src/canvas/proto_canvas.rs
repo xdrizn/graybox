@@ -200,8 +200,10 @@ pub fn draw(app: &FigApp, painter: &egui::Painter) {
     }
     match dragging {
         Some(d) => {
-            if let Some(f) = frame_at(app, doc, page, d.pos)
-                && doc.top_level_frame(d.source) != Some(f)
+            // Graybox: a variant connects to another variant of its set (Change to).
+            let target = crate::game::proto_targets::variant_at(doc, d.source, app.to_page(d.pos))
+                .or_else(|| frame_at(app, doc, page, d.pos).filter(|f| doc.top_level_frame(d.source) != Some(*f)));
+            if let Some(f) = target
                 && let Some(r) = screen_rect(app, doc, f)
             {
                 painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(2.0, crate::theme::canvas_accent(painter.ctx())), StrokeKind::Outside);
@@ -259,9 +261,15 @@ pub fn input(app: &mut FigApp, ui: &egui::Ui, resp: &egui::Response) -> bool {
         ctx.request_repaint();
         if released || !down {
             ctx.data_mut(|m| m.remove::<Drag>(drag_id()));
-            if let Some(dest) = frame_at(app, &doc, page, d.pos)
-                && doc.top_level_frame(d.source) != Some(dest)
-                && let Some(r) = app.run("proto.interaction.add", json!({"ids": [d.source], "dest": dest}))
+            // Graybox: dropped on another variant of its set, the connection is a Change to.
+            let params = match crate::game::proto_targets::variant_at(&doc, d.source, app.to_page(d.pos)) {
+                Some(v) => Some(json!({"ids": [d.source], "action": {"type": "changeTo", "dest": v}})),
+                None => frame_at(app, &doc, page, d.pos)
+                    .filter(|dest| doc.top_level_frame(d.source) != Some(*dest))
+                    .map(|dest| json!({"ids": [d.source], "dest": dest})),
+            };
+            if let Some(params) = params
+                && let Some(r) = app.run("proto.interaction.add", params)
             {
                 let k = r.get("index").and_then(Value::as_u64).unwrap_or(0) as usize;
                 crate::proto_panel::open_editor(&ctx, Some((d.source, k)));

@@ -9,6 +9,7 @@ pub mod components;
 pub mod editor;
 pub(crate) mod input;
 pub mod menu;
+pub mod proto_targets;
 pub mod renderer;
 pub mod share;
 

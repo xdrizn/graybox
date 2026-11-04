@@ -82,6 +82,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - `crates/engine/src/proto_run.rs` `play_interactions`: calls `cmd::game::aim_animations_at_instances`.
 - `crates/ui-egui/src/panels/component_panel.rs` `instance_section`: a set or main component goes to
   `game::components::section` (compact Properties / Current variant) before upstream's matrix.
+- `crates/ui-egui/src/canvas/proto_canvas.rs` `draw` / `input`: a connection dropped on another variant
+  of the source's set becomes Change to (`game::proto_targets::variant_at`).
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one
