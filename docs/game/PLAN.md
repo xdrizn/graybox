@@ -109,8 +109,8 @@ Death are only *examples* in the starter kit, never required.
 - [x] Game behind each screen: running / paused / none.
 - [x] Game bars: a layer's width follows health or ammo as a percentage of its drawn size.
 - [x] Maps: pan and zoom with mouse and controller.
-- [ ] Same UI font on every PC: embed Space Grotesk and JetBrains Mono (OFL) through a fonts
-  directory beside the repo (waits for the owner's go-ahead to download them).
+- [x] Same UI font on every PC: Space Grotesk and JetBrains Mono (OFL) embedded from the
+  craft-fonts checkout beside the repo; setup in [`FONTS.md`](FONTS.md).
 - [ ] "Selecting one selects all": not reproduced yet; needs a capture from the owner.
 
 ## Later

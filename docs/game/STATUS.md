@@ -108,6 +108,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   prefs, proto model…) without listing them here; to list.
 
 ## Known issues (not ours)
+- This machine now builds with `../craft-fonts` (plus the Graybox faces, see FONTS.md); the same three
+  engine tests still fail (board tables row growth, .fig font names, example .fig export).
 - Fail on this Windows machine before the G4 rework too: `fig_export_assets_tests::every_example_keeps_its_variables_and_styles`
   (.fig export drops the starter kit's number→text binding) and `fig_font_names_tests`
   (depends on installed fonts). `cargo fmt --check` flags `apps/figcraft-web/src/game_input.rs`
