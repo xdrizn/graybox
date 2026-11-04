@@ -36,6 +36,9 @@ pub fn paint_name(painter: &Painter, left_center: Pos2, name: &str, font: FontId
 pub fn single_line(ui: &mut Ui, id: Id, text: &mut String, font: FontId, width: f32) -> Response {
     // Centred in the height it's given (a rename row), like the name it replaces.
     let height = ui.available_height().max(0.0);
+    // Graybox: the theme's 24 px minimum control height made a shorter rename row grow downwards,
+    // so the edited text sat 2 px below the name it replaces.
+    ui.spacing_mut().interact_size.y = height;
     egui::TextEdit::singleline(text)
         .id(id)
         .frame(egui::Frame::NONE)

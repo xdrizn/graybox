@@ -75,6 +75,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - `crates/ui-egui/src/app/commands.rs` `game.settings`: selects nothing and shows the Prototype tab.
 - `crates/ui-egui/src/present/chrome.rs` `finish`: sounds scaled by `Play::volume`.
 - `crates/engine/src/proto_run.rs` `play_interactions`: calls `cmd::game::aim_animations_at_instances`.
+- `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
+  on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one
   selected layer (after Scroll behavior).
 - `crates/ui-egui/src/present/player.rs` `player`: calls `game::menu_overlay` right after `draw`.
