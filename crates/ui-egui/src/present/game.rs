@@ -71,6 +71,7 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
     });
     let menu_active = menu_input.is_some_and(|input| menu_step(&mut p, &input, now));
     map_step(&mut p, &ctx, held, [pad.axes[0], pad.axes[1], pad.axes[3]]);
+    named_inputs(&mut p, &ctx, pressed, now);
     settle(&mut p);
     // Graybox: a screen can show the game paused or no game behind it; then the mouse stays free.
     let behind = background(&p);
@@ -182,6 +183,31 @@ fn bar_widths(p: &Presenter) -> Vec<(NodeId, f64)> {
         if max > 0.0 && value.is_finite() { (value / max).clamp(0.0, 1.0) } else { 0.0 }
     };
     original.game.bars.iter().filter_map(|(id, name)| original.node(*id).map(|n| (*id, (n.width * share(name)).max(0.001)))).collect()
+}
+
+/// The designer's named inputs (T for a watch, E to pick up): a press fires the game event of that
+/// name on the screen on top only, so the same key can open a screen and, on it, close it.
+fn named_inputs(p: &mut Presenter, ctx: &Context, pads: u32, now: f64) {
+    let Some(doc) = p.doc.as_ref() else { return };
+    let fired: Vec<String> = ctx.input(|i| {
+        doc.game.inputs.iter().filter(|(_, keys)| keys.iter().any(|k| game::input::binding(i, k, pads, true))).map(|(name, _)| name.clone()).collect()
+    });
+    if fired.is_empty() {
+        return;
+    }
+    let top = p.overlays.last().map_or(p.current, |o| o.id);
+    let mut hits = Vec::new();
+    for id in doc.subtree(top) {
+        let Some(node) = doc.node(id) else { continue };
+        for (k, it) in node.interactions.iter().enumerate() {
+            if matches!(&it.trigger, Trigger::GameEvent { event } if fired.contains(event)) {
+                hits.push((id, k));
+            }
+        }
+    }
+    for (id, k) in hits {
+        p.fire(id, k, None, now);
+    }
 }
 
 /// The map on the screen on top, if any, moves and zooms with the mouse and the controller while the
@@ -509,5 +535,48 @@ mod screen_tests {
         assert_eq!(background(&p), GameBackground::Hidden, "the overlay on top has No game");
         p.close_overlay(0.1);
         assert_eq!(background(&p), GameBackground::Running);
+    }
+
+    #[test]
+    fn a_named_input_opens_a_screen_and_on_it_closes_it() {
+        use figcraft_doc::proto::{Action, Easing, Interaction, OverlayAnchor, OverlayPosition, Transition};
+        let mut doc = figcraft_doc::Document::new("Watch");
+        let page = doc.first_page().unwrap();
+        let hud = doc.create(page, figcraft_doc::NodeKind::Frame, "HUD", 0.0, 0.0, 1280.0, 720.0).unwrap();
+        let watch = doc.create(page, figcraft_doc::NodeKind::Frame, "Watch", 1400.0, 0.0, 400.0, 400.0).unwrap();
+        doc.game.inputs.insert("relogio".into(), vec!["T".into()]);
+        let on = |actions: Vec<Action>| Interaction {
+            trigger: Trigger::GameEvent { event: "relogio".into() },
+            actions,
+            transition: Transition::Instant,
+            duration_ms: 0,
+            easing: Easing::Linear,
+            delay_ms: 0,
+        };
+        let open = Action::OpenOverlay {
+            dest: watch,
+            position: OverlayPosition::Center,
+            close_on_outside: true,
+            background: None,
+            offset: None,
+            anchor: OverlayAnchor::Screen,
+        };
+        doc.node_mut(hud).unwrap().interactions.push(on(vec![open]));
+        doc.node_mut(watch).unwrap().interactions.push(on(vec![Action::CloseOverlay]));
+        let mut p = Presenter::new(hud);
+        p.game = Some(crate::game::Play::new());
+        p.sync(&Arc::new(doc), 0.0);
+        let ctx = egui::Context::default();
+        let mut press = |p: &mut Presenter, key: egui::Key| {
+            let events = vec![egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }];
+            let mut out = ctx.run_ui(egui::RawInput { events, ..Default::default() }, |ui| named_inputs(p, ui.ctx(), 0, 0.0));
+            out.textures_delta.clear();
+        };
+        press(&mut p, egui::Key::Y);
+        assert!(p.overlays.is_empty(), "other keys do nothing");
+        press(&mut p, egui::Key::T);
+        assert_eq!(p.overlays.iter().map(|o| o.id).collect::<Vec<_>>(), [watch], "T opens the watch");
+        press(&mut p, egui::Key::T);
+        assert!(p.overlays.is_empty(), "on the watch, T closes it (only the screen on top reacts)");
     }
 }

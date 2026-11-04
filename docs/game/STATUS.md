@@ -38,6 +38,10 @@
   in the app (Pause list with ↓, Inventory grid with the D-pad). Spec and plan in `docs/game/specs/`.
 
 ## Decisions
+- Named inputs (owner, 2026-11-04): the designer names keys/buttons (Prototype, nothing selected →
+  Game inputs); a press fires the Game event of that name on the screen on top only, so one key
+  can open a screen and close it from that screen. Every file starts with `pegar-item` on E /
+  D-pad right. Keys can't clash with gameplay actions or other inputs.
 - Maps (owner, 2026-11-04): any frame can be a map (Prototype tab). In Play, while the mouse is
   free, its content pans (mouse drag, left stick) and zooms (wheel; right stick or R2/R1 as chosen),
   between the chosen limits. The view is Play state only.

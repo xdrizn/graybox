@@ -58,6 +58,42 @@ pub fn controls(app: &mut FigApp, ui: &mut Ui) {
     });
 }
 
+/// The designer's named inputs: a name and its keys and buttons. In Play a press fires the "Game
+/// event" of that name on the screen on top (T opens a watch screen, E shows a pick-up).
+pub fn inputs(app: &mut FigApp, ui: &mut Ui) {
+    let Ok(ds) = app.session.ds() else { return };
+    let doc = ds.doc.clone();
+    let uid = ds.uid;
+    let tokens = Tokens::get(ui.ctx());
+    ui.push_id(("game_inputs", uid), |ui| {
+        widgets::label(
+            ui,
+            "Your own keys: pressing one in Play fires a Game event with its name. Use it as the trigger of any interaction.",
+            tokens.text_secondary,
+        );
+        for (name, keys) in &doc.game.inputs {
+            ui.horizontal(|ui| {
+                let w = (ui.available_width() - 30.0).max(60.0);
+                if let Some(new) = widgets::text_field_named(ui, Id::unique(("game_input_name", uid, name.as_str())), name, w, "Input name") {
+                    app.run("game.input.set", json!({"name": name, "newName": new.trim()}));
+                }
+                if crate::icons::button(ui, crate::icons::Icon::Minus, 22.0, false, "Remove input").clicked() {
+                    app.run("game.input.set", json!({"name": name, "keys": null}));
+                }
+            });
+            if let Some(value) =
+                widgets::text_field_named(ui, Id::unique(("game_input_keys", uid, name.as_str())), &keys.join(", "), ui.available_width(), "Keys")
+            {
+                app.run("game.input.set", json!({"name": name, "keys": split_keys(&value)}));
+            }
+        }
+        if widgets::button(ui, "Add input", false, true).clicked() {
+            let fresh = (1..).map(|n| format!("input-{n}")).find(|n| !doc.game.inputs.contains_key(n)).unwrap_or_default();
+            app.run("game.input.set", json!({"name": fresh, "keys": []}));
+        }
+    });
+}
+
 /// Game event names as the Game event trigger lists them.
 pub fn events(app: &mut FigApp, ui: &mut Ui) {
     let Ok(ds) = app.session.ds() else { return };

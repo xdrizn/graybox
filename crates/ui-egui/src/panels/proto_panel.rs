@@ -805,7 +805,12 @@ fn trigger_rows(app: &mut FigApp, ui: &mut Ui, node: NodeId, k: usize, it: &Inte
                 .doc()
                 .ok()
                 .map(|d| {
-                    figcraft_doc::game::EVENT_NAMES.iter().map(|key| ((*key).to_string(), d.game.event_name(key).to_string())).collect::<Vec<_>>()
+                    // Graybox: the designer's named inputs too ("Input: relogio (T)").
+                    figcraft_doc::game::EVENT_NAMES
+                        .iter()
+                        .map(|key| ((*key).to_string(), d.game.event_name(key).to_string()))
+                        .chain(d.game.inputs.iter().map(|(name, keys)| (name.clone(), format!("Input: {name} ({})", keys.join(", ")))))
+                        .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
             widgets::sublabels(ui, tr("Game event"), None);

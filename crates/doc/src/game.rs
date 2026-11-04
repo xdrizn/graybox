@@ -120,6 +120,9 @@ pub struct GameSettings {
     pub bars: BTreeMap<NodeId, String>,
     /// Frames whose content pans and zooms in Play.
     pub maps: BTreeMap<NodeId, MapSettings>,
+    /// The designer's own named inputs (name → keys and buttons). Pressing one fires a game event
+    /// of that name, for "Game event" triggers on the screen on top (T opens a watch, E picks up).
+    pub inputs: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -136,6 +139,7 @@ struct StoredGameSettings {
     backgrounds: BTreeMap<NodeId, GameBackground>,
     bars: BTreeMap<NodeId, String>,
     maps: BTreeMap<NodeId, MapSettings>,
+    inputs: BTreeMap<String, Vec<String>>,
 }
 
 impl Default for StoredGameSettings {
@@ -151,6 +155,7 @@ impl Default for StoredGameSettings {
             backgrounds: settings.backgrounds,
             bars: settings.bars,
             maps: settings.maps,
+            inputs: settings.inputs,
         }
     }
 }
@@ -169,6 +174,7 @@ impl TryFrom<StoredGameSettings> for GameSettings {
             backgrounds: stored.backgrounds,
             bars: stored.bars,
             maps: stored.maps,
+            inputs: stored.inputs,
         };
         settings.validate()?;
         Ok(settings)
@@ -202,6 +208,7 @@ impl Default for GameSettings {
             backgrounds: BTreeMap::new(),
             bars: BTreeMap::new(),
             maps: BTreeMap::new(),
+            inputs: default_inputs(),
         }
     }
 }
@@ -256,6 +263,7 @@ impl GameSettings {
         if self.backgrounds.len() > MAX_SCREEN_SETTINGS || self.bars.len() > MAX_SCREEN_SETTINGS {
             return Err(format!("Use at most {MAX_SCREEN_SETTINGS} game backgrounds and game bars"));
         }
+        validate_inputs(&self.inputs, &self.bindings)?;
         if self.maps.len() > MAX_SCREEN_SETTINGS {
             return Err(format!("Use at most {MAX_SCREEN_SETTINGS} maps"));
         }
@@ -380,3 +388,40 @@ pub fn validate_keys(keys: &[String]) -> Result<(), String> {
 #[cfg(test)]
 #[path = "game_menu_tests.rs"]
 mod menu_tests;
+
+pub const MAX_INPUTS: usize = 32;
+
+/// Named inputs every file starts with.
+pub fn default_inputs() -> BTreeMap<String, Vec<String>> {
+    BTreeMap::from([("pegar-item".to_string(), vec!["E".to_string(), "Gamepad Right".to_string()])])
+}
+
+/// A name for an input: like an event alias, and not one of the game's own events.
+pub fn valid_input_name(name: &str) -> bool {
+    valid_alias(name) && name.chars().count() <= 40 && !EVENT_NAMES.contains(&name)
+}
+
+/// Named inputs: valid names and keys, no key on two inputs or on a gameplay action.
+pub fn validate_inputs(inputs: &BTreeMap<String, Vec<String>>, bindings: &BTreeMap<String, Vec<String>>) -> Result<(), String> {
+    if inputs.len() > MAX_INPUTS {
+        return Err(format!("Use at most {MAX_INPUTS} inputs"));
+    }
+    let mut used: BTreeMap<&str, &str> = BTreeMap::new();
+    for (action, keys) in bindings {
+        for key in keys {
+            used.insert(key.as_str(), action.as_str());
+        }
+    }
+    for (name, keys) in inputs {
+        if !valid_input_name(name) {
+            return Err(format!("`{}` can't name an input: 1 to 40 characters, not a game event", name.chars().take(40).collect::<String>()));
+        }
+        validate_keys(keys)?;
+        for key in keys {
+            if let Some(other) = used.insert(key.as_str(), name.as_str()) {
+                return Err(format!("`{key}` is already used by {other}"));
+            }
+        }
+    }
+    Ok(())
+}

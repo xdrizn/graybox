@@ -33,6 +33,13 @@ pub fn specs() -> Vec<CommandSpec> {
             set_background
         ),
         spec!(
+            "game.input.set",
+            "Set game input",
+            "{name, keys? ([input names]; null removes the input), newName?}  a named input; pressing it in Play fires the game event of that name",
+            true,
+            set_input
+        ),
+        spec!(
             "game.map.set",
             "Set map",
             "{node (frame), enabled? (bool), zoomMin? (0.05..1), zoomMax? (1..20), zoomInput? (rightStick|shoulders)}  in Play the frame's content pans and zooms",
@@ -634,6 +641,43 @@ fn set_map(s: &mut Session, p: &Value) -> Result<Value> {
         settings.maps.insert(node, map);
     }
     settings.maps.retain(|id, _| doc.node(*id).is_some());
+    settings.validate().map_err(|e| bad(cmd, e))?;
+    s.doc_mut()?.game = settings;
+    ok()
+}
+
+fn set_input(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "game.input.set";
+    let name = req_string(cmd, p, "name")?;
+    let mut settings = s.doc()?.game.clone();
+    match p.get("keys") {
+        Some(Value::Null) => {
+            settings.inputs.remove(&name);
+        }
+        Some(v) => {
+            let keys = v
+                .as_array()
+                .ok_or_else(|| bad(cmd, "keys must be a list of input names"))?
+                .iter()
+                .map(|k| k.as_str().map(str::to_string).ok_or_else(|| bad(cmd, "keys must be text")))
+                .collect::<Result<Vec<_>>>()?;
+            settings.inputs.insert(name.clone(), keys);
+        }
+        None if !settings.inputs.contains_key(&name) => {
+            settings.inputs.insert(name.clone(), Vec::new());
+        }
+        None => {}
+    }
+    if let Some(new) = p.get("newName") {
+        let new = new.as_str().ok_or_else(|| bad(cmd, "newName must be text"))?.to_string();
+        if new != name {
+            if settings.inputs.contains_key(&new) {
+                return Err(bad(cmd, format!("An input is already called `{new}`")));
+            }
+            let keys = settings.inputs.remove(&name).ok_or_else(|| bad(cmd, format!("No input called `{name}`")))?;
+            settings.inputs.insert(new, keys);
+        }
+    }
     settings.validate().map_err(|e| bad(cmd, e))?;
     s.doc_mut()?.game = settings;
     ok()

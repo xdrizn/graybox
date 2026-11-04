@@ -390,3 +390,32 @@ fn maps_are_saved_validated_and_undoable() {
     ex(&mut s, "edit.undo", json!({}));
     assert!(s.doc().unwrap().game.maps.contains_key(&map));
 }
+
+#[test]
+fn named_inputs_start_with_pick_up_and_refuse_clashing_keys() {
+    let mut s = Session::new();
+    assert_eq!(s.doc().unwrap().game.inputs["pegar-item"][0], "E", "E picks up items out of the box");
+    ex(&mut s, "game.input.set", json!({"name": "relogio", "keys": ["T", "Gamepad LB"]}));
+    let game = s.doc().unwrap().game.clone();
+    assert_eq!(game.inputs["relogio"], ["T", "Gamepad LB"]);
+    for params in [
+        json!({"name": "relogio", "keys": ["W"]}),
+        json!({"name": "relogio", "keys": ["E"]}),
+        json!({"name": "tomou-dano", "keys": ["K"]}),
+        json!({"name": "", "keys": ["K"]}),
+        json!({"name": "relogio", "keys": ["NotAKey"]}),
+        json!({"name": "relogio", "newName": "pegar-item"}),
+    ] {
+        assert!(s.execute("game.input.set", &params).is_err(), "{params}");
+        assert_eq!(s.doc().unwrap().game, game);
+    }
+    assert!(s.execute("game.bind", &json!({"action": "jump", "keys": ["T"]})).is_err(), "a gameplay action can't take an input's key");
+    ex(&mut s, "game.input.set", json!({"name": "relogio", "newName": "watch"}));
+    assert!(s.doc().unwrap().game.inputs.contains_key("watch"));
+    let bytes = figcraft_format::save_bytes(s.doc().unwrap(), None).unwrap();
+    assert_eq!(figcraft_format::load_bytes(&bytes).unwrap().0.game, s.doc().unwrap().game);
+    ex(&mut s, "game.input.set", json!({"name": "watch", "keys": null}));
+    assert!(!s.doc().unwrap().game.inputs.contains_key("watch"));
+    ex(&mut s, "edit.undo", json!({}));
+    assert!(s.doc().unwrap().game.inputs.contains_key("watch"));
+}
