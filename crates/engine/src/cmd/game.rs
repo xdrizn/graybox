@@ -25,6 +25,20 @@ pub fn specs() -> Vec<CommandSpec> {
             menu_set
         ),
         spec!("game.event.rename", "Rename game event", "{event (canonical name), name (event alias)}", true, rename_event),
+        spec!(
+            "game.background.set",
+            "Set game behind screen",
+            "{node (top-level frame), background: running|paused|hidden}  what Play shows behind the screen while it is on top",
+            true,
+            set_background
+        ),
+        spec!(
+            "game.bar.set",
+            "Set game bar",
+            "{node (layer), variable: vida|municao|reserva | null}  in Play the layer's width follows the value's share of its maximum",
+            true,
+            set_bar
+        ),
         spec!("game.settings", "Game settings", "{}", false, |s, _| {
             s.doc()?;
             s.request_ui("game.settings", json!({}));
@@ -536,4 +550,52 @@ pub fn aim_animations_at_instances(doc: &mut Document) {
             }
         }
     }
+}
+
+fn set_background(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "game.background.set";
+    let node = crate::params::req_id(cmd, p, "node")?;
+    let doc = s.doc()?;
+    if doc.top_level_frame(node) != Some(node) {
+        return Err(bad(cmd, "Choose a screen: a top-level frame"));
+    }
+    let background: figcraft_doc::game::GameBackground = serde_json::from_value(p.get("background").cloned().unwrap_or(Value::Null))
+        .map_err(|_| bad(cmd, "background must be running, paused or hidden"))?;
+    let mut settings = doc.game.clone();
+    if background == figcraft_doc::game::GameBackground::Running {
+        settings.backgrounds.remove(&node);
+    } else {
+        settings.backgrounds.insert(node, background);
+    }
+    // Screens that were deleted drop out.
+    settings.backgrounds.retain(|id, _| doc.node(*id).is_some());
+    settings.validate().map_err(|e| bad(cmd, e))?;
+    s.doc_mut()?.game = settings;
+    ok()
+}
+
+fn set_bar(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "game.bar.set";
+    let node = crate::params::req_id(cmd, p, "node")?;
+    let doc = s.doc()?;
+    if doc.node(node).is_none_or(|n| n.is_page()) {
+        return Err(bad(cmd, "No such layer"));
+    }
+    let mut settings = doc.game.clone();
+    match p.get("variable") {
+        None | Some(Value::Null) => {
+            settings.bars.remove(&node);
+        }
+        Some(v) => {
+            let name = v
+                .as_str()
+                .filter(|n| figcraft_doc::game::BAR_VARIABLES.contains(n))
+                .ok_or_else(|| bad(cmd, "variable must be vida, municao or reserva"))?;
+            settings.bars.insert(node, name.to_string());
+        }
+    }
+    settings.bars.retain(|id, _| doc.node(*id).is_some());
+    settings.validate().map_err(|e| bad(cmd, e))?;
+    s.doc_mut()?.game = settings;
+    ok()
 }

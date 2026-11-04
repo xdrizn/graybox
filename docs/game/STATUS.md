@@ -38,6 +38,11 @@
   in the app (Pause list with ↓, Inventory grid with the D-pad). Spec and plan in `docs/game/specs/`.
 
 ## Decisions
+- Game behind a screen (owner, 2026-11-04): per top-level frame, Game running (default) / Game
+  paused / No game, decided by the screen on top (overlay, else the frame). Paused and No game
+  freeze the simulation and free the mouse. Game bars: a layer follows vida, municao or reserva as
+  a share of its maximum (health max, magazine, starting reserve) and keeps its drawn width as
+  the full mark; the binding of a variable to W stays as upstream has it.
 - Component panel like Figma (owner, 2026-11-04): a set lists each property on one compact row
   that opens its editor; a variant shows only "Current variant" (its own values, changing one
   renames the variant). Not yet in the compact panel: drag to reorder properties, instance-swap
@@ -86,6 +91,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   of the source's set becomes Change to (`game::proto_targets::variant_at`).
 - `crates/ui-egui/src/canvas/proto_canvas.rs` `noodles`: with a selection, only the selected screens'
   connections (`game::proto_targets::shows_connection`).
+- `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: `game::screen_ui::section` (game behind the screen,
+  game bar) after the menu section.
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one

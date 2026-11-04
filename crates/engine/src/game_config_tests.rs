@@ -341,3 +341,30 @@ fn starter_kit_menus_are_auto_layout_with_state_variants() {
         }
     }
 }
+
+#[test]
+fn game_background_and_bars_are_saved_validated_and_undoable() {
+    let mut s = Session::new();
+    let screen = id_of(&ex(&mut s, "frame.create", json!({"width": 1280, "height": 720}))["id"]).unwrap();
+    let bar = id_of(&ex(&mut s, "shape.rectangle", json!({"parent": screen, "width": 300, "height": 20}))["id"]).unwrap();
+    ex(&mut s, "game.background.set", json!({"node": screen, "background": "hidden"}));
+    ex(&mut s, "game.bar.set", json!({"node": bar, "variable": "vida"}));
+    let game = s.doc().unwrap().game.clone();
+    assert_eq!(game.backgrounds[&screen], figcraft_doc::game::GameBackground::Hidden);
+    assert_eq!(game.bars[&bar], "vida");
+    for (cmd, params) in [
+        ("game.background.set", json!({"node": bar, "background": "paused"})),
+        ("game.background.set", json!({"node": screen, "background": "sideways"})),
+        ("game.bar.set", json!({"node": bar, "variable": "mana"})),
+    ] {
+        assert!(s.execute(cmd, &params).is_err(), "{cmd} {params}");
+        assert_eq!(s.doc().unwrap().game, game);
+    }
+    let bytes = figcraft_format::save_bytes(s.doc().unwrap(), None).unwrap();
+    assert_eq!(figcraft_format::load_bytes(&bytes).unwrap().0.game, game);
+    ex(&mut s, "game.background.set", json!({"node": screen, "background": "running"}));
+    ex(&mut s, "game.bar.set", json!({"node": bar, "variable": null}));
+    assert!(s.doc().unwrap().game.backgrounds.is_empty() && s.doc().unwrap().game.bars.is_empty());
+    ex(&mut s, "edit.undo", json!({}));
+    assert_eq!(s.doc().unwrap().game.bars[&bar], "vida");
+}

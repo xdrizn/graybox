@@ -11,6 +11,7 @@ pub(crate) mod input;
 pub mod menu;
 pub mod proto_targets;
 pub mod renderer;
+pub mod screen_ui;
 pub mod share;
 
 /// Platform hosts read these markers inside the browser's trusted input event, before egui's
@@ -112,6 +113,13 @@ impl Play {
                     self.captured = captured;
                 }
             }
+        }
+    }
+
+    /// Keep the clock at `now` without simulating (the game is frozen behind a screen).
+    pub(crate) fn hold_clock(&mut self, now: f64) {
+        if now.is_finite() {
+            self.last = Some(now);
         }
     }
 

@@ -374,6 +374,7 @@ pub fn prototype(app: &mut FigApp, ui: &mut Ui) {
     scroll_section(app, ui, &doc, &sel, &node);
     if sel.len() == 1 {
         crate::game::menu_section(app, ui, &doc, &node);
+        crate::game::screen_ui::section(app, ui, &doc, &node);
     }
 }
 

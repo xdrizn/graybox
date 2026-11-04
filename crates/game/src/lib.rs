@@ -9,7 +9,7 @@ pub mod menu;
 mod state;
 pub use clock::{FixedClock, MAX_STEPS, STEP_SECS};
 use glam::Vec3;
-pub use state::{Debris, GameEvent, Input, MAGAZINE_SIZE, MAX_DEBRIS, MAX_ENEMIES, MAX_PROJECTILES, Player, Projectile, Sentinel};
+pub use state::{Debris, GameEvent, Input, MAGAZINE_SIZE, MAX_DEBRIS, MAX_ENEMIES, MAX_PROJECTILES, Player, Projectile, START_RESERVE, Sentinel};
 
 #[cfg(test)]
 mod menu_tests;
@@ -262,7 +262,7 @@ impl Game {
         p.pitch = 0.0;
         p.health = p.max_health;
         p.ammo = MAGAZINE_SIZE;
-        p.reserve = 48;
+        p.reserve = START_RESERVE;
         p.crouching = false;
         p.dead = false;
         p.last_damage = 0.0;

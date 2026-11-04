@@ -1,6 +1,8 @@
 use glam::Vec3;
 
 pub const MAGAZINE_SIZE: u32 = 12;
+/// Reserve ammo at the start (and after a respawn): the full mark of a reserve bar.
+pub const START_RESERVE: u32 = 48;
 pub const MAX_ENEMIES: usize = 8;
 pub const MAX_PROJECTILES: usize = 32;
 pub const MAX_DEBRIS: usize = MAX_ENEMIES * 9;
@@ -55,7 +57,7 @@ impl Default for Player {
             health: 100.0,
             max_health: 100.0,
             ammo: MAGAZINE_SIZE,
-            reserve: 48,
+            reserve: START_RESERVE,
             crouching: false,
             on_fire: false,
             dead: false,

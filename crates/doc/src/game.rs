@@ -59,6 +59,23 @@ impl Default for MenuSettings {
     }
 }
 
+/// What Play shows and runs behind a screen while it is the one on top.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GameBackground {
+    /// The game, playing (the default: a HUD).
+    #[default]
+    Running,
+    /// The game, frozen; the mouse is free (an inventory or pause menu shown on its own).
+    Paused,
+    /// No game: the screen alone, the game frozen (a title or map screen).
+    Hidden,
+}
+
+/// Game values a "game bar" can follow (health, ammo in the magazine, reserve ammo).
+pub const BAR_VARIABLES: [&str; 3] = ["vida", "municao", "reserva"];
+pub const MAX_SCREEN_SETTINGS: usize = 4096;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "StoredGameSettings")]
 pub struct GameSettings {
@@ -69,6 +86,11 @@ pub struct GameSettings {
     pub menus: BTreeMap<NodeId, MenuSettings>,
     /// Keys and buttons for [`MENU_ACTIONS`].
     pub menu_bindings: BTreeMap<String, Vec<String>>,
+    /// Top-level frame → what Play shows behind it (missing: [`GameBackground::Running`]).
+    pub backgrounds: BTreeMap<NodeId, GameBackground>,
+    /// Layer → the game variable whose share of its maximum sets the layer's width in Play
+    /// (a health bar drawn at any size empties from 100 % to 0 %).
+    pub bars: BTreeMap<NodeId, String>,
 }
 
 #[derive(Deserialize)]
@@ -82,6 +104,8 @@ struct StoredGameSettings {
     web_url: String,
     menus: BTreeMap<NodeId, MenuSettings>,
     menu_bindings: BTreeMap<String, Vec<String>>,
+    backgrounds: BTreeMap<NodeId, GameBackground>,
+    bars: BTreeMap<NodeId, String>,
 }
 
 impl Default for StoredGameSettings {
@@ -94,6 +118,8 @@ impl Default for StoredGameSettings {
             web_url: settings.web_url,
             menus: settings.menus,
             menu_bindings: settings.menu_bindings,
+            backgrounds: settings.backgrounds,
+            bars: settings.bars,
         }
     }
 }
@@ -109,6 +135,8 @@ impl TryFrom<StoredGameSettings> for GameSettings {
             web_url: stored.web_url,
             menus: stored.menus,
             menu_bindings: stored.menu_bindings,
+            backgrounds: stored.backgrounds,
+            bars: stored.bars,
         };
         settings.validate()?;
         Ok(settings)
@@ -139,6 +167,8 @@ impl Default for GameSettings {
             web_url: String::new(),
             menus: BTreeMap::new(),
             menu_bindings: default_menu_bindings(),
+            backgrounds: BTreeMap::new(),
+            bars: BTreeMap::new(),
         }
     }
 }
@@ -189,6 +219,12 @@ impl GameSettings {
                     return Err(format!("`{key}` is already bound to {previous}"));
                 }
             }
+        }
+        if self.backgrounds.len() > MAX_SCREEN_SETTINGS || self.bars.len() > MAX_SCREEN_SETTINGS {
+            return Err(format!("Use at most {MAX_SCREEN_SETTINGS} game backgrounds and game bars"));
+        }
+        if self.bars.values().any(|v| !BAR_VARIABLES.contains(&v.as_str())) {
+            return Err("A game bar follows vida, municao or reserva".into());
         }
         if self.menus.len() > MAX_MENUS {
             return Err(format!("Use at most {MAX_MENUS} navigable menus"));

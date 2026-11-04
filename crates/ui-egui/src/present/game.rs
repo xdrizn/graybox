@@ -2,6 +2,7 @@
 use super::{Presenter, layout::FULL};
 use crate::{FigApp, game};
 use egui::{Align2, Context, CursorGrab, Key, Rect, Ui, ViewportCommand, pos2, vec2};
+use figcraft_doc::game::GameBackground;
 use figcraft_doc::proto::Trigger;
 use figcraft_doc::{NodeId, NodeKind, VariableValue};
 
@@ -70,9 +71,14 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
     });
     let menu_active = menu_input.is_some_and(|input| menu_step(&mut p, &input, now));
     settle(&mut p);
-    app.services.game_capture_allowed(p.game.as_ref().is_some_and(|g| g.captured || p.overlays.is_empty()));
+    // Graybox: a screen can show the game paused or no game behind it; then the mouse stays free.
+    let behind = background(&p);
+    let running = behind == GameBackground::Running;
+    app.services.game_capture_allowed(running && p.game.as_ref().is_some_and(|g| g.captured || p.overlays.is_empty()));
     if let (Some(play), Some(doc)) = (&mut p.game, &p.design) {
-        if p.overlays.is_empty() && ctx.input(|i| i.pointer.primary_pressed()) {
+        if !running {
+            play.captured = false;
+        } else if p.overlays.is_empty() && ctx.input(|i| i.pointer.primary_pressed()) {
             play.captured = true;
         }
         play.game.input = ctx.input(|i| game::input::read(i, &doc.game, held | pressed, pressed, play.captured));
@@ -91,7 +97,11 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
             play.game.respawn();
             play.game.input.respawn = false;
         }
-        play.frame(now);
+        if running {
+            play.frame(now);
+        } else {
+            play.hold_clock(now);
+        }
     }
     publish(&mut p);
     let events = p.game.as_mut().map(|play| play.game.drain_events()).unwrap_or_default();
@@ -109,7 +119,18 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
     }
     egui::CentralPanel::default().frame(egui::Frame::NONE).show(ui, |ui| {
         let rect = ui.max_rect();
-        if let Some(play) = &p.game {
+        if behind == GameBackground::Hidden {
+            // No game: the screen's own background colour (black when it has none).
+            let top = p.overlays.last().map_or(p.current, |o| o.id);
+            let fill = p.design.as_ref().and_then(|d| d.node(top)).and_then(|n| n.fills.iter().find_map(|f| f.solid_color())).map_or(
+                egui::Color32::BLACK,
+                |c| {
+                    let [r, g, b, a] = c.to_rgba8();
+                    egui::Color32::from_rgba_unmultiplied(r, g, b, a)
+                },
+            );
+            ui.painter().rect_filled(rect, 0, fill);
+        } else if let Some(play) = &p.game {
             game::renderer::paint(ui, rect, &play.game, &game::renderer::SceneTheme::default());
         }
         super::player::player(&mut p, ui, rect, now, FULL);
@@ -144,6 +165,29 @@ fn leave(app: &mut FigApp, ctx: &Context, p: Presenter) {
     } else {
         app.ui.present = None;
     }
+}
+
+/// Game bars: each layer's width in Play, its designed width times the share of the value it
+/// follows (health of the maximum, the magazine, the starting reserve). Bars empty from the right.
+fn bar_widths(p: &Presenter) -> Vec<(NodeId, f64)> {
+    let (Some(play), Some(original)) = (&p.game, &p.original) else { return Vec::new() };
+    let player = &play.game.player;
+    let share = |name: &str| -> f64 {
+        let (value, max) = match name {
+            "vida" => (f64::from(player.health), f64::from(player.max_health)),
+            "municao" => (f64::from(player.ammo), f64::from(figcraft_game::MAGAZINE_SIZE)),
+            _ => (f64::from(player.reserve), f64::from(figcraft_game::START_RESERVE)),
+        };
+        if max > 0.0 && value.is_finite() { (value / max).clamp(0.0, 1.0) } else { 0.0 }
+    };
+    original.game.bars.iter().filter_map(|(id, name)| original.node(*id).map(|n| (*id, (n.width * share(name)).max(0.001)))).collect()
+}
+
+/// What the screen on top (an overlay, else the presented frame) shows behind it.
+fn background(p: &Presenter) -> GameBackground {
+    let Some(doc) = p.doc.as_ref() else { return GameBackground::Running };
+    let top = p.overlays.last().map_or(p.current, |o| o.id);
+    doc.game.backgrounds.get(&top).or_else(|| doc.game.backgrounds.get(&p.current)).copied().unwrap_or_default()
 }
 
 /// Apply the Pause game / cursor actions the prototype ran; see [`game::Play::settle`].
@@ -194,6 +238,7 @@ fn dispatch(p: &mut Presenter, canonical: &str, now: f64) {
 }
 
 fn publish(p: &mut Presenter) {
+    let bars = bar_widths(p);
     let (Some(play), Some(doc)) = (&p.game, &mut p.design) else { return };
     let player = &play.game.player;
     let ids = &play.variable_ids;
@@ -226,6 +271,18 @@ fn publish(p: &mut Presenter) {
             before = Some(doc.clone());
         }
         figcraft_engine::proto_run::set_variable(doc, p.current, id, &serde_json::json!(value), None);
+    }
+    for (id, width) in bars {
+        let Some(node) = doc.node(id) else { continue };
+        if (node.width - width).abs() < 0.01 {
+            continue;
+        }
+        if before.is_none() {
+            before = Some(doc.clone());
+        }
+        if let Some(node) = doc.node_mut(id) {
+            node.width = width;
+        }
     }
     for (name, value) in [("atacante", player.attacker.as_str()), ("arma", "Pistola")] {
         let Some(id) = ids.get(name) else { continue };
@@ -289,6 +346,7 @@ fn help(p: &Presenter, ui: &Ui, rect: Rect) {
 #[cfg(test)]
 #[path = "game_menu_tests.rs"]
 mod menu_tests;
+
 
 pub(super) use crate::game::menu::MenuInputs;
 
@@ -367,5 +425,57 @@ pub(super) fn stop_moving(play: &mut game::Play, menu_active: bool) {
         play.game.input.forward = 0.0;
         play.game.input.strafe = 0.0;
         play.game.input.jump = false;
+    }
+}
+
+#[cfg(test)]
+mod screen_tests {
+    use super::*;
+    use std::sync::Arc;
+
+    /// A HUD (300 wide health bar) and an inventory, the game playing.
+    fn play() -> (Presenter, NodeId, NodeId, NodeId) {
+        let mut doc = figcraft_doc::Document::new("Screens");
+        let page = doc.first_page().unwrap();
+        let hud = doc.create(page, figcraft_doc::NodeKind::Frame, "HUD", 0.0, 0.0, 1280.0, 720.0).unwrap();
+        let bar = doc.create(hud, figcraft_doc::NodeKind::Rectangle, "Health", 40.0, 600.0, 300.0, 20.0).unwrap();
+        let inventory = doc.create(page, figcraft_doc::NodeKind::Frame, "Inventory", 1400.0, 0.0, 1280.0, 720.0).unwrap();
+        doc.game.bars.insert(bar, "vida".into());
+        doc.game.backgrounds.insert(inventory, GameBackground::Hidden);
+        let mut p = Presenter::new(hud);
+        p.game = Some(crate::game::Play::new());
+        p.sync(&Arc::new(doc), 0.0);
+        (p, hud, bar, inventory)
+    }
+
+    #[test]
+    fn a_game_bar_keeps_its_drawn_size_as_the_full_mark() {
+        let (mut p, _, bar, _) = play();
+        publish(&mut p);
+        assert_eq!(p.design.as_ref().unwrap().node(bar).unwrap().width, 300.0, "full health: the width it was drawn at");
+        if let Some(play) = p.game.as_mut() {
+            play.game.player.health = 25.0;
+        }
+        publish(&mut p);
+        assert_eq!(p.design.as_ref().unwrap().node(bar).unwrap().width, 75.0, "a quarter of the health, a quarter of the bar");
+        assert_eq!(p.original.as_ref().unwrap().node(bar).unwrap().width, 300.0, "the design is untouched");
+    }
+
+    #[test]
+    fn the_screen_on_top_decides_what_is_behind_it() {
+        let (mut p, hud, _, inventory) = play();
+        assert_eq!(background(&p), GameBackground::Running, "a screen without a setting shows the game");
+        let open = figcraft_doc::proto::Action::OpenOverlay {
+            dest: inventory,
+            position: figcraft_doc::proto::OverlayPosition::Center,
+            close_on_outside: true,
+            background: None,
+            offset: None,
+            anchor: figcraft_doc::proto::OverlayAnchor::Screen,
+        };
+        p.perform(&open, hud, figcraft_doc::proto::Transition::Instant, 0.0, figcraft_doc::proto::Easing::Linear, None, 0.0);
+        assert_eq!(background(&p), GameBackground::Hidden, "the overlay on top has No game");
+        p.close_overlay(0.1);
+        assert_eq!(background(&p), GameBackground::Running);
     }
 }
