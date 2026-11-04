@@ -4,7 +4,7 @@ use crate::{FigApp, game};
 use egui::{Align2, Context, CursorGrab, Key, Rect, Ui, ViewportCommand, pos2, vec2};
 use figcraft_doc::game::GameBackground;
 use figcraft_doc::proto::Trigger;
-use figcraft_doc::{NodeId, NodeKind, VariableValue};
+use figcraft_doc::{Document, NodeId, NodeKind, VariableValue};
 
 pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
     let ctx = ui.ctx().clone();
@@ -511,6 +511,12 @@ pub(super) fn menu_pointer(p: &mut Presenter, hit: Option<NodeId>, pointer: Opti
     }
 }
 
+/// The layer of `menu` under the pointer at `q`. Only the menu's own layers count, so a
+/// decoration drawn over it (a monitor bezel, a vignette) does not hide its items from the mouse.
+pub(super) fn menu_hit(doc: &Document, menu: NodeId, place: &super::layout::Place, q: egui::Pos2) -> Option<NodeId> {
+    super::chrome::layer_at(doc, menu, place, q)
+}
+
 /// After the prototype is drawn: the pointer marks menu items and an item without a State variant
 /// gets a focus outline.
 pub(super) fn menu_overlay(p: &mut Presenter, painter: &egui::Painter, ctx: &Context, l: &super::layout::Layout) {
@@ -531,9 +537,10 @@ pub(super) fn menu_overlay(p: &mut Presenter, painter: &egui::Painter, ctx: &Con
     if p.game.as_ref().is_none_or(|g| g.menu.menu.is_none()) {
         return;
     }
-    let (root, place, clip) = l.active(p.current);
+    let (_, place, clip) = l.active(p.current);
+    let menu = p.game.as_ref().and_then(|g| g.menu.menu);
     let pos = ctx.pointer_hover_pos().filter(|q| clip.contains(*q));
-    let hit = pos.and_then(|q| super::chrome::layer_at(&l.disp, root, &place, q));
+    let hit = pos.zip(menu).and_then(|(q, menu)| menu_hit(&l.disp, menu, &place, q));
     menu_pointer(p, hit, pos.map(|q| [q.x, q.y]));
     let Some(focus) = p.game.as_ref().map(|g| &g.menu) else { return };
     if let (true, Some(item)) = (focus.outline, focus.item)

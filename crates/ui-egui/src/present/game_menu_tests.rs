@@ -337,3 +337,22 @@ fn an_open_menu_stops_the_player() {
     super::stop_moving(&mut play, true);
     assert_eq!((play.game.input.forward, play.game.input.strafe, play.game.input.jump), (0.0, 0.0, false));
 }
+
+#[test]
+fn a_layer_drawn_over_the_menu_does_not_block_the_pointer() {
+    // A decoration on top of the whole screen (a monitor bezel, a vignette) has no interactions:
+    // the pointer still focuses the menu item under it.
+    let sc = scene();
+    let mut doc = sc.doc.clone();
+    let decor = doc.create(sc.screen, NodeKind::Rectangle, "Bezel", 0.0, 0.0, 1280.0, 720.0).unwrap();
+    let place = crate::present::layout::Place { page_min: (0.0, 0.0), origin: egui::Pos2::ZERO, scale: 1.0 };
+    let b = doc.world_bounds(sc.items[2]).unwrap();
+    let q = egui::pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32);
+    assert_eq!(crate::present::chrome::layer_at(&doc, sc.screen, &place, q), Some(decor), "the decoration is on top");
+    let mut p = play(&doc, sc.screen);
+    menu_step(&mut p, &idle(), 0.0);
+    let hit = super::menu_hit(&doc, sc.list, &place, q);
+    menu_pointer(&mut p, hit, Some([q.x, q.y]));
+    menu_step(&mut p, &idle(), 0.05);
+    assert_eq!(focused(&p), Some(sc.items[2]));
+}

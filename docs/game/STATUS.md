@@ -36,6 +36,8 @@
   `ui-egui/src/game/menu.rs`, applied by `present/game.rs`. Starter kit: Button, Tab and Grid
   cell are State sets; the Inventory grid, Pause buttons and library List/Grid are menus. Checked
   in the app (Pause list with ↓, Inventory grid with the D-pad). Spec and plan in `docs/game/specs/`.
+  Fix (2026-11-04): the mouse finds menu items through layers drawn over the menu (a monitor
+  bezel image covered the whole screen and hid the items from the pointer).
 
 ## Decisions
 - State looks without special names (owner, 2026-11-04): hotbars and navigable menus show selected /

@@ -262,27 +262,3 @@ impl Focus {
         plan
     }
 }
-
-#[cfg(test)]
-mod debug_tmp {
-    use super::*;
-    #[test]
-    fn abf_menu() {
-        let mut s = figcraft_engine::Session::empty();
-        s.execute("file.open", &serde_json::json!({"path": "C:/Users/Adriel/Documents/graybox projects/ABF/Abiotic Factor.figcraft"})).unwrap();
-        let doc = s.doc().unwrap();
-        let id = |n: u64| doc.nodes().map(|n| n.id).find(|i| format!("{i:?}").contains(&format!("({n})")) || format!("{i:?}") == n.to_string()).unwrap();
-        let root = id(320);
-        eprintln!("root {:?} menu {:?}", root, active_menu(doc, root));
-        let mut f = Focus::default();
-        let none = MenuInputs::default();
-        let down = MenuInputs { held: Some(Dir::Down), ..Default::default() };
-        let p = f.plan(doc, root, &none, 0.0);
-        eprintln!("frame0 item {:?} outline {} plan {:?}", f.item, f.outline, p);
-        let p = f.plan(doc, root, &down, 0.1);
-        eprintln!("down item {:?} outline {} plan {:?}", f.item, f.outline, p);
-        let comp = component_of(doc, f.item.unwrap()).unwrap();
-        eprintln!("comp {:?} name {:?} choices {:?} guess {:?}", comp, doc.node(comp).unwrap().name, super::super::looks::choices(doc, comp), super::super::looks::guess(doc, comp, super::super::looks::Role::Selected));
-        eprintln!("variant_with {:?}", super::super::looks::variant_with(doc, comp, "Property 1", "Focused"));
-    }
-}
