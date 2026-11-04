@@ -223,7 +223,12 @@ fn main() -> eframe::Result {
     session.invite_links_startup();
     let first_run = svc.prefs.is_none() && args.join.is_none();
     if session.docs.is_empty() && opens_new_file(first_run, session.prefs.start_on_home, port.is_some()) {
-        let _ = session.execute("file.new", &json!({}));
+        // Graybox: start in the file worked on last, when it is still there (not for --control).
+        let last = session.prefs.recent_files.first().cloned().filter(|p| port.is_none() && std::path::Path::new(p).is_file());
+        let reopened = last.is_some_and(|path| session.execute("file.open", &json!({"path": path})).is_ok());
+        if !reopened {
+            let _ = session.execute("file.new", &json!({}));
+        }
     }
     // The interface language from the first frame on, and for the message when the window can't
     // open (no frame then).

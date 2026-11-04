@@ -105,6 +105,19 @@ pub(crate) fn swap_wheel(wheel: egui::Vec2, zoom: f32, shift: bool, speed: f32) 
 
 fn import_dropped(app: &mut FigApp, ctx: &egui::Context, hover_pos: Option<egui::Pos2>) {
     let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+    if dropped.is_empty() {
+        return;
+    }
+    // Graybox: Windows sends no pointer position while files are dragged in, so the last one egui
+    // knows is stale; ask the system where the mouse is and drop there.
+    let at_drop = app.services.cursor_screen_pixels().and_then(|[x, y]| {
+        let (inner, ppp) = ctx.input(|i| (i.viewport().inner_rect, i.pixels_per_point));
+        let inner = inner?;
+        let ppp = f64::from(ppp.max(0.01));
+        let p = egui::pos2((x / ppp) as f32 - inner.min.x, (y / ppp) as f32 - inner.min.y);
+        (p.x.is_finite() && p.y.is_finite() && app.canvas.rect.contains(p)).then_some(p)
+    });
+    let hover_pos = at_drop.or(hover_pos);
     let mut refused = false;
     // The first image goes to the colour picker that shows an image; the rest to the canvas.
     let mut well = crate::colorpicker::image_drop_target(app, ctx).map(|(_, params)| params);

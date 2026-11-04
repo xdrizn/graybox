@@ -114,6 +114,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   gets its "size" override, so a variant change keeps its size (upstream only marked layers inside
   instances).
 - `crates/ui-egui/src/present/actions.rs` Change to: `cmd::game::keep_instance_size` before the swap.
+- `apps/figcraft/src/main.rs`: with nothing to open, start in the most recent file that still exists.
+- `crates/ui-egui/src/services.rs` `Services::cursor_screen_pixels` (desktop Windows: `mouse_position`
+  crate) and `canvas/input.rs` `import_dropped`: dropped files land under the mouse.
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one

@@ -106,6 +106,11 @@ pub trait Services {
     fn game_mouse_delta(&mut self) -> Option<[f32; 2]> {
         None
     }
+    /// Graybox: the mouse on the screen in physical pixels, where the platform can tell (desktop
+    /// Windows): files dropped on the window land under it.
+    fn cursor_screen_pixels(&mut self) -> Option<[f64; 2]> {
+        None
+    }
     /// The fonts installed on this computer can be asked for and haven't been (the browser's Local
     /// Font Access; the desktop app sees them anyway).
     fn can_ask_for_local_fonts(&self) -> bool {

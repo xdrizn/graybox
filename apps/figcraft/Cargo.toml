@@ -37,6 +37,8 @@ env_logger = { version = "0.11", default-features = false, features = ["auto-col
 [target.'cfg(windows)'.dependencies]
 craft-update = { workspace = true }
 windows = { version = "0.62", default-features = false, features = ["UI_ViewManagement", "System_UserProfile", "Foundation_Collections", "Gaming_Input"] }
+# Graybox: where the mouse is when files are dropped on the window (Windows reports no position).
+mouse_position = "0.1.4"
 
 # Native controller hotplug, buttons and analog sticks. Keep this off FreeBSD (where libudev-devd
 # is optional), Windows (Gaming.Input above), and web (the browser Gamepad API).

@@ -561,6 +561,21 @@ impl Services for Desktop {
             _ => None,
         }
     }
+    // Graybox: the mouse on the screen, in physical pixels (dropped files land where it is).
+    fn cursor_screen_pixels(&mut self) -> Option<[f64; 2]> {
+        #[cfg(windows)]
+        {
+            match mouse_position::mouse_position::Mouse::get_mouse_position() {
+                mouse_position::mouse_position::Mouse::Position { x, y } => Some([f64::from(x), f64::from(y)]),
+                mouse_position::mouse_position::Mouse::Error => None,
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            None
+        }
+    }
+
     fn gamepad_held(&mut self) -> u32 {
         crate::gamepad::held()
     }
