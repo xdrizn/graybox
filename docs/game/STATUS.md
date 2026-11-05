@@ -40,6 +40,9 @@
   bezel image covered the whole screen and hid the items from the pointer).
 
 ## Decisions
+- Play redraws its whole screen when a variant changes on hover. Costly unchanged layers (layer blur,
+  big image fills) are kept between renders instead (owner's "essa aqui" screen: ~450 to ~120 ms per
+  hover, identical pixels). Going further would mean redrawing only the changed area.
 - Fonts (owner, 2026-11-04): Google Fonts / Noto families download to this computer only when picked
   (font picker's "Google Fonts" rows), never into the repo or the program. Sharing (`game.share`)
   puts the font store fonts the text uses into the file (`game.fonts`, base64, capped); whoever
@@ -129,6 +132,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - `crates/engine/src/cmd/game_share.rs` `share`: `cmd::game::embed_shared_fonts` before publishing.
 - `crates/ui-egui/src/app.rs` `frame`: `game::fonts::load_shared`.
 - `crates/ui-egui/src/theme.rs` `install_fonts`: Inter stays a fallback behind Space Grotesk (shortcut glyphs).
+- `crates/render/src/effect_cache.rs` (new, `mod` in `lib.rs`) and `draw.rs` `draw_layer`: a layer blur and a
+  plain image layer reuse their pixels while unchanged (same node `Arc`, place, size, scale, colour
+  profile, image bytes, GIF frame); drop shadow casters only for layers with drop shadows.
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one

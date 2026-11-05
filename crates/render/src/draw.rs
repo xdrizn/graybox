@@ -681,7 +681,10 @@ fn draw_layer(ctx: &Ctx, pix: &mut Pixmap, n: &Node, parent_xf: Affine, depth: u
         return;
     }
     if !needs_layer(n) {
-        draw_content(ctx, pix, n, xf, depth, None);
+        // Graybox: an image layer (costly to resample) reuses its pixels while unchanged.
+        if !draw_image_cached(ctx, pix, n, xf, dev, view, depth) {
+            draw_content(ctx, pix, n, xf, depth, None);
+        }
         return;
     }
     // Isolated layer covering the node's paint bounds, clipped to the visible area + margin. Its
@@ -712,53 +715,67 @@ fn draw_layer(ctx: &Ctx, pix: &mut Pixmap, n: &Node, parent_xf: Affine, depth: u
     // Kept apart, the first read is only what backdrop effects inside the content see: without
     // any, the backdrop (blur or glass, the costly part) is computed once, after the shadows.
     let nested = || ctx.doc.subtree(id).iter().skip(1).any(|c| ctx.doc.node(*c).is_some_and(backdrop::has_effects));
-    let first_back = if !casts || nested() { read_backdrop(pix) } else { None };
-    if !casts && let Some(b) = &first_back {
-        layer.draw_pixmap(0, 0, b.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
-    }
     let op = n.opacity.clamp(0.0, 1.0);
-    {
-        // Inner shadows paint over the fills, under the children and strokes: cast from around the
-        // outline, or around the fills' pixels where images paint their own alpha.
-        let inner = |l: &mut Pixmap| {
-            let fills = shadow::inner_from_pixels(ctx.doc, n).then(|| l.clone());
+    // Graybox: an unchanged blurred layer reuses its pixels from the last render
+    // ([`crate::effect_cache`]): a prototype redraws its screen on every hover change.
+    let flags = (ctx.lod, ctx.preview, ctx.magnified_image_pixels);
+    let cache_key = crate::effect_cache::Key::new(crate::effect_cache::Kind::Blur, ctx.doc, id, lxf, (lw, lh), ctx.scale, flags, ctx.time)
+        .filter(|_| back_shape.is_none());
+    let cached = cache_key.as_ref().and_then(crate::effect_cache::get);
+    let first_back = if cached.is_none() && (!casts || nested()) { read_backdrop(pix) } else { None };
+    if let Some(pixels) = cached {
+        layer = pixels;
+    } else {
+        if !casts && let Some(b) = &first_back {
+            layer.draw_pixmap(0, 0, b.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
+        }
+        {
+            // Inner shadows paint over the fills, under the children and strokes: cast from around the
+            // outline, or around the fills' pixels where images paint their own alpha.
+            let inner = |l: &mut Pixmap| {
+                let fills = shadow::inner_from_pixels(ctx.doc, n).then(|| l.clone());
+                for e in n.effects.iter().filter(|e| e.visible) {
+                    if let EffectKind::InnerShadow(s) = &e.kind
+                        && let Some(inner) = match &fills {
+                            Some(f) => shadow::inner_shadow_of(f, ctx.scale, s),
+                            None => shape.as_ref().and_then(|sh| shadow::inner_shadow(sh, lw, lh, lxf, ctx.scale, s)),
+                        }
+                    {
+                        l.draw_pixmap(0, 0, inner.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
+                    }
+                }
+            };
+            let has_inner = shape.is_some() && n.effects.iter().any(|e| e.visible && matches!(e.kind, EffectKind::InnerShadow(_)));
+            // Backdrops further down see this layer composited onto `pix` (over its backdrop, when
+            // that is kept apart for now).
+            let under = Under { opacity: op, blend: n.blend, ..Under::new(pix, (lx, ly), ctx.under) };
+            let over_back = first_back.as_ref().filter(|_| casts).map(|b| Under::new(b, (0, 0), Some(&under)));
+            let content_under = over_back.as_ref().unwrap_or(&under);
+            draw_content(&Ctx { under: Some(content_under), ..*ctx }, &mut layer, n, lxf, depth, has_inner.then_some(&inner as &dyn Fn(&mut Pixmap)));
+        }
+        // A group is no outline of its own: its inner shadows are cast from around what its layers
+        // draw together, over them.
+        if matches!(n.kind, NodeKind::Group) && n.effects.iter().any(|e| e.visible && matches!(e.kind, EffectKind::InnerShadow(_))) {
+            let cover = layer.clone();
             for e in n.effects.iter().filter(|e| e.visible) {
                 if let EffectKind::InnerShadow(s) = &e.kind
-                    && let Some(inner) = match &fills {
-                        Some(f) => shadow::inner_shadow_of(f, ctx.scale, s),
-                        None => shape.as_ref().and_then(|sh| shadow::inner_shadow(sh, lw, lh, lxf, ctx.scale, s)),
-                    }
+                    && let Some(sh) = shadow::inner_shadow_of(&cover, ctx.scale, s)
                 {
-                    l.draw_pixmap(0, 0, inner.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
+                    layer.draw_pixmap(0, 0, sh.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
                 }
             }
-        };
-        let has_inner = shape.is_some() && n.effects.iter().any(|e| e.visible && matches!(e.kind, EffectKind::InnerShadow(_)));
-        // Backdrops further down see this layer composited onto `pix` (over its backdrop, when
-        // that is kept apart for now).
-        let under = Under { opacity: op, blend: n.blend, ..Under::new(pix, (lx, ly), ctx.under) };
-        let over_back = first_back.as_ref().filter(|_| casts).map(|b| Under::new(b, (0, 0), Some(&under)));
-        let content_under = over_back.as_ref().unwrap_or(&under);
-        draw_content(&Ctx { under: Some(content_under), ..*ctx }, &mut layer, n, lxf, depth, has_inner.then_some(&inner as &dyn Fn(&mut Pixmap)));
-    }
-    // A group is no outline of its own: its inner shadows are cast from around what its layers
-    // draw together, over them.
-    if matches!(n.kind, NodeKind::Group) && n.effects.iter().any(|e| e.visible && matches!(e.kind, EffectKind::InnerShadow(_))) {
-        let cover = layer.clone();
-        for e in n.effects.iter().filter(|e| e.visible) {
-            if let EffectKind::InnerShadow(s) = &e.kind
-                && let Some(sh) = shadow::inner_shadow_of(&cover, ctx.scale, s)
-            {
-                layer.draw_pixmap(0, 0, sh.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
-            }
+        }
+        // Layer blur, noise and texture, in list order, over everything else.
+        if !casts {
+            layer_effects(ctx, &mut layer, n, id, lxf);
+        }
+        if let Some(key) = cache_key {
+            crate::effect_cache::put(key, &layer);
         }
     }
-    // Layer blur, noise and texture, in list order, over everything else.
-    if !casts {
-        layer_effects(ctx, &mut layer, n, id, lxf);
-    }
-    // Drop shadows go under the layer, in effect-list order.
-    {
+    // Drop shadows go under the layer, in effect-list order. (Graybox: only for layers that have
+    // some; the caster works out a cover the size of the layer, costly for a big one.)
+    if n.effects.iter().any(|e| e.visible && matches!(e.kind, EffectKind::DropShadow(_))) {
         // Kept apart, the backdrop isn't in the layer yet: the shadows are cast from the content
         // with the layer effects it will get (a copy only when it gets some).
         let layer_fx =
@@ -1152,4 +1169,38 @@ fn fract_ok(_v: f64) -> bool {
 /// `snap_px` forgives.
 fn on_whole_pixels(r: Rect) -> bool {
     [r.x0, r.y0, r.x1, r.y1].into_iter().all(|v| (snap_px(v) - v.round()).abs() < 1e-9)
+}
+
+/// Graybox: a plain image layer (no children, fully opaque layer, normal blend, no effects) drawn
+/// through [`crate::effect_cache`]: its pixels are kept and drawn again while it doesn't change
+/// (a prototype redraws its whole screen on each hover). False when it doesn't qualify or has no
+/// room: the caller draws it as usual.
+fn draw_image_cached(ctx: &Ctx, pix: &mut Pixmap, n: &Node, xf: Affine, dev: Rect, view: Rect, depth: usize) -> bool {
+    if !n.children.is_empty() || n.opacity < 1.0 || n.blend != figcraft_color::BlendMode::Normal || n.effects.iter().any(|e| e.visible) {
+        return false;
+    }
+    let vis = dev.intersect(view);
+    let (x0, y0) = (vis.x0.floor(), vis.y0.floor());
+    let (w, h) = (vis.x1.ceil() - x0, vis.y1.ceil() - y0);
+    if !(x0.is_finite() && y0.is_finite() && w >= 1.0 && h >= 1.0 && w <= 16_384.0 && h <= 16_384.0) {
+        return false;
+    }
+    let (lx, ly, lw, lh) = (x0 as i32, y0 as i32, w as u32, h as u32);
+    let lxf = Affine::translate((-f64::from(lx), -f64::from(ly))) * xf;
+    let flags = (ctx.lod, ctx.preview, ctx.magnified_image_pixels);
+    let Some(key) = crate::effect_cache::Key::new(crate::effect_cache::Kind::Image, ctx.doc, n.id, lxf, (lw, lh), ctx.scale, flags, ctx.time) else {
+        return false;
+    };
+    let layer = match crate::effect_cache::get(&key) {
+        Some(layer) => layer,
+        None => {
+            let Some(_held) = crate::layer_budget::Held::take(lw, lh, 1) else { return false };
+            let Some(mut layer) = Pixmap::new(lw, lh) else { return false };
+            draw_content(ctx, &mut layer, n, lxf, depth, None);
+            crate::effect_cache::put(key, &layer);
+            layer
+        }
+    };
+    pix.draw_pixmap(lx, ly, layer.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
+    true
 }

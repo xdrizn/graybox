@@ -10,6 +10,7 @@ pub mod blur;
 pub mod boolean;
 pub mod dots;
 pub mod draw;
+mod effect_cache;
 mod export_depth;
 pub mod fx;
 pub mod glass;
