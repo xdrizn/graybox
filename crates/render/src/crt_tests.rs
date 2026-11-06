@@ -313,3 +313,41 @@ fn only_a_crt_in_view_on_the_page_turns_bands_off() {
     d.get_mut(pane).unwrap().visible = false;
     assert!(!crate::crt::in_view(&d, page, &view));
 }
+
+/// How long a full-screen CRT takes per redraw (run with `--release --ignored --nocapture`).
+#[test]
+#[ignore]
+fn crt_bench_full_screen() {
+    let mut d = Document::new("bench");
+    let p = d.first_page().unwrap();
+    let f = d.create(p, NodeKind::Frame, "Screen", 0.0, 0.0, 1920.0, 1080.0).unwrap();
+    solid(&mut d, f, "10204A");
+    for i in 0..12 {
+        let r = d.create(f, NodeKind::Rectangle, "Box", 100.0 + f64::from(i) * 140.0, 200.0, 120.0, 600.0).unwrap();
+        solid(&mut d, r, if i % 2 == 0 { "FF5A00" } else { "30D060" });
+    }
+    let plain_doc = d.clone();
+    let pane = d.create(f, NodeKind::Rectangle, "CRT", 0.0, 0.0, 1920.0, 1080.0).unwrap();
+    let n = d.get_mut(pane).unwrap();
+    n.fills = vec![];
+    n.effects = vec![Effect { kind: EffectKind::Crt(Crt::default()), visible: true }];
+    let scale = 2560.0 / 1920.0;
+    let time = |doc: &Document| {
+        let _ = render_node(doc, f, scale);
+        let t = std::time::Instant::now();
+        for _ in 0..5 {
+            let _ = render_node(doc, f, scale);
+        }
+        t.elapsed().as_secs_f64() * 1000.0 / 5.0
+    };
+    eprintln!("without CRT: {:.1} ms", time(&plain_doc));
+    eprintln!("with CRT:    {:.1} ms", time(&d));
+    let no_glow = {
+        let mut d = d.clone();
+        if let EffectKind::Crt(c) = &mut d.get_mut(pane).unwrap().effects[0].kind {
+            c.glow = 0.0;
+        }
+        d
+    };
+    eprintln!("CRT no glow: {:.1} ms", time(&no_glow));
+}

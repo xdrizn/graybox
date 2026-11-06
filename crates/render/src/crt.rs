@@ -21,7 +21,8 @@ type Rgba = [f32; 4];
 struct Screen<'a> {
     c: Crt,
     back: &'a Pixmap,
-    glow: Option<Pixmap>,
+    /// The blurred backdrop the glow adds, at `1 / step` of the backdrop's size.
+    glow: Option<(Pixmap, f64)>,
     /// Local → backdrop pixels.
     to_back: Affine,
     bb: Rect,
@@ -41,31 +42,40 @@ pub(crate) fn crt(c: &Crt, frame: EffectFrame<'_>) -> Option<Pixmap> {
         return None;
     }
     let c = c.sanitized();
-    let glow = (c.glow > 0.0).then(|| {
-        let mut g = back.clone();
-        fx::blur(&mut g, c.glow_radius() / 2.0 * scale);
-        g
-    });
+    let glow = if c.glow > 0.0 { glow_of(back, c.glow_radius() / 2.0 * scale) } else { None };
     let to_back = Affine::translate((f64::from(pad), f64::from(pad))) * xf;
     let screen = Screen { c, back, glow, to_back, bb, foot: 1.0 / scale };
     let cover = crate::shadow::spread_alpha(std::slice::from_ref(shape), 0.0, xf, w, h)?;
     let inv = xf.inverse();
     let mut out = Pixmap::new(w, h)?;
-    for (i, (o, m)) in out.data_mut().chunks_exact_mut(4).zip(cover.data().chunks_exact(4)).enumerate() {
-        let a = f32::from(m.get(3).copied().unwrap_or(0)) / 255.0;
-        if a <= 0.0 {
-            continue;
-        }
-        let (x, y) = (i % w as usize, i / w as usize);
-        let px = screen.at(inv * Point::new(x as f64 + 0.5, y as f64 + 0.5));
-        for (o, v) in o.iter_mut().zip(px) {
-            *o = (v * a * 255.0 + 0.5).clamp(0.0, 255.0) as u8;
-        }
+    let row = (w as usize) * 4;
+    let shade = |(y, (o, m)): (usize, (&mut [u8], &[u8]))| screen.row(inv, y, o, m);
+    // Rows in parallel on the desktop (a full-screen CRT is millions of pixels).
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use rayon::prelude::*;
+        out.data_mut().par_chunks_mut(row).zip(cover.data().par_chunks(row)).enumerate().for_each(shade);
     }
+    #[cfg(target_arch = "wasm32")]
+    out.data_mut().chunks_mut(row).zip(cover.data().chunks(row)).enumerate().for_each(shade);
     Some(out)
 }
 
 impl Screen<'_> {
+    /// Row `y` of the layer into `out` (premultiplied RGBA8), through the shape's coverage `cover`.
+    fn row(&self, inv: Affine, y: usize, out: &mut [u8], cover: &[u8]) {
+        for (x, (o, m)) in out.chunks_exact_mut(4).zip(cover.chunks_exact(4)).enumerate() {
+            let a = f32::from(m.get(3).copied().unwrap_or(0)) / 255.0;
+            if a <= 0.0 {
+                continue;
+            }
+            let px = self.at(inv * Point::new(x as f64 + 0.5, y as f64 + 0.5));
+            for (o, v) in o.iter_mut().zip(px) {
+                *o = (v * a * 255.0 + 0.5).clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
+
     /// The colour at local point `p`.
     fn at(&self, p: Point) -> Rgba {
         let c = &self.c;
@@ -97,11 +107,12 @@ impl Screen<'_> {
             // Red outwards, blue inwards, further the further out.
             let dir = Vec2::new(d.x * bw, d.y * bh);
             let dir = dir / dir.hypot().max(1e-9) * (c.max_split() * r / std::f64::consts::FRAC_1_SQRT_2);
-            s[0] = self.sample(self.back, local + dir)[0];
-            s[2] = self.sample(self.back, local - dir)[2];
+            s[0] = self.channel(local + dir, 0);
+            s[2] = self.channel(local - dir, 2);
         }
-        if let Some(g) = self.glow.as_ref() {
-            let gl = self.sample(g, local);
+        if let Some((g, step)) = self.glow.as_ref() {
+            let q = self.to_back * local;
+            let gl = sample(g, q.x / step, q.y / step);
             let lift = c.glow as f32 * ((luma(gl) - 0.5).max(0.0) * 2.0);
             for (v, g) in s.iter_mut().zip(gl).take(3) {
                 *v += g * lift;
@@ -128,6 +139,12 @@ impl Screen<'_> {
     fn sample(&self, p: &Pixmap, local: Point) -> Rgba {
         let q = self.to_back * local;
         sample(p, q.x, q.y)
+    }
+
+    /// One channel of the backdrop at `local` (the colour split reads red and blue apart).
+    fn channel(&self, local: Point, ch: usize) -> f32 {
+        let q = self.to_back * local;
+        sample_channel(self.back, q.x, q.y, ch)
     }
 }
 
@@ -235,6 +252,67 @@ fn smoothstep(lo: f32, hi: f32, v: f32) -> f32 {
 
 fn luma(c: Rgba) -> f32 {
     0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
+}
+
+/// The backdrop blurred by `sigma` (device pixels) for the glow, at a half or a quarter of its size
+/// when the blur is wide enough not to show it (the glow is soft), and that step.
+fn glow_of(back: &Pixmap, sigma: f64) -> Option<(Pixmap, f64)> {
+    let step: u32 = if sigma >= 4.0 {
+        4
+    } else if sigma >= 1.0 {
+        2
+    } else {
+        1
+    };
+    let mut g = if step == 1 { back.clone() } else { shrink(back, step)? };
+    fx::blur(&mut g, sigma / f64::from(step));
+    Some((g, f64::from(step)))
+}
+
+/// `p` at `1 / step` of its size, each pixel the mean of the block it covers.
+fn shrink(p: &Pixmap, step: u32) -> Option<Pixmap> {
+    let (w, h) = (p.width(), p.height());
+    let (sw, sh) = (w.div_ceil(step), h.div_ceil(step));
+    let mut out = Pixmap::new(sw, sh)?;
+    let (src, w) = (p.data(), w as usize);
+    for (i, o) in out.data_mut().chunks_exact_mut(4).enumerate() {
+        let (bx, by) = ((i % sw as usize) * step as usize, (i / sw as usize) * step as usize);
+        let mut sum = [0u32; 4];
+        let mut n = 0u32;
+        for y in by..(by + step as usize).min(h as usize) {
+            for x in bx..(bx + step as usize).min(w) {
+                if let Some(q) = src.get((y * w + x) * 4..(y * w + x) * 4 + 4) {
+                    for (s, v) in sum.iter_mut().zip(q) {
+                        *s += u32::from(*v);
+                    }
+                    n += 1;
+                }
+            }
+        }
+        for (o, s) in o.iter_mut().zip(sum) {
+            *o = ((s + n / 2) / n.max(1)) as u8;
+        }
+    }
+    Some(out)
+}
+
+/// Channel `ch` of `p` at pixel position `(x, y)`, bilinear, clamped to its edges like [`sample`].
+fn sample_channel(p: &Pixmap, x: f64, y: f64, ch: usize) -> f32 {
+    if !(x.is_finite() && y.is_finite()) {
+        return 0.0;
+    }
+    let (x, y) = (x.clamp(0.5, f64::from(p.width()) - 0.5) - 0.5, y.clamp(0.5, f64::from(p.height()) - 0.5) - 0.5);
+    let (x0, y0) = (x.floor(), y.floor());
+    let (tx, ty) = ((x - x0) as f32, (y - y0) as f32);
+    let (w, h) = (i64::from(p.width()), i64::from(p.height()));
+    let data = p.data();
+    let get = |xi: f64, yi: f64| -> f32 {
+        let (xi, yi) = ((xi as i64).min(w - 1), (yi as i64).min(h - 1));
+        data.get(((yi * w + xi) * 4) as usize + ch).map_or(0.0, |v| f32::from(*v) / 255.0)
+    };
+    let top = get(x0, y0) + (get(x0 + 1.0, y0) - get(x0, y0)) * tx;
+    let bottom = get(x0, y0 + 1.0) + (get(x0 + 1.0, y0 + 1.0) - get(x0, y0 + 1.0)) * tx;
+    top + (bottom - top) * ty
 }
 
 /// `p` at pixel position `(x, y)` (pixel centres at .5), bilinear, premultiplied; past its edges,
