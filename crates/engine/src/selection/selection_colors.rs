@@ -85,7 +85,8 @@ pub fn collect(doc: &Document, ids: &[NodeId]) -> Vec<SelectionColor> {
                         })
                     })
                     .flatten();
-                let Ok(value) = serde_json::to_string(paint) else { continue };
+                // Graybox: colours that read the same (hex and percent) are one row, as in Figma.
+                let Ok(value) = serde_json::to_string(&as_shown(paint)) else { continue };
                 let key = (style.clone(), variable.clone(), value);
                 if let Some(index) = by_paint.get(&key).copied() {
                     if let Some(g) = groups.get_mut(index) {
@@ -112,6 +113,18 @@ pub fn collect(doc: &Document, ids: &[NodeId]) -> Vec<SelectionColor> {
         add(&n.strokes, false, None);
     }
     groups
+}
+
+/// Graybox: `paint` as the panel shows it: a solid colour to 8 bits a channel, opacity to whole
+/// percent (so 0.8118 and 0.8125 grey, both CFCFCF, are one selection colour).
+fn as_shown(paint: &Paint) -> Paint {
+    let mut p = paint.clone();
+    if let PaintKind::Solid { color } = &mut p.kind {
+        let byte = |v: f32| if v.is_finite() { (v.clamp(0.0, 1.0) * 255.0).round() / 255.0 } else { 0.0 };
+        (color.r, color.g, color.b, color.a) = (byte(color.r), byte(color.g), byte(color.b), byte(color.a));
+    }
+    p.opacity = if p.opacity.is_finite() { (p.opacity.clamp(0.0, 1.0) * 100.0).round() / 100.0 } else { 1.0 };
+    p
 }
 
 pub fn specs() -> Vec<CommandSpec> {

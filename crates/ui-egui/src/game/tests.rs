@@ -194,3 +194,51 @@ fn padding_typed_as_zero_applies() {
         assert_eq!(pad(&u), [0.0, 10.0, 0.0, 10.0], "{how}");
     }
 }
+
+/// G9: Selection colors folds past three colours (a preview and "+N"), and the header opens it.
+#[test]
+fn selection_colors_fold_past_three_and_open_on_click() {
+    use serde_json::json;
+    let mut s = figcraft_engine::Session::new();
+    let frame = s.execute("frame.create", &json!({"width": 300, "height": 100, "props": {"fill": "none"}})).unwrap()["id"].as_u64().unwrap();
+    for c in ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#00ffff"] {
+        s.execute("shape.rectangle", &json!({"parent": frame, "width": 10, "height": 10, "props": {"fill": c}})).unwrap();
+    }
+    s.execute("select.set", &json!({"ids": [frame]})).unwrap();
+    let ctx = egui::Context::default();
+    crate::theme::install_fonts(&ctx, false, 0);
+    let mut app = crate::FigApp::new(s, Box::new(crate::NoServices));
+    let mut time = 0.0;
+    let mut frame_texts = |app: &mut crate::FigApp, events: Vec<egui::Event>| {
+        time += 1.0 / 60.0;
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(280.0, 600.0))),
+            time: Some(time),
+            events,
+            ..Default::default()
+        };
+        let mut out = ctx.run_ui(input, |ui| {
+            let ds = app.session.ds().unwrap();
+            let (doc, ids) = (ds.doc.clone(), ds.selection.clone());
+            crate::selection_colors::section(app, ui, &doc, &ids);
+        });
+        out.textures_delta.clear();
+        crate::live_tests::texts(&crate::live_tests::flat(&out.shapes)).into_iter().map(|(t, _, _)| t).collect::<Vec<_>>()
+    };
+    let folded = frame_texts(&mut app, vec![]);
+    assert!(folded.iter().any(|t| t == "+2"), "five colours fold to three swatches and +2: {folded:?}");
+    assert!(!folded.iter().any(|t| t == "FF0000"), "no rows while folded");
+    let p = egui::pos2(60.0, 20.0);
+    for pressed in [true, false] {
+        frame_texts(
+            &mut app,
+            vec![
+                egui::Event::PointerMoved(p),
+                egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() },
+            ],
+        );
+    }
+    let open = frame_texts(&mut app, vec![]);
+    assert!(open.iter().any(|t| t == "FF0000") && !open.iter().any(|t| t == "+2"), "the header opens the list: {open:?}");
+    assert!(super::color_fold::opens_by_default(3) && !super::color_fold::opens_by_default(4));
+}

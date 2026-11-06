@@ -5,6 +5,7 @@ use figcraft_game::Game;
 pub mod animation;
 pub mod audio;
 pub mod brand;
+pub(crate) mod color_fold;
 pub mod components;
 pub mod editor;
 pub mod fonts;

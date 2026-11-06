@@ -68,7 +68,11 @@ pub fn section(app: &mut FigApp, ui: &mut Ui, doc: &Arc<Document>, ids: &[NodeId
         return;
     }
     let t = Tokens::get(ui.ctx());
-    widgets::section_header(ui, tr("Selection colors"), &[], false);
+    // Graybox: the header folds the list (a preview of the colours while folded).
+    if !crate::game::color_fold::header(ui, tr("Selection colors"), &colors) {
+        widgets::separator(ui);
+        return;
+    }
     // Bound the panel's height; a document with many distinct colors stays scrollable.
     ui.add_enabled_ui(!interacting, |ui| {
         egui::ScrollArea::vertical().id_salt("selection_colors_rows").max_height(240.0).show_rows(ui, 32.0, colors.len(), |ui, range| {

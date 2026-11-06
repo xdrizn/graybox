@@ -522,3 +522,23 @@ fn padding_zero_on_instances() {
     assert_eq!((y(&s, kid), h(&s, main)), (0.0, 20.0), "main");
     assert_eq!((y(&s, ikid2), h(&s, inst2)), (0.0, 20.0), "instance after main");
 }
+
+/// G9: two greys that both read CFCFCF are one selection colour, holding both layers' fills.
+#[test]
+fn selection_colors_join_colours_that_read_the_same() {
+    let mut s = Session::new();
+    let frame = id_of(&ex(&mut s, "frame.create", json!({"width": 100, "height": 100, "props": {"fill": "none"}}))["id"]).unwrap();
+    let mut kids = Vec::new();
+    for grey in [0.811_764_7, 0.8125] {
+        let fill = json!([{"type": "solid", "color": {"r": grey, "g": grey, "b": grey, "a": 1.0}}]);
+        kids.push(
+            id_of(&ex(&mut s, "shape.rectangle", json!({"parent": frame, "width": 10, "height": 10, "props": {"fills": fill}}))["id"]).unwrap(),
+        );
+    }
+    let red = id_of(&ex(&mut s, "shape.rectangle", json!({"parent": frame, "width": 10, "height": 10, "props": {"fill": "#ff0000"}}))["id"]).unwrap();
+    let colors = crate::selection_colors::collect(s.doc().unwrap(), &[frame]);
+    assert_eq!(colors.len(), 2, "grey and red");
+    let ids = |i: usize| colors[i].targets.iter().map(|t| t.id).collect::<Vec<_>>();
+    assert_eq!(ids(0), kids);
+    assert_eq!(ids(1), [red]);
+}
