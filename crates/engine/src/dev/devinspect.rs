@@ -479,6 +479,19 @@ pub fn properties_with(doc: &Document, id: NodeId, fmt: ColorFormat) -> Vec<Sect
                     pct(g.splay)
                 ),
             ),
+            // Graybox.
+            EffectKind::Crt(c) => prop(
+                "CRT",
+                format!(
+                    "curvature {}% lines {} {:?} {}% split {}% glow {}%",
+                    pct(c.curvature),
+                    num(c.line_size),
+                    c.direction,
+                    pct(c.line_opacity),
+                    pct(c.rgb_split),
+                    pct(c.glow)
+                ),
+            ),
         })
         .collect();
     if !effects.is_empty() {

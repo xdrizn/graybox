@@ -281,3 +281,66 @@ fn alt_drag_on_a_number_field_scrubs_it() {
     drag(&mut u, Modifiers::ALT);
     assert_eq!(pad(&u), 30.0, "Alt: 20 points right is +20");
 }
+
+/// The CRT effect's settings: every field shows, a typed line size and a picked direction land on
+/// the effect.
+#[test]
+fn crt_effect_fields_edit_the_effect() {
+    use crate::live_tests::{flat, text_center};
+    use egui::accesskit::Role;
+    use egui::{Event, Id, Key, Modifiers, PointerButton, pos2};
+    use figcraft_doc::{CrtDirection, EffectKind};
+    let mut s = figcraft_engine::Session::new();
+    let r = s.execute("shape.rectangle", &serde_json::json!({"x": 0, "y": 0, "width": 200, "height": 120})).unwrap();
+    let r = figcraft_engine::params::id_of(&r["id"]).unwrap();
+    s.execute("effect.add", &serde_json::json!({"ids": [r], "type": "crt"})).unwrap();
+    s.set_selection(vec![r]);
+    let mut u = crate::layers_drag_tests::Ui::new(s);
+    u.ctx.enable_accesskit();
+    u.ctx.data_mut(|d| d.insert_temp(Id::unique(("fx_open", 0usize)), true));
+    let press = |u: &mut crate::layers_drag_tests::Ui, p: egui::Pos2| {
+        for pressed in [true, false] {
+            u.frame(vec![
+                Event::PointerMoved(p),
+                Event::PointerButton { pos: p, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE },
+            ]);
+        }
+        u.frame(vec![]);
+    };
+    let field = |u: &mut crate::layers_drag_tests::Ui, name: &str| {
+        u.frame(vec![]);
+        let out = u.frame_output(vec![]);
+        let nodes = out.platform_output.accesskit_update.unwrap().nodes;
+        let n = nodes.iter().map(|(_, n)| n).find(|n| n.role() == Role::SpinButton && n.label() == Some(name)).map(|n| n.bounds().unwrap());
+        n.map(|b| pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32))
+    };
+    for name in ["Curvature", "Vignette", "Line size", "Thickness", "Line opacity", "Bleed", "RGB split", "Phosphor", "Glow", "Brightness"] {
+        assert!(field(&mut u, name).is_some(), "no field {name:?}");
+    }
+    let p = field(&mut u, "Line size").unwrap();
+    press(&mut u, p);
+    u.frame(vec![Event::Text("8".into())]);
+    u.frame(vec![Event::Key { key: Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }]);
+    u.frame(vec![]);
+    // The direction sits below the fold: scroll the Design panel down.
+    let wheel = Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        source: egui::MouseWheelSource::Unknown,
+        delta: egui::vec2(0.0, -300.0),
+        phase: egui::TouchPhase::Move,
+        modifiers: Modifiers::NONE,
+    };
+    for _ in 0..3 {
+        u.frame(vec![Event::PointerMoved(pos2(1300.0, 600.0)), wheel.clone()]);
+    }
+    u.frame(vec![]);
+    let shapes = flat(&u.frame_output(vec![]).shapes);
+    let p = text_center(&shapes, "Horizontal");
+    press(&mut u, p);
+    let shapes = flat(&u.frame_output(vec![]).shapes);
+    let p = text_center(&shapes, "Vertical");
+    press(&mut u, p);
+    let doc = u.app.session.doc().unwrap();
+    let Some(EffectKind::Crt(c)) = doc.node(r).and_then(|n| n.effects.first()).map(|e| &e.kind) else { panic!("no CRT") };
+    assert_eq!((c.line_size, c.direction), (8.0, CrtDirection::Vertical));
+}

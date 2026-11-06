@@ -38,6 +38,14 @@
   in the app (Pause list with ↓, Inventory grid with the D-pad). Spec and plan in `docs/game/specs/`.
   Fix (2026-11-04): the mouse finds menu items through layers drawn over the menu (a monitor
   bezel image covered the whole screen and hid the items from the pointer).
+- G9 CRT effect (2026-11-06): new effect type `crt` (`figcraft_doc::Crt`, our `doc/src/crt.rs`),
+  a backdrop effect drawn like glass by our `render/src/crt.rs`: bulge, red/blue split, glow,
+  box-filtered scanlines with bleed, phosphor columns, vignette, brightness, all in the layer's own
+  coordinates. A render with a visible CRT in view on its page is drawn in one piece (no bands),
+  canvas patches redraw CRT layers whole, and its backdrop reads clamp at a cut view's edge; the CRT clears its shape on the surface below as far as its picture
+  will not cover it, so in Play (transparent frame) the unbent layers never show. In Play it bends the UI layers only, not the 3D scene.
+  Figma and Vector Drawable exports leave it out with a warning. Checked in the app: canvas,
+  zoomed to 30 % and 300 %, Play. Spec and plan in `docs/game/specs/2026-11-06-crt-effect-*`.
 
 ## Decisions
 - Play redraws its whole screen when a variant changes on hover. Costly unchanged layers (layer blur,
@@ -175,6 +183,20 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   selected layer (after Scroll behavior).
 - `crates/ui-egui/src/present/player.rs` `player`: calls `game::menu_overlay` right after `draw`.
 - `crates/doc/src/game.rs` and `crates/engine/src/cmd/game.rs` are ours (game settings, game commands).
+- CRT effect (`crates/doc/src/crt.rs`, `crates/render/src/crt.rs` are ours):
+  - `doc/src/lib.rs`: `pub mod crt; pub use crt::{Crt, CrtDirection};`, `mod crt_tests`.
+  - `doc/src/props.rs`: `EffectKind::Crt`, `Effect::TYPES` entry, `crt()`, `of_type`, `label`,
+    `backdrop_radius` arm. `doc/src/colors.rs`: no-colour arm.
+  - `engine/src/cmd/arrange.rs` (scale: line size), `engine/src/dev/devinspect.rs` (row),
+    `engine/src/effects_tests.rs` (type list).
+  - `format/src/fig/export/{paint,layer,assets}.rs`: `figma_effects` leaves CRT out.
+  - `vectordrawable/src/{walk,warnings}.rs`: `Warn::Crt`.
+  - `render/src/lib.rs` (`mod crt`, `band_overlap` none with a CRT, `render_alone` filter),
+    `render/src/backdrop.rs` (`has_effects`, `effects` arm), `render/src/draw.rs` (reach arm,
+    `crt::clear_under` before the layer's composite), `render/src/effect_cache.rs`,
+    `render/src/retained.rs` (`sensitive`).
+  - `ui-egui/src/panels/right.rs` (imports), `ui-egui/src/panels/right/effects.rs` (the CRT
+    fields arm and `CrtField`).
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.
 

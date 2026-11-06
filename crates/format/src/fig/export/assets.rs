@@ -172,7 +172,7 @@ impl<'d> Exporter<'d> {
             match &st.kind {
                 StyleKind::Paint { paints } => f.push(("fillPaints", self.paints(paints, true, &none))),
                 StyleKind::Effect { effects } => {
-                    let list = effects.iter().enumerate().map(|(i, x)| self.effect(x, i, &none)).collect();
+                    let list = self.figma_effects(effects).iter().map(|(i, x)| self.effect(x, *i, &none)).collect();
                     f.extend([("fillPaints", arr(Vec::new())), ("effects", arr(list))]);
                 }
                 StyleKind::Grid { grids } => {

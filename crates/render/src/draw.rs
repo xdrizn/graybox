@@ -538,7 +538,7 @@ pub fn effect_margin(n: &Node) -> f64 {
         .sum();
     let others = visible()
         .map(|e| match &e.kind {
-            EffectKind::BackgroundBlur { .. } | EffectKind::Glass(_) => e.backdrop_radius() * 2.0,
+            EffectKind::BackgroundBlur { .. } | EffectKind::Glass(_) | EffectKind::Crt(_) => e.backdrop_radius() * 2.0,
             EffectKind::DropShadow(s) => s.radius * 2.0 + s.spread.abs() * figcraft_doc::SPREAD_MITER_LIMIT + s.offset.0.abs() + s.offset.1.abs(),
             // Inner shadows cast from around a layer's pixels (groups, image fills with alpha; any
             // image counts here): a layer cut off at the view would cast one from the cut.
@@ -723,6 +723,8 @@ fn draw_layer(ctx: &Ctx, pix: &mut Pixmap, n: &Node, parent_xf: Affine, depth: u
         .filter(|_| back_shape.is_none());
     let cached = cache_key.as_ref().and_then(crate::effect_cache::get);
     let first_back = if cached.is_none() && (!casts || nested()) { read_backdrop(pix) } else { None };
+    // Graybox: whether the backdrop effects drew (a CRT clears under it only then).
+    let mut drew_back = first_back.is_some();
     if let Some(pixels) = cached {
         layer = pixels;
     } else {
@@ -799,8 +801,13 @@ fn draw_layer(ctx: &Ctx, pix: &mut Pixmap, n: &Node, parent_xf: Affine, depth: u
         if let Some(mut b) = read_backdrop(pix) {
             b.draw_pixmap(0, 0, layer.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
             layer = b;
+            drew_back = true;
         }
         layer_effects(ctx, &mut layer, n, id, lxf);
+    }
+    // Graybox: a CRT replaces what lies under it (`crt::clear_under`).
+    if let Some(sh) = back_shape.as_ref().filter(|_| drew_back && crate::crt::on(n)) {
+        crate::crt::clear_under(pix, (lx, ly), &layer, sh, lxf, op);
     }
     composite(pix, (lx, ly), &layer, op, n.blend);
 }
@@ -811,7 +818,11 @@ fn backdrop_layer(ctx: &Ctx, pix: &Pixmap, n: &Node, sh: &shadow::Outline, at: (
     let ((lx, ly), (lw, lh)) = (at, size);
     let pad = backdrop::pad(n, ctx.scale);
     let p = i32::try_from(pad).unwrap_or(0);
-    let back = backdrop::backdrop(pix, ctx.under, lx.saturating_sub(p), ly.saturating_sub(p), lw + pad * 2, lh + pad * 2)?;
+    let mut back = backdrop::backdrop(pix, ctx.under, lx.saturating_sub(p), ly.saturating_sub(p), lw + pad * 2, lh + pad * 2)?;
+    // Graybox: a CRT reads past a view's edge (see `crt::extend_edges`).
+    if crate::crt::on(n) {
+        crate::crt::extend_edges(&mut back, (lx.saturating_sub(p), ly.saturating_sub(p)), (pix.width(), pix.height()));
+    }
     backdrop::effects(n, backdrop::EffectFrame { shape: sh, back: &back, pad, size: (lw, lh), xf: lxf, scale: ctx.scale })
 }
 

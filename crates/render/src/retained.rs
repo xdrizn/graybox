@@ -69,9 +69,12 @@ struct Sensitive {
 }
 
 /// Grain effects (noise, texture) work on their layer's pixels, which end where a render cuts the
-/// layer (texture scatters pixels from across the cut): grainy layers are redrawn whole.
+/// layer (texture scatters pixels from across the cut): grainy layers are redrawn whole. (Graybox:
+/// so are CRT layers, whose bulge reads the backdrop anywhere under them.)
 fn sensitive(doc: &Document) -> Sensitive {
-    let noisy = doc.nodes().filter(|n| n.effects.iter().any(|e| e.visible && matches!(e.kind, EffectKind::Noise(_) | EffectKind::Texture(_))));
+    let noisy = doc
+        .nodes()
+        .filter(|n| n.effects.iter().any(|e| e.visible && matches!(e.kind, EffectKind::Noise(_) | EffectKind::Texture(_) | EffectKind::Crt(_))));
     let pattern_sources = doc
         .nodes()
         .flat_map(|n| n.fills.iter().chain(&n.strokes))
@@ -226,7 +229,7 @@ impl Retained {
             Prepared::Full { snapped, px, fonts, sensitive } => {
                 // Bands at least twice what they overlap (each draws its overlap again both ways),
                 // so a background blur reaching past `band_h` makes the bands taller.
-                let overlap = crate::band_overlap(doc, &snapped, u32::MAX).map(|o| o.min(snapped.height));
+                let overlap = crate::band_overlap(doc, page, &snapped, u32::MAX).map(|o| o.min(snapped.height));
                 let band_h = band_h.max(1).max(overlap.unwrap_or(0).saturating_mul(2));
                 // A blur that can't be measured: one piece.
                 let Some(overlap) = overlap else {

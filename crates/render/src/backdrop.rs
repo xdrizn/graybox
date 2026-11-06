@@ -129,7 +129,7 @@ pub(crate) fn replace(dst: &mut Pixmap, at: (i32, i32), src: &Pixmap, clip: Opti
 
 /// Whether a node has a visible background blur or glass.
 pub fn has_effects(n: &Node) -> bool {
-    n.effects.iter().any(|e| (e.visible && matches!(e.kind, EffectKind::Glass(_))) || e.backdrop_radius() > 0.0)
+    n.effects.iter().any(|e| (e.visible && matches!(e.kind, EffectKind::Glass(_) | EffectKind::Crt(_))) || e.backdrop_radius() > 0.0)
 }
 
 /// Pixels around a layer its backdrop effects read at `scale`.
@@ -161,6 +161,8 @@ pub fn effects(n: &Node, frame: EffectFrame<'_>) -> Option<Pixmap> {
                 l
             }
             EffectKind::Glass(g) => glass::glass(g, frame, glass::RoundedRect::of(n))?,
+            // Graybox.
+            EffectKind::Crt(c) => crate::crt::crt(c, frame)?,
             _ => continue,
         };
         match out.as_mut() {

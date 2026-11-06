@@ -168,6 +168,14 @@ impl<'d> Exporter<'d> {
         }
     }
 
+    /// Graybox: the effects a Figma file can hold, with their indices in `effects` (CRT is left out).
+    pub(super) fn figma_effects(&mut self, effects: &[figcraft_doc::Effect]) -> Vec<(usize, figcraft_doc::Effect)> {
+        if effects.iter().any(|x| matches!(x.kind, EffectKind::Crt(_))) {
+            self.warn("CRT effects were left out");
+        }
+        effects.iter().cloned().enumerate().filter(|(_, x)| !matches!(x.kind, EffectKind::Crt(_))).collect()
+    }
+
     /// Effect `index` of a layer, with the variables `bound` to its fields.
     pub(super) fn effect(&mut self, x: &figcraft_doc::Effect, index: usize, bound: &Bound) -> Kv<'static> {
         let mut f: Fields = vec![("visible", b(x.visible))];
@@ -235,6 +243,11 @@ impl<'d> Exporter<'d> {
             EffectKind::Glass(g) => {
                 self.warn("glass effects keep only their frost");
                 f.extend([("type", e("GLASS")), ("radius", fl(g.sanitized().frost))]);
+            }
+            // Graybox: Figma has no CRT; the layer and style writers leave it out (see `figma_effects`).
+            EffectKind::Crt(_) => {
+                self.warn("CRT effects were left out");
+                f = vec![("visible", b(false)), ("type", e("FOREGROUND_BLUR")), ("radius", fl(0.0))];
             }
         }
         o(f)

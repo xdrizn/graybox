@@ -10,6 +10,8 @@ pub(crate) enum Warn {
     Noise,
     Texture,
     Glass,
+    /// Graybox.
+    Crt,
     Blend,
     ImageFill,
     PatternFill,
@@ -38,6 +40,7 @@ impl Warn {
             Warn::Noise => "noise effects were left out",
             Warn::Texture => "texture effects were left out",
             Warn::Glass => "glass effects were left out",
+            Warn::Crt => "CRT effects were left out",
             Warn::Blend => "blend modes were drawn as normal",
             Warn::ImageFill => "image fills were left out",
             Warn::PatternFill => "pattern fills were left out",
