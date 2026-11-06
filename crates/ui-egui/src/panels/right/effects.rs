@@ -343,39 +343,30 @@ fn effect_settings(app: &mut FigApp, ui: &mut Ui, ids: &[NodeId], i: usize, e: &
             };
             let pct = |v: f64| Some((v * 100.0).round());
             let unit = |v: f64| (v / 100.0).clamp(0.0, 1.0);
-            let field = |ui: &mut Ui, prop: &str, label: &str, v: Option<f64>, suffix: &str| {
-                widgets::number_field(ui, Id::unique(("crt", prop, i)), Lead::Text(tr(label)), v, suffix, half, 1.0)
-            };
-            let pair = |app: &mut FigApp, ui: &mut Ui, a: CrtField<'_>, b: Option<CrtField<'_>>| {
+            // One field a row: the names are long for half a row.
+            let one = |app: &mut FigApp, ui: &mut Ui, (prop, label, v, f): CrtField<'_>| {
                 row(ui, 32.0, |ui| {
-                    for (prop, label, v, f) in std::iter::once(a).chain(b) {
-                        let suffix = if prop == "lineSize" { "" } else { "%" };
-                        let ed = field(ui, prop, label, v, suffix);
-                        edit(app, ed, &|x| with(&|c2| f(c2, x)));
-                    }
+                    let suffix = if prop == "lineSize" { "" } else { "%" };
+                    let w = ui.available_width();
+                    let ed = widgets::number_field(ui, Id::unique(("crt", prop, i)), Lead::Text(tr(label)), v, suffix, w, 1.0);
+                    edit(app, ed, &|x| with(&|c2| f(c2, x)));
                 });
             };
-            pair(
-                app,
-                ui,
-                ("curvature", "Curvature", pct(c.curvature), &|c2, x| c2.curvature = unit(x)),
-                Some(("vignette", "Vignette", pct(c.vignette), &|c2, x| c2.vignette = unit(x))),
-            );
             let size = |c2: &mut Crt, x: f64| c2.line_size = x.clamp(Crt::MIN_LINE_SIZE, Crt::MAX_LINE_SIZE);
-            pair(
-                app,
-                ui,
+            let bright = |c2: &mut Crt, x: f64| c2.brightness = (x / 100.0).clamp(Crt::MIN_BRIGHTNESS, Crt::MAX_BRIGHTNESS);
+            let before: [CrtField<'_>; 6] = [
+                ("curvature", "Curvature", pct(c.curvature), &|c2, x| c2.curvature = unit(x)),
+                ("vignette", "Vignette", pct(c.vignette), &|c2, x| c2.vignette = unit(x)),
                 ("lineSize", "Line size", Some(c.line_size), &size),
-                Some(("thickness", "Thickness", pct(c.thickness), &|c2, x| c2.thickness = unit(x))),
-            );
-            pair(
-                app,
-                ui,
+                ("thickness", "Thickness", pct(c.thickness), &|c2, x| c2.thickness = unit(x)),
                 ("lineOpacity", "Line opacity", pct(c.line_opacity), &|c2, x| c2.line_opacity = unit(x)),
-                Some(("bleed", "Bleed", pct(c.bleed), &|c2, x| c2.bleed = unit(x))),
-            );
+                ("bleed", "Bleed", pct(c.bleed), &|c2, x| c2.bleed = unit(x)),
+            ];
+            for fld in before {
+                one(app, ui, fld);
+            }
             row(ui, 32.0, |ui| {
-                let resp = widgets::dropdown(ui, tr(c.direction.label()), half, None);
+                let resp = widgets::dropdown(ui, tr(c.direction.label()), ui.available_width(), None);
                 menu_popup(&resp).show(|ui| {
                     for d in CrtDirection::ALL {
                         if menu_item(ui, tr(d.label()), "") {
@@ -384,17 +375,16 @@ fn effect_settings(app: &mut FigApp, ui: &mut Ui, ids: &[NodeId], i: usize, e: &
                         }
                     }
                 });
-                let ed = field(ui, "rgbSplit", "RGB split", pct(c.rgb_split), "%");
-                edit(app, ed, &|x| with(&|c2| c2.rgb_split = unit(x)));
             });
-            pair(
-                app,
-                ui,
+            let after: [CrtField<'_>; 4] = [
+                ("rgbSplit", "RGB split", pct(c.rgb_split), &|c2, x| c2.rgb_split = unit(x)),
                 ("phosphor", "Phosphor", pct(c.phosphor), &|c2, x| c2.phosphor = unit(x)),
-                Some(("glow", "Glow", pct(c.glow), &|c2, x| c2.glow = unit(x))),
-            );
-            let bright = |c2: &mut Crt, x: f64| c2.brightness = (x / 100.0).clamp(Crt::MIN_BRIGHTNESS, Crt::MAX_BRIGHTNESS);
-            pair(app, ui, ("brightness", "Brightness", pct(c.brightness), &bright), None);
+                ("glow", "Glow", pct(c.glow), &|c2, x| c2.glow = unit(x)),
+                ("brightness", "Brightness", pct(c.brightness), &bright),
+            ];
+            for fld in after {
+                one(app, ui, fld);
+            }
         }
     }
 }

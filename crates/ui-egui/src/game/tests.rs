@@ -322,6 +322,18 @@ fn crt_effect_fields_edit_the_effect() {
     u.frame(vec![Event::Text("8".into())]);
     u.frame(vec![Event::Key { key: Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }]);
     u.frame(vec![]);
+    // The direction sits below the fold: scroll the Design panel down.
+    let wheel = Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        source: egui::MouseWheelSource::Unknown,
+        delta: egui::vec2(0.0, -300.0),
+        phase: egui::TouchPhase::Move,
+        modifiers: Modifiers::NONE,
+    };
+    for _ in 0..3 {
+        u.frame(vec![Event::PointerMoved(pos2(1300.0, 600.0)), wheel.clone()]);
+    }
+    u.frame(vec![]);
     let shapes = flat(&u.frame_output(vec![]).shapes);
     let p = text_center(&shapes, "Horizontal");
     press(&mut u, p);
