@@ -19,6 +19,7 @@ pub mod map;
 pub mod menu;
 pub mod proto_targets;
 pub mod renderer;
+pub mod screen_fit;
 pub mod screen_ui;
 pub mod share;
 

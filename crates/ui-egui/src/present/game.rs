@@ -595,6 +595,47 @@ mod screen_tests {
         (p, hud, bar, inventory)
     }
 
+    /// Play takes the monitor's shape: layers anchored by their constraints reach the monitor's
+    /// corners, centre and edges whatever its size, and the saved design keeps its size.
+    #[test]
+    fn constraints_anchor_layers_to_any_monitor() {
+        use figcraft_doc::{Constraints, HConstraint, VConstraint};
+        let mut doc = figcraft_doc::Document::new("Anchors");
+        let page = doc.first_page().unwrap();
+        let hud = doc.create(page, NodeKind::Frame, "HUD", 0.0, 0.0, 1280.0, 720.0).unwrap();
+        let map = doc.create(hud, NodeKind::Rectangle, "Minimap", 1160.0, 20.0, 100.0, 100.0).unwrap();
+        let aim = doc.create(hud, NodeKind::Rectangle, "Crosshair", 630.0, 350.0, 20.0, 20.0).unwrap();
+        let strip = doc.create(hud, NodeKind::Rectangle, "Bottom strip", 0.0, 700.0, 1280.0, 20.0).unwrap();
+        let health = doc.create(hud, NodeKind::Rectangle, "Health", 20.0, 660.0, 200.0, 20.0).unwrap();
+        let anchor =
+            |doc: &mut figcraft_doc::Document, id, horizontal, vertical| doc.node_mut(id).unwrap().constraints = Constraints { horizontal, vertical };
+        anchor(&mut doc, map, HConstraint::Right, VConstraint::Top);
+        anchor(&mut doc, aim, HConstraint::Center, VConstraint::Center);
+        anchor(&mut doc, strip, HConstraint::LeftRight, VConstraint::Bottom);
+        anchor(&mut doc, health, HConstraint::Left, VConstraint::Bottom);
+        let mut p = Presenter::new(hud);
+        p.game = Some(crate::game::Play::new());
+        p.sync(&Arc::new(doc), 0.0);
+
+        for (w, h) in [(1280.0, 720.0), (3440.0, 1440.0), (1920.0, 1200.0), (1024.0, 768.0), (3840.0, 2160.0)] {
+            let area = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
+            let l = super::super::layout::layout(&mut p, area, super::super::layout::FULL).unwrap();
+            let on_screen = |id| l.place.rect(l.disp.world_bounds(id).unwrap());
+            let k = l.scale as f32;
+            let near = |a: f32, b: f32| (a - b).abs() < 0.5;
+            assert!(near(l.screen.width(), w) && near(l.screen.height(), h), "{w}×{h}: the frame fills the monitor");
+            let m = on_screen(map);
+            assert!(near(m.max.x, w - 20.0 * k) && near(m.min.y, 20.0 * k), "{w}×{h}: the minimap keeps its corner");
+            assert!(near(on_screen(aim).center().x, w / 2.0) && near(on_screen(aim).center().y, h / 2.0), "{w}×{h}: the crosshair stays centred");
+            let s = on_screen(strip);
+            assert!(near(s.min.x, 0.0) && near(s.max.x, w) && near(s.max.y, h), "{w}×{h}: the strip spans the bottom edge");
+            let hb = on_screen(health);
+            assert!(near(hb.min.x, 20.0 * k) && near(hb.max.y, h - 40.0 * k), "{w}×{h}: health keeps the bottom-left corner");
+        }
+        let saved = p.design.as_ref().unwrap().node(hud).unwrap();
+        assert_eq!((saved.width, saved.height), (1280.0, 720.0), "the design keeps its size");
+    }
+
     #[test]
     fn a_game_bar_keeps_its_drawn_size_as_the_full_mark() {
         let (mut p, _, bar, _) = play();

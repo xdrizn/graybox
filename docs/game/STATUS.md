@@ -61,6 +61,12 @@
   second's, at once, no animation: size, scale and rotation, fills, strokes, effects, corners and
   opacity move; what each slot holds and its place stay (auto layout reflows). Play only, the file
   is untouched. Identical slots keep the orange outline (`game::hotbar::base_looks`).
+- Any monitor (owner, 2026-11-06): in Play the screen frame as designed is the reference size. It is
+  scaled until its width or height meets the monitor's (nothing cut, no bars) and stretched along
+  the other side to the monitor's shape; the layers' Constraints (Design tab) anchor them: Right +
+  Top keeps a minimap in that corner, Center the crosshair in the middle, Left & Right stretches.
+  A 16:9 design on a 16:9 monitor looks as before; 4K is the same layout twice as big. Overlays keep
+  their designed size. The presenter's Fit / Fill options don't apply in Play (`game::screen_fit`).
 - Named inputs (owner, 2026-11-04): the designer names keys/buttons (Prototype, nothing selected →
   Game inputs); a press fires the Game event of that name on the screen on top only, so one key
   can open a screen and close it from that screen. Every file starts with `pegar-item` on E /
@@ -106,6 +112,8 @@
 
 ## Upstream hooks
 Every place where we changed an upstream FigCraft file, so merges stay easy:
+- `crates/ui-egui/src/present/layout.rs` `layout`: in Play the frame is sized and scaled by
+  `game::screen_fit::fit` (anchoring to any monitor).
 - `Cargo.toml` `[workspace.dependencies]`: `figcraft-game` path entry.
 - `crates/ui-egui/Cargo.toml`: depends on `figcraft-game`.
 - `crates/ui-egui/src/lib.rs`: `pub mod game;`.

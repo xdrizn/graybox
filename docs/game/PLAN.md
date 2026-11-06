@@ -116,6 +116,8 @@ Death are only *examples* in the starter kit, never required.
 - [x] Hotbars: keys 1-9, wheel and LB/RB select a slot.
 - [x] Wireframe hotbars (experimental): plain frames, no components; the first slot is drawn as
   the selected look and moves to the picked slot (size, scale, paints, corners, opacity).
+- [x] Play fills any monitor: the frame takes the monitor's shape at its designed scale and the
+  layers' constraints anchor them (corners, centre, stretched edges).
 - [ ] "Selecting one selects all": not reproduced yet; needs a capture from the owner.
 
 ### G9 — Editing polish (owner's list, 2026-11-06)

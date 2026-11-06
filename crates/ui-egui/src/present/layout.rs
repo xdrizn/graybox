@@ -110,7 +110,14 @@ pub(super) fn layout(p: &mut Presenter, area: Rect, chrome: Chrome) -> Option<La
     let (device, landscape) = if p.game.is_some() { (None, false) } else { (settings.device(), settings.landscape()) };
     let fills = settings.responsive && device.is_none();
     let whole_area = (f64::from(area.width().round()), f64::from(area.height().round()));
-    p.respond_to(settings.responsive.then(|| device.map_or(whole_area, |d| (d.width, d.height))));
+    // Game Play: the frame takes the monitor's shape at its designed scale (`game::screen_fit`).
+    let game_fit = p
+        .game
+        .as_ref()
+        .and(p.design.as_ref())
+        .and_then(|d| d.node(p.current))
+        .and_then(|n| crate::game::screen_fit::fit((n.width, n.height), whole_area));
+    p.respond_to(game_fit.map(|f| f.0).or_else(|| settings.responsive.then(|| device.map_or(whole_area, |d| (d.width, d.height)))));
     let disp = p.display()?;
     let fb = p.placement_bounds(p.current)?;
     let view = if chrome.pane { PresentView::default() } else { p.view };
@@ -135,7 +142,13 @@ pub(super) fn layout(p: &mut Presenter, area: Rect, chrome: Chrome) -> Option<La
             PresentScale::Actual => 1.0,
         })
     };
-    let mut scale = if fills { 1.0 } else { factor(vec2(sw as f32, sh as f32)) };
+    let mut scale = if let Some((_, k)) = game_fit {
+        k
+    } else if fills {
+        1.0
+    } else {
+        factor(vec2(sw as f32, sh as f32))
+    };
     // The body doesn't scale exactly with the screen (its edges have a minimum): size it once more.
     if body.is_some() {
         scale *= factor(outer(scale).3);
