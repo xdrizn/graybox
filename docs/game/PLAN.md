@@ -114,6 +114,8 @@ Death are only *examples* in the starter kit, never required.
 - [x] Menu navigation and game settings sections padded like the rest of the panel.
 - [x] Named game inputs (T for a watch, E to pick up by default) as Game event triggers.
 - [x] Hotbars: keys 1-9, wheel and LB/RB select a slot.
+- [x] Wireframe hotbars (experimental): plain frames, no components; the first slot is drawn as
+  the selected look and moves to the picked slot (size, scale, paints, corners, opacity).
 - [ ] "Selecting one selects all": not reproduced yet; needs a capture from the owner.
 
 ### G9 — Editing polish (owner's list, 2026-11-06)

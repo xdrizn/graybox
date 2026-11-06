@@ -55,6 +55,12 @@
 - Hotbars (owner, 2026-11-04): an auto layout row marked as a hotbar keeps one selected slot in Play:
   keys 1-9 pick, the wheel (unless a map is open) and LB/RB step, without stopping the player. The
   selected slot shows its State=Focused variant.
+- Wireframe hotbars (owner, 2026-11-06, experimental): when no slot is a component copy and the
+  first slot is drawn differently from the second, the first slot is the selected look and the
+  second the plain one. Picking slot 4 gives slot 4 the first one's look and the first the
+  second's, at once, no animation: size, scale and rotation, fills, strokes, effects, corners and
+  opacity move; what each slot holds and its place stay (auto layout reflows). Play only, the file
+  is untouched. Identical slots keep the orange outline (`game::hotbar::base_looks`).
 - Named inputs (owner, 2026-11-04): the designer names keys/buttons (Prototype, nothing selected →
   Game inputs); a press fires the Game event of that name on the screen on top only, so one key
   can open a screen and close it from that screen. Every file starts with `pegar-item` on E /

@@ -210,12 +210,18 @@ fn hotbar_step(p: &mut Presenter, ctx: &Context, pads: u32) {
     });
     let Some(play) = p.game.as_mut() else { return };
     let mut looks = Vec::new();
+    let mut plain_looks = Vec::new();
     play.hotbar_outline.clear();
     for (bar, settings) in &bars {
         let count = game::menu::items(original, *bar).len();
         let selected = play.hotbars.get(bar).copied().unwrap_or(0);
         let next = game::hotbar::step(selected, count, settings, &input);
         play.hotbars.insert(*bar, next);
+        // Wireframe hotbars: the first slot's look moves to the selected one, no outline.
+        if let Some(base) = game::hotbar::base_looks(original, *bar, next) {
+            plain_looks.extend(base);
+            continue;
+        }
         let (bar_looks, outline) = game::hotbar::looks(original, *bar, next, settings);
         looks.extend(bar_looks);
         play.hotbar_outline.extend(outline);
@@ -225,10 +231,15 @@ fn hotbar_step(p: &mut Presenter, ctx: &Context, pads: u32) {
         .into_iter()
         .filter(|(slot, variant)| matches!(design.node(*slot).map(|n| &n.kind), Some(NodeKind::Instance { component, .. }) if component != variant))
         .collect();
-    if stale.is_empty() {
+    let plain_stale: Vec<(NodeId, game::hotbar::Look)> =
+        plain_looks.into_iter().filter(|(slot, look)| game::hotbar::Look::of(design, *slot).as_ref() != Some(look)).collect();
+    if stale.is_empty() && plain_stale.is_empty() {
         return;
     }
     let before = design.clone();
+    for (slot, look) in plain_stale {
+        look.apply(design, slot);
+    }
     for (slot, variant) in stale {
         figcraft_engine::cmd::game::keep_instance_size(design, slot);
         if let Some(n) = design.node_mut(slot)
