@@ -464,9 +464,10 @@ fn help(p: &Presenter, ui: &Ui, rect: Rect) {
     } else {
         "WASD: move  ·  mouse: look/shoot  ·  R: reload  ·  H: heal  ·  F10: editor"
     };
-    let r = Rect::from_center_size(pos2(rect.center().x, rect.max.y - 24.0), vec2(rect.width().min(650.0) - 24.0, 28.0));
-    ui.painter().rect_filled(r, 4, t.panel.gamma_multiply(0.9));
-    ui.painter().text(r.center(), Align2::CENTER_CENTER, text, crate::theme::regular(12.0), t.text);
+    // Graybox: low and see-through, so it covers as little of the HUD as it can.
+    let r = Rect::from_center_size(pos2(rect.center().x, rect.max.y - 16.0), vec2(rect.width().min(650.0) - 24.0, 24.0));
+    ui.painter().rect_filled(r, 4, t.panel.gamma_multiply(0.45));
+    ui.painter().text(r.center(), Align2::CENTER_CENTER, text, crate::theme::regular(12.0), t.text.gamma_multiply(0.75));
 }
 
 #[cfg(test)]
