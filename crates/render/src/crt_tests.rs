@@ -230,3 +230,25 @@ fn bands_draw_what_one_piece_draws() {
     let worst = banded.data().iter().zip(whole.data()).map(|(a, b)| a.abs_diff(*b)).max().unwrap();
     assert!(worst <= 2, "{worst}");
 }
+
+#[test]
+fn over_a_transparent_backdrop_the_crt_replaces_what_is_under_it() {
+    // In Play the frame has no background (the game shows through): where the bulged picture
+    // leaves the backdrop's transparency, nothing of the unbent layers may show.
+    let (mut d, f, pane) = crt_scene(Crt { curvature: 1.0, ..plain() }, "808080");
+    d.get_mut(f).unwrap().fills.clear();
+    let r = d.create(f, NodeKind::Rectangle, "Box", 100.0, 60.0, 40.0, 40.0).unwrap();
+    solid(&mut d, r, "FF5A00");
+    // Below the pane in z-order.
+    let fr = d.get_mut(f).unwrap();
+    let (ri, pi) = (fr.children.iter().position(|c| *c == r).unwrap(), fr.children.iter().position(|c| *c == pane).unwrap());
+    fr.children.swap(ri, pi);
+    let got = render_node(&d, f, 1.0).unwrap();
+    // The box's own corner: the bulge shows the box smaller, so the backdrop there is clear.
+    assert!(px(&got, 100, 60)[3] <= 10, "{:?}", px(&got, 100, 60));
+    // The box's centre still shows it.
+    assert!(px(&got, 120, 80)[0] >= 0xF0, "{:?}", px(&got, 120, 80));
+    // Outside the pane nothing changes.
+    let want = without_effect(&d, f, pane, 1.0);
+    assert_eq!(px(&got, 30, 30), px(&want, 30, 30));
+}

@@ -802,6 +802,10 @@ fn draw_layer(ctx: &Ctx, pix: &mut Pixmap, n: &Node, parent_xf: Affine, depth: u
         }
         layer_effects(ctx, &mut layer, n, id, lxf);
     }
+    // Graybox: a CRT replaces what lies under it (`crt::clear_under`).
+    if let Some(sh) = back_shape.as_ref().filter(|_| crate::crt::on(n)) {
+        crate::crt::clear_under(pix, sh, Affine::translate((f64::from(lx), f64::from(ly))) * lxf, op);
+    }
     composite(pix, (lx, ly), &layer, op, n.blend);
 }
 

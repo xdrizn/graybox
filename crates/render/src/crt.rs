@@ -130,6 +130,21 @@ impl Screen<'_> {
     }
 }
 
+/// Whether node `n` has a visible CRT.
+pub(crate) fn on(n: &figcraft_doc::Node) -> bool {
+    n.effects.iter().any(|e| e.visible && matches!(e.kind, figcraft_doc::EffectKind::Crt(_)))
+}
+
+/// Clear `pix` under `shape` (local → `pix` through `xf`) by `strength`: the CRT draws the whole
+/// picture inside its shape, so the unbent layers under it must not show where the bulged picture
+/// leaves the backdrop's transparency (in Play, where the game shows through).
+pub(crate) fn clear_under(pix: &mut Pixmap, shape: &crate::shadow::Outline, xf: Affine, strength: f32) {
+    let Some(path) = crate::draw::ts_path(&shape.0) else { return };
+    let mut paint = tiny_skia::Paint { blend_mode: tiny_skia::BlendMode::DestinationOut, anti_alias: true, ..Default::default() };
+    paint.set_color_rgba8(0, 0, 0, (strength.clamp(0.0, 1.0) * 255.0).round() as u8);
+    pix.fill_path(&path, &paint, shape.1, crate::draw::ts_transform(xf), None);
+}
+
 /// Whether `doc` has a visible CRT. Its bulge reads the backdrop anywhere under its layer, further
 /// than any band overlap: a render with one is not cut into bands.
 pub(crate) fn in_doc(doc: &figcraft_doc::Document) -> bool {
