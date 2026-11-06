@@ -495,3 +495,30 @@ fn shared_files_carry_their_font_store_fonts() {
     ex(&mut s, "text.style", json!({"id": text, "fontFamily": "Graybox Private Font"}));
     assert!(crate::cmd::game::shareable_fonts(s.doc().unwrap()).is_empty());
 }
+
+/// G9: padding 0 moves the children of a frame, an instance (its own override) and a main.
+#[test]
+fn padding_zero_on_instances() {
+    let mut s = Session::new();
+    let f = id_of(
+        &ex(&mut s, "frame.create", json!({"width": 100, "height": 40, "props": {"layout": "vertical", "padding": 10, "sizingV": "hug"}}))["id"],
+    )
+    .unwrap();
+    let kid = id_of(&ex(&mut s, "shape.rectangle", json!({"parent": f, "width": 20, "height": 20}))["id"]).unwrap();
+    let y = |s: &Session, n| s.doc().unwrap().node(n).unwrap().transform.as_coeffs()[5];
+    let h = |s: &Session, n| s.doc().unwrap().node(n).unwrap().height;
+    assert_eq!(y(&s, kid), 10.0);
+    ex(&mut s, "node.set", json!({"ids": [f], "props": {"paddingVertical": 0}}));
+    assert_eq!((y(&s, kid), h(&s, f)), (0.0, 20.0), "frame");
+    ex(&mut s, "node.set", json!({"ids": [f], "props": {"paddingVertical": 10}}));
+    let main = id_of(&ex(&mut s, "component.create", json!({"ids": [f]}))["id"]).unwrap();
+    let inst = id_of(&ex(&mut s, "instance.create", json!({"component": main}))["id"]).unwrap();
+    let ikid = s.doc().unwrap().node(inst).unwrap().children[0];
+    ex(&mut s, "node.set", json!({"ids": [inst], "props": {"paddingVertical": 0}}));
+    assert_eq!((y(&s, ikid), h(&s, inst)), (0.0, 20.0), "instance");
+    let inst2 = id_of(&ex(&mut s, "instance.create", json!({"component": main}))["id"]).unwrap();
+    let ikid2 = s.doc().unwrap().node(inst2).unwrap().children[0];
+    ex(&mut s, "node.set", json!({"ids": [main], "props": {"paddingVertical": 0}}));
+    assert_eq!((y(&s, kid), h(&s, main)), (0.0, 20.0), "main");
+    assert_eq!((y(&s, ikid2), h(&s, inst2)), (0.0, 20.0), "instance after main");
+}

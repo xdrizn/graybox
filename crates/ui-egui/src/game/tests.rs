@@ -146,3 +146,51 @@ fn variant_shows_and_changes_only_its_own_value() {
         "the other variant keeps its value"
     );
 }
+
+/// G9: a padding typed as 0 applies at once, whichever way the edit ends (Enter, or a click on
+/// the canvas), on a frame and on an instance.
+#[test]
+fn padding_typed_as_zero_applies() {
+    use egui::{Event, Key, Modifiers};
+    use serde_json::json;
+    let field = |u: &mut crate::layers_drag_tests::Ui, label: &str| {
+        u.ctx.enable_accesskit();
+        u.frame(vec![]);
+        let out = u.frame_output(vec![]);
+        let nodes = out.platform_output.accesskit_update.expect("an AccessKit update").nodes;
+        let n = nodes.iter().map(|(_, n)| n).find(|n| n.role() != egui::accesskit::Role::Button && n.label() == Some(label)).expect(label);
+        let b = n.bounds().expect("bounds");
+        egui::pos2(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32)
+    };
+    let enter = vec![
+        Event::Key { key: Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE },
+        Event::Key { key: Key::Enter, physical_key: None, pressed: false, repeat: false, modifiers: Modifiers::NONE },
+    ];
+    for how in ["enter", "select-all", "backspace"] {
+        let mut s = figcraft_engine::Session::new();
+        let f = s
+            .execute("frame.create", &json!({"x": 0, "y": 0, "width": 300, "height": 200, "props": {"layout": "vertical", "padding": 10}}))
+            .unwrap()["id"]
+            .as_u64()
+            .unwrap();
+        s.execute("select.set", &json!({"ids": [f]})).unwrap();
+        let mut u = crate::layers_drag_tests::Ui::new(s);
+        let pad =
+            |u: &crate::layers_drag_tests::Ui| u.app.session.doc().unwrap().node(figcraft_doc::NodeId(f)).unwrap().layout.clone().unwrap().padding;
+        let v = field(&mut u, "Vertical padding");
+        u.button(v, true);
+        u.button(v, false);
+        u.frame(vec![]);
+        match how {
+            "backspace" => {
+                let bs = Event::Key { key: Key::Backspace, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE };
+                u.frame(vec![bs]);
+                u.frame(vec![Event::Text("0".into())]);
+            }
+            _ => u.frame(vec![Event::Text("0".into())]),
+        }
+        u.frame(enter.clone());
+        u.frame(vec![]);
+        assert_eq!(pad(&u), [0.0, 10.0, 0.0, 10.0], "{how}");
+    }
+}

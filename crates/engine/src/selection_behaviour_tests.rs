@@ -129,7 +129,9 @@ fn clicking_selects_by_the_documented_rules() {
         ((520.0, 20.0), CMD, vec![k.r, k.empty], vec![k.r, k.empty], "silent: Cmd/Ctrl-click on a selected layer keeps the whole selection (pinned)"),
         ((520.0, 120.0), NONE, vec![], vec![k.r2], "a locked layer can't be selected on the canvas: the click goes to what is under it"),
         ((520.0, 220.0), NONE, vec![k.r], vec![], "a hidden layer can't be selected on the canvas (empty canvas deselects)"),
-        ((390.0, 290.0), NONE, vec![k.r], vec![], "the background of a top-level frame with layers is like the canvas: a click deselects"),
+        // Graybox (owner's rule, G9): the background shows the frame's hover outline, so a click selects it.
+        ((390.0, 290.0), NONE, vec![k.r], vec![k.f], "a click on the background of a top-level frame with layers selects the frame"),
+        ((390.0, 290.0), SHIFT, vec![k.r], vec![k.r, k.f], "Shift-click on a frame's background adds the frame"),
         ((390.0, 290.0), NONE, vec![k.f], vec![k.f], "a selected top-level frame stays selected when its background is clicked"),
         ((390.0, 290.0), CMD, vec![], vec![k.f], "silent: Cmd/Ctrl-click on a frame's background selects the frame (the deepest layer there)"),
         ((640.0, 40.0), NONE, vec![], vec![k.empty], "an empty top-level frame is selected by a click on it"),

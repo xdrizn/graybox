@@ -116,6 +116,12 @@ Death are only *examples* in the starter kit, never required.
 - [x] Hotbars: keys 1-9, wheel and LB/RB select a slot.
 - [ ] "Selecting one selects all": not reproduced yet; needs a capture from the owner.
 
+### G9 — Editing polish (owner's list, 2026-11-06)
+- [ ] Auto layout padding typed as 0 applies at once (it kept the old value).
+- [ ] A click anywhere on a frame that shows its hover outline selects it.
+- [ ] Selection colors: every colour inside the selection, editable in one place (Figma-like).
+- [ ] Auto layout eases its other layers in and out when a layer is dropped in or taken out.
+
 ## Later
 Third-person preset, 2D platformer and top-down presets, safe-area guides and resolution presets,
 export package for engines (assets + spec sheet, 9-slice), Godot scene export, Unity plugin,
