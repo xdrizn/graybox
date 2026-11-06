@@ -2,6 +2,7 @@
 
 use figcraft_game::Game;
 
+pub(crate) mod alt_scrub;
 pub mod animation;
 pub mod audio;
 pub mod brand;

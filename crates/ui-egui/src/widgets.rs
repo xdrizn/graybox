@@ -134,6 +134,11 @@ pub fn scrubbed(from: f64, amount: f64, quantum: f64) -> f64 {
 /// The shared label-scrub gesture, including changing modifier rates and raw edge motion.
 /// Callers supply the hit area and apply live values until the final `Scrub(_, true)`.
 pub(crate) fn scrub(ui: &Ui, id: Id, response: &Response, value: Option<f64>, step: f64) -> Option<FieldEdit> {
+    scrub_rated(ui, id, response, value, step, true)
+}
+
+/// [`scrub`]; `alt_fine` false (Graybox: the Alt-drag over a whole field) keeps Alt at the normal rate.
+pub(crate) fn scrub_rated(ui: &Ui, id: Id, response: &Response, value: Option<f64>, step: f64, alt_fine: bool) -> Option<FieldEdit> {
     let v = value?;
     // Where the scrub began and how far it has taken the value (the modifiers can change on
     // the way: each stretch counts at its own rate).
@@ -150,7 +155,7 @@ pub(crate) fn scrub(ui: &Ui, id: Id, response: &Response, value: Option<f64>, st
             // does too. Elsewhere the scrub just stops there.
             let raw = p.motion().map_or(0.0, |m| m.x / i.pixels_per_point);
             let at_edge = moved == 0.0 && p.hover_pos().is_none_or(|at| at.x <= 1.0 || at.x >= i.content_rect().max.x - 1.0);
-            (f64::from(if at_edge { raw } else { moved }), i.modifiers.shift, i.modifiers.alt)
+            (f64::from(if at_edge { raw } else { moved }), i.modifiers.shift, i.modifiers.alt && alt_fine)
         });
         // The frame the button goes up moves nothing: the scrub ends where the last one left it.
         if response.dragged() {
@@ -265,6 +270,13 @@ fn number_field_impl(
     let edit_rect = Rect::from_min_max(pos2(rect.min.x + lead_w, rect.min.y), rect.max);
     let editing_id = id.with("editing");
     let mut editing: Option<String> = ui.data(|d| d.get_temp(editing_id));
+    // Graybox: Alt and a drag anywhere on the value scrubs it too (under the field, so its clicks
+    // still reach the field).
+    if editing.is_none()
+        && let Some(edit) = crate::game::alt_scrub::scrub(ui, id, edit_rect, value, step)
+    {
+        out = Some(Edit::All(edit));
+    }
     let field_resp = ui.interact(edit_rect, id.with("field"), Sense::click());
     a11y::number(&field_resp, lead.name(), value, suffix, empty.text());
     a11y::ring_around(ui, rect, &field_resp);

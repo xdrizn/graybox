@@ -122,6 +122,7 @@ Death are only *examples* in the starter kit, never required.
 - [x] Selection colors: near-equal colours are one row; folds past three colours (Figma-like).
 - [x] Auto layout eases its other layers in and out when a layer is dropped in or taken out.
 - [x] No light line around frames covered by a screenshot or background.
+- [x] Alt and a drag anywhere on a number field changes its value (normal rate; Shift ×10).
 
 ## Later
 Third-person preset, 2D platformer and top-down presets, safe-area guides and resolution presets,

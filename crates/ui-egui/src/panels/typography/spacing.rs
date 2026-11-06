@@ -49,15 +49,26 @@ pub(super) fn commit_spacing(
 /// Auto and Mixed have no numeric starting value and remain unchanged by dragging.
 pub(super) fn spacing_input(ui: &mut Ui, field: &SpacingField, value: &str, width: f32) -> Option<SpacingEdit> {
     let rect = Rect::from_min_size(ui.cursor().min, vec2(24.0, FIELD_H));
+    let numeric = value.trim_end_matches('%').parse::<f64>().ok();
+    // Graybox: Alt and a drag anywhere on the value scrubs it too (under the field, so its clicks
+    // still reach the field).
+    let body = Rect::from_min_max(egui::pos2(rect.max.x, rect.min.y), egui::pos2(rect.min.x + width, rect.max.y));
+    let alt_scrub = if ui.data(|d| d.get_temp::<String>(field.id.with("editing")).is_none()) {
+        crate::game::alt_scrub::scrub(ui, field.id, body, numeric, 1.0)
+    } else {
+        None
+    };
     let typed = lead_field(ui, field.id, field.glyph, value, width, field.tip);
     if ui.data(|d| d.get_temp::<String>(field.id.with("editing")).is_some()) {
         return typed.map(SpacingEdit::Typed);
+    }
+    if let Some(FieldEdit::Scrub(v, done)) = alt_scrub {
+        return Some(SpacingEdit::Scrub(v, done));
     }
     let response = ui.interact(rect, field.id.with("lead"), Sense::drag());
     if response.hovered() || response.dragged() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
     }
-    let numeric = value.trim_end_matches('%').parse::<f64>().ok();
     match widgets::scrub(ui, field.id, &response, numeric, 1.0) {
         Some(FieldEdit::Scrub(v, done)) => Some(SpacingEdit::Scrub(v, done)),
         _ => typed.map(SpacingEdit::Typed),

@@ -152,6 +152,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   a layer inside covers completely (opaque, axis-aligned, whole box) is not drawn (no light seam).
 - `crates/ui-egui/src/canvas/render.rs` `request_render` and `canvas.rs`: the drawn document goes
   through `game::layout_ease::view`; the canvas repaints while layers glide.
+- `crates/ui-egui/src/widgets.rs` `scrub` (+ `scrub_rated`) and `number_field_impl`, and
+  `panels/typography/spacing.rs` `spacing_input`: Alt and a drag anywhere on a number field's value
+  scrubs it (`game::alt_scrub`, a drag-only area under the field's click area, out of Tab order).
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one

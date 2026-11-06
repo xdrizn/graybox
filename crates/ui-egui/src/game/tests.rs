@@ -242,3 +242,42 @@ fn selection_colors_fold_past_three_and_open_on_click() {
     assert!(open.iter().any(|t| t == "FF0000") && !open.iter().any(|t| t == "+2"), "the header opens the list: {open:?}");
     assert!(super::color_fold::opens_by_default(3) && !super::color_fold::opens_by_default(4));
 }
+
+/// G9: Alt and a drag anywhere on a number field's value changes it at the normal rate (one a
+/// point); without Alt the same drag changes nothing, and a plain click still starts typing.
+#[test]
+fn alt_drag_on_a_number_field_scrubs_it() {
+    use egui::{Event, Modifiers, PointerButton};
+    use serde_json::json;
+    let mut s = figcraft_engine::Session::new();
+    let f = s.execute("frame.create", &json!({"x": 0, "y": 0, "width": 300, "height": 200, "props": {"layout": "vertical", "padding": 10}})).unwrap()
+        ["id"]
+        .as_u64()
+        .unwrap();
+    s.execute("select.set", &json!({"ids": [f]})).unwrap();
+    let mut u = crate::layers_drag_tests::Ui::new(s);
+    let pad =
+        |u: &crate::layers_drag_tests::Ui| u.app.session.doc().unwrap().node(figcraft_doc::NodeId(f)).unwrap().layout.clone().unwrap().padding[0];
+    u.ctx.enable_accesskit();
+    u.frame(vec![]);
+    let out = u.frame_output(vec![]);
+    let nodes = out.platform_output.accesskit_update.expect("an AccessKit update").nodes;
+    let n = nodes.iter().map(|(_, n)| n).find(|n| n.role() != egui::accesskit::Role::Button && n.label() == Some("Vertical padding")).unwrap();
+    let b = n.bounds().unwrap();
+    // The middle of the value, well right of the label icon.
+    let at = egui::pos2(((b.x0 + b.x1) / 2.0) as f32 + 10.0, ((b.y0 + b.y1) / 2.0) as f32);
+    let drag = |u: &mut crate::layers_drag_tests::Ui, mods: Modifiers| {
+        let button = |pos, pressed| Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: mods };
+        u.frame_with(vec![Event::PointerMoved(at), button(at, true)], mods);
+        for i in 1..=4 {
+            u.frame_with(vec![Event::PointerMoved(at + egui::vec2(5.0 * i as f32, 0.0))], mods);
+        }
+        let end = at + egui::vec2(20.0, 0.0);
+        u.frame_with(vec![button(end, false)], mods);
+        u.frame(vec![]);
+    };
+    drag(&mut u, Modifiers::NONE);
+    assert_eq!(pad(&u), 10.0, "no Alt: a drag on the value changes nothing");
+    drag(&mut u, Modifiers::ALT);
+    assert_eq!(pad(&u), 30.0, "Alt: 20 points right is +20");
+}
