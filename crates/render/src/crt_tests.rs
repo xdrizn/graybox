@@ -198,7 +198,8 @@ fn hidden_crt_changes_nothing() {
 
 #[test]
 fn a_view_cutting_the_pane_draws_the_same_pixels() {
-    // The view's top edge runs through the pane: the bulge still reads the backdrop above it.
+    // The view's top edge runs through the pane's centre: below it the bulge reads away from the
+    // cut, so the pixels match. (Above a cut the backdrop past the view is not drawn at all.)
     let (d, _, _) = crt_scene(Crt { curvature: 1.0, rgb_split: 0.5, ..lines_only() }, "bars");
     let page = d.first_page().unwrap();
     let at = |y0: f64, h: u32| View { origin: (0.0, y0), scale: 1.0, width: 240, height: h };
@@ -215,4 +216,17 @@ fn a_view_cutting_the_pane_draws_the_same_pixels() {
         }
     }
     assert!(worst.0 <= 2, "{worst:?}");
+}
+
+#[test]
+fn bands_draw_what_one_piece_draws() {
+    // Big enough for the renderer to split it into parallel bands: the bulge reads across a band's
+    // edge, so a band must still see the whole backdrop under the pane.
+    let (d, _, _) = crt_scene(Crt { curvature: 1.0, rgb_split: 0.5, ..lines_only() }, "bars");
+    let page = d.first_page().unwrap();
+    let view = View { origin: (0.0, 0.0), scale: 5.0, width: 1200, height: 800 };
+    let banded = render_view(&d, page, &view, &Options::default()).unwrap();
+    let whole = crate::render_view_single(&d, page, &view, &Options::default()).unwrap();
+    let worst = banded.data().iter().zip(whole.data()).map(|(a, b)| a.abs_diff(*b)).max().unwrap();
+    assert!(worst <= 2, "{worst}");
 }

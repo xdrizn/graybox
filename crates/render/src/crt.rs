@@ -130,6 +130,12 @@ impl Screen<'_> {
     }
 }
 
+/// Whether `doc` has a visible CRT. Its bulge reads the backdrop anywhere under its layer, further
+/// than any band overlap: a render with one is not cut into bands.
+pub(crate) fn in_doc(doc: &figcraft_doc::Document) -> bool {
+    doc.nodes().any(|n| n.effects.iter().any(|e| e.visible && matches!(e.kind, figcraft_doc::EffectKind::Crt(_))))
+}
+
 /// The share of `[t − foot/2, t + foot/2]` lying in the dark part (`0..dark` of each `period`):
 /// a box filter, so lines finer than a pixel fade to an even darkening.
 fn dark_share(t: f64, foot: f64, period: f64, dark: f64) -> f64 {

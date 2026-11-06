@@ -184,6 +184,10 @@ fn render_bands(doc: &Document, page: NodeId, view: &View, opts: &Options, bands
 /// How many rows bands of `band_h` rows of `view` overlap (what background blurs read); `None`
 /// when that is more than a band.
 pub(crate) fn band_overlap(doc: &Document, view: &View, band_h: u32) -> Option<u32> {
+    // Graybox: a CRT reads its whole layer's backdrop (see `crt::in_doc`).
+    if crt::in_doc(doc) {
+        return None;
+    }
     let overlap = backdrop_reach(max_backdrop_blur(doc), view.scale).ceil();
     (overlap.is_finite() && overlap <= f64::from(band_h)).then_some(overlap as u32)
 }
