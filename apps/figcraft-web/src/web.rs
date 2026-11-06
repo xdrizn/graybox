@@ -363,7 +363,6 @@ impl Services for WebServices {
     }
 }
 
-
 /// The file picked in the browser's file picker (`accept`: the extensions it offers), with its
 /// name; `None` when the picker is cancelled, `Some(Err)` with what to tell the user when the file
 /// can't be read.

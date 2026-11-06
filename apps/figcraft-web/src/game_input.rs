@@ -1,8 +1,8 @@
 //! Browser-only game input. Restricted APIs run synchronously in the trusted DOM gesture,
 //! not in egui's later animation frame. Menus never recapture a pointer on their UI clicks.
 
-use std::cell::Cell;
 use figcraft_ui_egui::game;
+use std::cell::Cell;
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 
 thread_local! {
@@ -106,7 +106,9 @@ pub fn install(ctx: &egui::Context) -> Result<(), JsValue> {
     mouse.forget();
     let click_ctx = ctx.clone();
     let click = Closure::<dyn FnMut(web_sys::MouseEvent)>::new(move |event: web_sys::MouseEvent| {
-        if event.button() != 0 { return }
+        if event.button() != 0 {
+            return;
+        }
         let point = egui::pos2(event.client_x() as f32, event.client_y() as f32) / click_ctx.zoom_factor();
         let play = click_ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::unique(game::PLAY_BUTTON_RECT))).is_some_and(|r| r.contains(point));
         if play || (ACTIVE.get() && CAPTURE_ALLOWED.get()) {
@@ -117,8 +119,11 @@ pub fn install(ctx: &egui::Context) -> Result<(), JsValue> {
     click.forget();
     let key_ctx = ctx.clone();
     let key = Closure::<dyn FnMut(web_sys::KeyboardEvent)>::new(move |event: web_sys::KeyboardEvent| {
-        if event.code() == "F9" && !event.repeat() && !key_ctx.egui_wants_keyboard_input()
-            && key_ctx.data(|d| d.get_temp::<bool>(egui::Id::unique(game::PLAY_KEY_ENABLED)).unwrap_or(false)) {
+        if event.code() == "F9"
+            && !event.repeat()
+            && !key_ctx.egui_wants_keyboard_input()
+            && key_ctx.data(|d| d.get_temp::<bool>(egui::Id::unique(game::PLAY_KEY_ENABLED)).unwrap_or(false))
+        {
             capture(&key_ctx);
         }
     });
