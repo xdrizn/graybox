@@ -107,16 +107,17 @@ impl Screen<'_> {
                 *v += g * lift;
             }
         }
-        // Lines and phosphor follow the bulged screen.
+        // Lines follow the bulged screen; the phosphor mask lies on the glass (unbent), in whole
+        // device pixels, so it never beats with the pixel grid.
         let (along, across) = match c.direction {
-            CrtDirection::Horizontal => ((bent.y + 0.5) * bh, (bent.x + 0.5) * bw),
-            CrtDirection::Vertical => ((bent.x + 0.5) * bw, (bent.y + 0.5) * bh),
+            CrtDirection::Horizontal => ((bent.y + 0.5) * bh, (d.x + 0.5) * bw),
+            CrtDirection::Vertical => ((bent.x + 0.5) * bw, (d.y + 0.5) * bh),
         };
         let lined = dark_share(along, self.foot, c.line_size, c.thickness * c.line_size) as f32;
         let darken = lined * c.line_opacity as f32 * (1.0 - c.bleed as f32 * luma(s).min(1.0));
-        // Phosphor columns: a third of the line period, at least a device pixel.
-        let cell = (c.line_size / 3.0).max(self.foot);
-        let col = (across / cell).floor().rem_euclid(3.0) as usize;
+        // Phosphor columns: a third of the line period, rounded to whole device pixels (at least one).
+        let cell_px = (c.line_size / 3.0 / self.foot).round().max(1.0);
+        let col = (across / self.foot / cell_px).floor().rem_euclid(3.0) as usize;
         for (ch, v) in s.iter_mut().take(3).enumerate() {
             let mask = if ch == col { 1.0 } else { 1.0 - c.phosphor as f32 };
             *v *= (1.0 - darken) * mask;
@@ -135,25 +136,90 @@ pub(crate) fn on(n: &figcraft_doc::Node) -> bool {
     n.effects.iter().any(|e| e.visible && matches!(e.kind, figcraft_doc::EffectKind::Crt(_)))
 }
 
-/// Clear `pix` under `shape` (local → `pix` through `xf`) by `strength`: the CRT draws the whole
-/// picture inside its shape, so the unbent layers under it must not show where the bulged picture
-/// leaves the backdrop's transparency (in Play, where the game shows through).
-pub(crate) fn clear_under(pix: &mut Pixmap, shape: &crate::shadow::Outline, xf: Affine, strength: f32) {
-    let Some(path) = crate::draw::ts_path(&shape.0) else { return };
-    let mut paint = tiny_skia::Paint { blend_mode: tiny_skia::BlendMode::DestinationOut, anti_alias: true, ..Default::default() };
-    paint.set_color_rgba8(0, 0, 0, (strength.clamp(0.0, 1.0) * 255.0).round() as u8);
-    pix.fill_path(&path, &paint, shape.1, crate::draw::ts_transform(xf), None);
+/// Clear `pix` under the CRT's `layer` (placed at `at`, its shape through `lxf`) as far as the layer
+/// will not cover it: the CRT draws the whole picture inside its shape, so the unbent layers under
+/// it must not show where the bulged picture leaves the backdrop's transparency (in Play, where
+/// the game shows through). With coverage `a` and the layer's alpha `l`, what lies under is kept
+/// by `(1 − a·op) / (1 − l·op)`: the layer then composites over it to `layer·op + under·(1 − a·op)`,
+/// so anti-aliased edges blend without thinning and content outside the shape keeps its backdrop.
+pub(crate) fn clear_under(pix: &mut Pixmap, at: (i32, i32), layer: &Pixmap, shape: &crate::shadow::Outline, lxf: Affine, op: f32) {
+    let Some(cover) = crate::shadow::spread_alpha(std::slice::from_ref(shape), 0.0, lxf, layer.width(), layer.height()) else { return };
+    let op = op.clamp(0.0, 1.0);
+    let (pw, ph) = (i64::from(pix.width()), i64::from(pix.height()));
+    let lw = i64::from(layer.width().max(1));
+    let dst = pix.data_mut();
+    for (i, (l, m)) in layer.data().chunks_exact(4).zip(cover.data().chunks_exact(4)).enumerate() {
+        let a = f32::from(m.get(3).copied().unwrap_or(0)) / 255.0;
+        if a <= 0.0 {
+            continue;
+        }
+        let (x, y) = (i64::from(at.0) + i as i64 % lw, i64::from(at.1) + i as i64 / lw);
+        if x < 0 || y < 0 || x >= pw || y >= ph {
+            continue;
+        }
+        let la = f32::from(l.get(3).copied().unwrap_or(0)) / 255.0;
+        let rest = 1.0 - la * op;
+        let k = if rest <= 1e-6 { 1.0 } else { ((1.0 - a * op) / rest).clamp(0.0, 1.0) };
+        if k >= 1.0 {
+            continue;
+        }
+        let j = ((y * pw + x) * 4) as usize;
+        if let Some(p) = dst.get_mut(j..j + 4) {
+            for v in p.iter_mut() {
+                *v = (f32::from(*v) * k + 0.5) as u8;
+            }
+        }
+    }
 }
 
-/// Whether `doc` has a visible CRT. Its bulge reads the backdrop anywhere under its layer, further
-/// than any band overlap: a render with one is not cut into bands.
-pub(crate) fn in_doc(doc: &figcraft_doc::Document) -> bool {
-    doc.nodes().any(|n| n.effects.iter().any(|e| e.visible && matches!(e.kind, figcraft_doc::EffectKind::Crt(_))))
+/// Fill `back` (a backdrop read at `origin` on a surface of `size`) past that surface's edges with
+/// its nearest pixel inside: the bulge reads past a view's edge, where nothing was drawn, and a
+/// hole there would show through the cleared layer.
+pub(crate) fn extend_edges(back: &mut Pixmap, origin: (i32, i32), size: (u32, u32)) {
+    let (bw, bh) = (i64::from(back.width()), i64::from(back.height()));
+    let (ox, oy) = (i64::from(origin.0), i64::from(origin.1));
+    let (x0, y0) = ((-ox).max(0), (-oy).max(0));
+    let (x1, y1) = ((i64::from(size.0) - ox).min(bw), (i64::from(size.1) - oy).min(bh));
+    if x0 >= x1 || y0 >= y1 || (x0 == 0 && y0 == 0 && x1 == bw && y1 == bh) {
+        return;
+    }
+    let src = back.data().to_vec();
+    let dst = back.data_mut();
+    for y in 0..bh {
+        let sy = y.clamp(y0, y1 - 1);
+        for x in 0..bw {
+            let sx = x.clamp(x0, x1 - 1);
+            if (sx, sy) == (x, y) {
+                continue;
+            }
+            let (i, j) = (((y * bw + x) * 4) as usize, ((sy * bw + sx) * 4) as usize);
+            if let (Some(d), Some(s)) = (dst.get_mut(i..i + 4), src.get(j..j + 4)) {
+                d.copy_from_slice(s);
+            }
+        }
+    }
+}
+
+/// Whether a visible CRT on `page` lies in `view`. Its bulge reads the backdrop anywhere under its
+/// layer, further than any band overlap: such a render is not cut into bands.
+pub(crate) fn in_view(doc: &figcraft_doc::Document, page: figcraft_doc::NodeId, view: &crate::View) -> bool {
+    let seen = view.page_rect();
+    doc.subtree(page).into_iter().any(|id| {
+        doc.node(id).is_some_and(|n| n.visible && on(n)) && crate::draw::paint_bounds(doc, id).is_some_and(|b| b.intersect(seen).area() > 0.0)
+    })
 }
 
 /// The share of `[t − foot/2, t + foot/2]` lying in the dark part (`0..dark` of each `period`):
-/// a box filter, so lines finer than a pixel fade to an even darkening.
+/// a box filter, eased into the lines' mean share as a pixel nears a whole period, so lines finer
+/// than about two pixels fade to an even darkening instead of beating with the pixel grid.
 fn dark_share(t: f64, foot: f64, period: f64, dark: f64) -> f64 {
+    let boxed = boxed_share(t, foot, period, dark);
+    let w = smoothstep(0.4, 0.75, (foot / period) as f32) as f64;
+    boxed + (dark / period - boxed) * w
+}
+
+/// The plain box filter of [`dark_share`].
+fn boxed_share(t: f64, foot: f64, period: f64, dark: f64) -> f64 {
     // Dark length from 0 up to `t`.
     let upto = |t: f64| {
         let n = (t / period).floor();
@@ -171,12 +237,13 @@ fn luma(c: Rgba) -> f32 {
     0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
 }
 
-/// `p` at pixel position `(x, y)` (pixel centres at .5), bilinear, premultiplied; transparent
-/// outside.
+/// `p` at pixel position `(x, y)` (pixel centres at .5), bilinear, premultiplied; past its edges,
+/// its edge pixels (a render cut by the view holds only part of the layer's backdrop).
 fn sample(p: &Pixmap, x: f64, y: f64) -> Rgba {
     if !(x.is_finite() && y.is_finite()) {
         return [0.0; 4];
     }
+    let (x, y) = (x.clamp(0.5, f64::from(p.width()) - 0.5), y.clamp(0.5, f64::from(p.height()) - 0.5));
     let (fx, fy) = (x - 0.5, y - 0.5);
     let (x0, y0) = (fx.floor(), fy.floor());
     let (tx, ty) = ((fx - x0) as f32, (fy - y0) as f32);

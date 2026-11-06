@@ -164,7 +164,7 @@ fn band_pool() -> Option<&'static rayon::ThreadPool> {
 fn render_bands(doc: &Document, page: NodeId, view: &View, opts: &Options, bands: u32) -> Option<Pixmap> {
     use rayon::prelude::*;
     let band_h = view.height.div_ceil(bands.max(1));
-    let overlap = band_overlap(doc, view, band_h)?;
+    let overlap = band_overlap(doc, page, view, band_h)?;
     let parts: Vec<(u32, Option<Pixmap>)> = (0..bands)
         .into_par_iter()
         .map(|i| {
@@ -183,9 +183,9 @@ fn render_bands(doc: &Document, page: NodeId, view: &View, opts: &Options, bands
 
 /// How many rows bands of `band_h` rows of `view` overlap (what background blurs read); `None`
 /// when that is more than a band.
-pub(crate) fn band_overlap(doc: &Document, view: &View, band_h: u32) -> Option<u32> {
-    // Graybox: a CRT reads its whole layer's backdrop (see `crt::in_doc`).
-    if crt::in_doc(doc) {
+pub(crate) fn band_overlap(doc: &Document, page: NodeId, view: &View, band_h: u32) -> Option<u32> {
+    // Graybox: a CRT reads its whole layer's backdrop (see `crt::in_view`).
+    if crt::in_view(doc, page, view) {
         return None;
     }
     let overlap = backdrop_reach(max_backdrop_blur(doc), view.scale).ceil();

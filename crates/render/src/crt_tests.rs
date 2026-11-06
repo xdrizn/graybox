@@ -3,6 +3,7 @@
 
 use figcraft_color::{Color, Paint};
 use figcraft_doc::{Crt, CrtDirection, Document, Effect, EffectKind, NodeId, NodeKind};
+use figcraft_geom::Affine;
 use tiny_skia::Pixmap;
 
 use crate::{Options, View, render_node, render_view};
@@ -251,4 +252,64 @@ fn over_a_transparent_backdrop_the_crt_replaces_what_is_under_it() {
     // Outside the pane nothing changes.
     let want = without_effect(&d, f, pane, 1.0);
     assert_eq!(px(&got, 30, 30), px(&want, 30, 30));
+}
+
+#[test]
+fn zoomed_out_lines_fade_evenly_at_any_scale() {
+    // A pixel covering a period and a bit must not beat with the lines (30 %, 1/6, 10 %).
+    let (d, f, _) = crt_scene(lines_only(), "808080");
+    for scale in [0.3, 1.0 / 6.0, 0.1] {
+        let got = render_node(&d, f, scale).unwrap();
+        let (x0, x1) = ((60.0 * scale).ceil() as u32 + 1, (180.0 * scale).floor() as u32 - 1);
+        let (y0, y1) = ((40.0 * scale).ceil() as u32 + 1, (120.0 * scale).floor() as u32 - 1);
+        let vals: Vec<u8> = (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).map(|(x, y)| px(&got, x, y)[1]).collect();
+        let (lo, hi) = (vals.iter().min().unwrap(), vals.iter().max().unwrap());
+        assert!(hi - lo <= 6, "scale {scale}: {lo}..{hi}");
+    }
+}
+
+#[test]
+fn a_view_cut_past_the_centre_leaves_no_hole() {
+    // The view's bottom edge lies between the pane's centre (y 80) and its bottom (y 120): the
+    // bulge there reads past the view, which must not leave the pane see-through.
+    let (d, _, _) = crt_scene(Crt { curvature: 1.0, ..plain() }, "808080");
+    let page = d.first_page().unwrap();
+    let view = View { origin: (0.0, 0.0), scale: 1.0, width: 240, height: 100 };
+    let got = crate::render_view_single(&d, page, &view, &Options::default()).unwrap();
+    for y in 40..100 {
+        for x in 60..180 {
+            assert_eq!(px(&got, x, y)[3], 255, "({x}, {y})");
+        }
+    }
+}
+
+#[test]
+fn rounded_edges_stay_opaque_over_an_opaque_backdrop() {
+    // Anti-aliased edge pixels (rounded corners, a fractional place) blend, never thin out.
+    let (mut d, f, pane) = crt_scene(plain(), "808080");
+    let n = d.get_mut(pane).unwrap();
+    n.corners.radii = [30.0; 4];
+    n.transform = Affine::translate((60.5, 40.25));
+    let got = render_node(&d, f, 1.0).unwrap();
+    for y in 0..160 {
+        for x in 0..240 {
+            assert_eq!(px(&got, x, y)[3], 255, "({x}, {y})");
+        }
+    }
+}
+
+#[test]
+fn only_a_crt_in_view_on_the_page_turns_bands_off() {
+    let (mut d, _, pane) = crt_scene(plain(), "808080");
+    let page = d.first_page().unwrap();
+    let view = View { origin: (0.0, 0.0), scale: 1.0, width: 240, height: 160 };
+    assert!(crate::crt::in_view(&d, page, &view));
+    // Scrolled away from it, or on another page: bands stay on.
+    let away = View { origin: (1000.0, 1000.0), ..view };
+    assert!(!crate::crt::in_view(&d, page, &away));
+    let other = d.add_page("Other");
+    assert!(!crate::crt::in_view(&d, other, &view));
+    // Hidden: off.
+    d.get_mut(pane).unwrap().visible = false;
+    assert!(!crate::crt::in_view(&d, page, &view));
 }
