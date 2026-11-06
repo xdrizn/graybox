@@ -473,6 +473,10 @@ fn help(p: &Presenter, ui: &Ui, rect: Rect) {
 #[path = "game_menu_tests.rs"]
 mod menu_tests;
 
+#[cfg(test)]
+#[path = "game_frames_tests.rs"]
+mod frames_tests;
+
 pub(super) use crate::game::menu::MenuInputs;
 
 /// One frame of the navigable menu the open screen (top overlay, else the frame) owns: move focus,

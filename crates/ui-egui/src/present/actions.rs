@@ -298,6 +298,23 @@ impl Presenter {
             return Some(t.clone());
         }
         let bounds = figcraft_render::export_bounds(doc, id)?;
+        // Graybox: in Play a screen that changed is redrawn off the UI thread and its last image
+        // shows meanwhile, so the game never waits for a heavy screen (`game::frames`).
+        if let (Some(play), Some(old)) = (self.game.as_mut(), self.textures.get(&id)) {
+            use crate::game::frames::Asked;
+            match play.frames.request(ctx, doc, id, texture_scale(ctx, bounds, px_scale), t, key) {
+                Asked::Ready(done) => {
+                    let img = crate::render_worker::screen_image(&done.pix, doc.color_profile);
+                    let mut tex = old.tex.clone();
+                    tex.set(img, egui::TextureOptions::LINEAR);
+                    let ft = FrameTex { key: done.key, tex, bounds: done.bounds };
+                    self.textures.insert(id, ft.clone());
+                    return Some(ft);
+                }
+                Asked::Pending => return Some(old.clone()),
+                Asked::Unavailable => {}
+            }
+        }
         let pix = figcraft_render::render_node_at(doc, id, texture_scale(ctx, bounds, px_scale), t)?;
         let img = crate::render_worker::screen_image(&pix, doc.color_profile);
         let tex = ctx.load_texture(format!("present-{}", id.0), img, egui::TextureOptions::LINEAR);

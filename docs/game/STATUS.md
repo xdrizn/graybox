@@ -46,6 +46,11 @@
   will not cover it, so in Play (transparent frame) the unbent layers never show. In Play it bends the UI layers only, not the 3D scene.
   Figma and Vector Drawable exports leave it out with a warning. Checked in the app: canvas,
   zoomed to 30 % and 300 %, Play. Spec and plan in `docs/game/specs/2026-11-06-crt-effect-*`.
+- Play never waits for a heavy screen (2026-11-06): a full-screen CRT took ~460 ms a redraw and
+  froze the game on every HUD change (a shot with ammo, a hotbar slot). The CRT now shades rows
+  in parallel, blurs its glow at half/quarter size and reads one channel per split (~140 ms), and
+  Play redraws a changed screen off the UI thread (`game/frames.rs`): the last image shows until
+  the new one is ready, newest request wins. The browser draws at once, as before.
 
 ## Decisions
 - Play redraws its whole screen when a variant changes on hover. Costly unchanged layers (layer blur,
@@ -182,6 +187,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one
   selected layer (after Scroll behavior).
 - `crates/ui-egui/src/present/player.rs` `player`: calls `game::menu_overlay` right after `draw`.
+- `crates/ui-egui/src/present/actions.rs` `texture`: in Play, a changed screen asks
+  `game::frames` and shows its last image meanwhile.
 - `crates/doc/src/game.rs` and `crates/engine/src/cmd/game.rs` are ours (game settings, game commands).
 - CRT effect (`crates/doc/src/crt.rs`, `crates/render/src/crt.rs` are ours):
   - `doc/src/lib.rs`: `pub mod crt; pub use crt::{Crt, CrtDirection};`, `mod crt_tests`.

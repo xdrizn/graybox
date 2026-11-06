@@ -10,6 +10,7 @@ pub(crate) mod color_fold;
 pub mod components;
 pub mod editor;
 pub mod fonts;
+pub mod frames;
 pub mod hotbar;
 pub(crate) mod input;
 pub(crate) mod layout_ease;
@@ -59,6 +60,8 @@ pub struct Play {
     pub(crate) hotbar_outline: Vec<figcraft_doc::NodeId>,
     /// How far each map is moved and zoomed (Play only).
     pub(crate) maps: std::collections::BTreeMap<figcraft_doc::NodeId, map::View>,
+    /// Screens redrawn off the UI thread (see [`frames`]).
+    pub(crate) frames: frames::Frames,
 }
 
 /// A game action from a prototype interaction.
