@@ -538,7 +538,7 @@ pub fn effect_margin(n: &Node) -> f64 {
         .sum();
     let others = visible()
         .map(|e| match &e.kind {
-            EffectKind::BackgroundBlur { .. } | EffectKind::Glass(_) => e.backdrop_radius() * 2.0,
+            EffectKind::BackgroundBlur { .. } | EffectKind::Glass(_) | EffectKind::Crt(_) => e.backdrop_radius() * 2.0,
             EffectKind::DropShadow(s) => s.radius * 2.0 + s.spread.abs() * figcraft_doc::SPREAD_MITER_LIMIT + s.offset.0.abs() + s.offset.1.abs(),
             // Inner shadows cast from around a layer's pixels (groups, image fills with alpha; any
             // image counts here): a layer cut off at the view would cast one from the cut.

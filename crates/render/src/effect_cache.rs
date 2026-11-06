@@ -58,7 +58,7 @@ impl Key {
     ) -> Option<Self> {
         let node = doc.node_arc(id)?;
         let blurs = node.effects.iter().any(|e| e.visible && matches!(e.kind, EffectKind::LayerBlur(_)));
-        let backdrop = node.effects.iter().any(|e| e.visible && matches!(e.kind, EffectKind::BackgroundBlur(_) | EffectKind::Glass(_)));
+        let backdrop = node.effects.iter().any(|e| e.visible && matches!(e.kind, EffectKind::BackgroundBlur(_) | EffectKind::Glass(_) | EffectKind::Crt(_)));
         let wanted = match kind {
             Kind::Blur => blurs && !backdrop,
             Kind::Image => node.fills.iter().any(|p| p.visible && matches!(p.kind, figcraft_color::PaintKind::Image(_))),
