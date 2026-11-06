@@ -41,9 +41,9 @@
 - G9 CRT effect (2026-11-06): new effect type `crt` (`figcraft_doc::Crt`, our `doc/src/crt.rs`),
   a backdrop effect drawn like glass by our `render/src/crt.rs`: bulge, red/blue split, glow,
   box-filtered scanlines with bleed, phosphor columns, vignette, brightness, all in the layer's own
-  coordinates. A document with a visible CRT renders in one piece (no bands) and canvas patches
-  redraw CRT layers whole; the CRT clears its shape on the surface below, so in Play (transparent
-  frame) the unbent layers never show. In Play it bends the UI layers only, not the 3D scene.
+  coordinates. A render with a visible CRT in view on its page is drawn in one piece (no bands),
+  canvas patches redraw CRT layers whole, and its backdrop reads clamp at a cut view's edge; the CRT clears its shape on the surface below as far as its picture
+  will not cover it, so in Play (transparent frame) the unbent layers never show. In Play it bends the UI layers only, not the 3D scene.
   Figma and Vector Drawable exports leave it out with a warning. Checked in the app: canvas,
   zoomed to 30 % and 300 %, Play. Spec and plan in `docs/game/specs/2026-11-06-crt-effect-*`.
 
