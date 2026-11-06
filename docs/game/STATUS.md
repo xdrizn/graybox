@@ -83,6 +83,12 @@
   still open; those are dropped on load.
 - Escape in Play frees the mouse only when no screen is open and the frame has no Escape
   interaction of its own (so a pause menu on Escape works). F10 always leaves Play.
+- G9 (2026-11-06): a click on a top-level frame's background selects the frame (its hover outline
+  already suggested it); a drag there still draws a marquee. Selection colors folds past three
+  colours. Auto layout glides last 0.18 s (cubic ease in and out) and only on the canvas. A frame
+  fill hidden by a covering layer isn't drawn, which removes the light line around screenshot
+  frames. "Padding 0 stays 10" not reproduced (frame, instance and main all apply 0): tests pin it;
+  waiting for the owner's steps.
 - Branding stops at what the user sees. Internal names stay upstream's: crates, `figcraft.exe`,
   the `.figcraft` extension, the settings folder (`FigCraft`, so settings are kept) and command ids.
   Messages that mention FigCraft in passing (errors, sharing) still do; renaming them would mean
@@ -135,6 +141,17 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - `crates/render/src/effect_cache.rs` (new, `mod` in `lib.rs`) and `draw.rs` `draw_layer`: a layer blur and a
   plain image layer reuse their pixels while unchanged (same node `Arc`, place, size, scale, colour
   profile, image bytes, GIF frame); drop shadow casters only for layers with drop shadows.
+- `crates/engine/src/canvas/tools/draw.rs` `up` (+ `board_click`): a click without a drag on the
+  background of a top-level frame selects it (upstream: deselects); `selection_behaviour_tests`
+  row changed to match.
+- `crates/engine/src/selection/selection_colors.rs` `collect`: colours group by how they read
+  (8-bit channels, whole percent), so near-equal greys are one row.
+- `crates/ui-egui/src/panels/selection_colors.rs` `section`: header from `game::color_fold` (folds
+  past three colours to a preview and "+N").
+- `crates/render/src/covered.rs` (new, `mod` in `lib.rs`) and `draw.rs` `draw_content`: a frame fill
+  a layer inside covers completely (opaque, axis-aligned, whole box) is not drawn (no light seam).
+- `crates/ui-egui/src/canvas/render.rs` `request_render` and `canvas.rs`: the drawn document goes
+  through `game::layout_ease::view`; the canvas repaints while layers glide.
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one
@@ -152,8 +169,7 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   engine tests still fail (board tables row growth, .fig font names, example .fig export).
 - Fail on this Windows machine before the G4 rework too: `fig_export_assets_tests::every_example_keeps_its_variables_and_styles`
   (.fig export drops the starter kit's number→text binding) and `fig_font_names_tests`
-  (depends on installed fonts). `cargo fmt --check` flags `apps/figcraft-web/src/game_input.rs`
-  and `web.rs` (from 32b0bc22).
+  (depends on installed fonts).
 - `figcraft-engine` test `board_tables_tests::a_double_click_types_in_the_cell_and_its_row_grows_with_the_text`
   fails on this machine at upstream commit `db3cb317` too, before any game change (checked on a
   clean worktree). Probably text measurement without `../craft-fonts`. Everything else in
