@@ -208,7 +208,7 @@ impl<'d> Exporter<'d> {
         f.extend([("fillPaints", fills), ("strokePaints", strokes)]);
         self.stroke(n, f);
         if !n.effects.is_empty() {
-            let effects = n.effects.iter().enumerate().map(|(i, x)| self.effect(x, i, &bound)).collect();
+            let effects = self.figma_effects(&n.effects).iter().map(|(i, x)| self.effect(x, *i, &bound)).collect();
             f.push(("effects", arr(effects)));
         }
         if n.kind.has_corner_radius() {

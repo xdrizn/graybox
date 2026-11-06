@@ -468,6 +468,8 @@ pub fn scale_node(doc: &mut Document, id: NodeId, k: f64) -> Result<()> {
                     // From the frost it draws with (an older file's past 100 draws at 100).
                     g.frost = (g.sanitized().frost * k).min(figcraft_doc::Glass::MAX_FROST);
                 }
+                // Graybox: the lines keep their look on the scaled layer.
+                EffectKind::Crt(c) => c.line_size = (c.sanitized().line_size * k).clamp(figcraft_doc::Crt::MIN_LINE_SIZE, figcraft_doc::Crt::MAX_LINE_SIZE),
             }
         }
         if let Some(l) = n.layout.as_mut() {

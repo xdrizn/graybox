@@ -332,6 +332,7 @@ fn effect_settings(app: &mut FigApp, ui: &mut Ui, ids: &[NodeId], i: usize, e: &
                 edit(app, ed, &|v| with(&|gl| gl.splay = unit(v)));
             });
         }
+        EffectKind::Crt(_) => {}
     }
 }
 

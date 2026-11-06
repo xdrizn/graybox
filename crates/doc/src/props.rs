@@ -838,6 +838,8 @@ pub enum EffectKind {
     Texture(Texture),
     /// The backdrop through curved glass.
     Glass(Glass),
+    /// Graybox: the backdrop as an old tube screen.
+    Crt(crate::Crt),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -854,7 +856,7 @@ fn yes() -> bool {
 
 impl Effect {
     /// Effect types in the order the Design panel lists them: (label, type name).
-    pub const TYPES: [(&str, &str); 7] = [
+    pub const TYPES: [(&str, &str); 8] = [
         ("Drop shadow", "dropShadow"),
         ("Inner shadow", "innerShadow"),
         ("Layer blur", "layerBlur"),
@@ -862,6 +864,7 @@ impl Effect {
         ("Noise", "noise"),
         ("Texture", "texture"),
         ("Glass", "glass"),
+        ("CRT", "crt"),
     ];
 
     fn of(kind: EffectKind) -> Self {
@@ -888,6 +891,9 @@ impl Effect {
     pub fn glass() -> Self {
         Self::of(EffectKind::Glass(Glass::default()))
     }
+    pub fn crt() -> Self {
+        Self::of(EffectKind::Crt(crate::Crt::default()))
+    }
 
     /// A new effect of a type named like `dropShadow`, `drop shadow` or `DROP_SHADOW` (`blur` is
     /// a layer blur), with its defaults.
@@ -900,6 +906,7 @@ impl Effect {
             "noise" => Self::noise(),
             "texture" => Self::texture(),
             "glass" => Self::glass(),
+            "crt" => Self::crt(),
             _ => return None,
         })
     }
@@ -913,6 +920,7 @@ impl Effect {
             EffectKind::Noise(_) => "Noise",
             EffectKind::Texture(_) => "Texture",
             EffectKind::Glass(_) => "Glass",
+            EffectKind::Crt(_) => "CRT",
         }
     }
     /// How far outside the node's bounds this effect can paint (a shadow's spread at a sharp
@@ -975,6 +983,11 @@ impl Effect {
             EffectKind::BackgroundBlur(b) => b.max_radius(),
             // The frost blur plus the furthest bend, in blur radii (a blur reads 1.5 radii).
             EffectKind::Glass(g) => g.sanitized().frost + g.max_bend() / 1.5,
+            // The glow blur plus the furthest colour split, in blur radii.
+            EffectKind::Crt(c) => {
+                let c = c.sanitized();
+                c.glow_radius() + c.max_split() / 1.5
+            }
             _ => 0.0,
         };
         if r.is_finite() { r } else { 0.0 }

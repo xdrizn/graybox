@@ -39,6 +39,8 @@ pub use handoff::*;
 pub use library::*;
 pub use node::*;
 pub use props::*;
+pub mod crt;
+pub use crt::{Crt, CrtDirection};
 pub use styles::*;
 pub use text::*;
 pub use vector::*;
@@ -1327,6 +1329,8 @@ mod client_id_tests;
 mod colors_tests;
 #[cfg(test)]
 mod diff_tests;
+#[cfg(test)]
+mod crt_tests;
 #[cfg(test)]
 mod effects_tests;
 #[cfg(test)]

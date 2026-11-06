@@ -22,12 +22,12 @@ fn effect_add_takes_every_type() {
     s.execute("effect.add", &json!({"ids": [r], "type": "GLASS"})).unwrap();
     let n = s.doc().unwrap().node(r).unwrap();
     let labels: Vec<&str> = n.effects.iter().map(Effect::label).collect();
-    assert_eq!(labels, vec!["Drop shadow", "Inner shadow", "Layer blur", "Background blur", "Noise", "Texture", "Glass", "Glass"]);
+    assert_eq!(labels, vec!["Drop shadow", "Inner shadow", "Layer blur", "Background blur", "Noise", "Texture", "Glass", "CRT", "Glass"]);
     let err = s.execute("effect.add", &json!({"ids": [r], "type": "sparkle"})).unwrap_err();
     assert!(err.to_string().contains("sparkle"), "{err}");
     // Undo removes one at a time.
     s.undo().unwrap();
-    assert_eq!(s.doc().unwrap().node(r).unwrap().effects.len(), 7);
+    assert_eq!(s.doc().unwrap().node(r).unwrap().effects.len(), 8);
 }
 
 #[test]
