@@ -24,7 +24,7 @@ fn covers(doc: &Document, frame: &Node, k: &Node) -> bool {
     if !k.visible || k.opacity < 1.0 || k.blend != BlendMode::Normal || k.effects.iter().any(|e| e.visible) {
         return false;
     }
-    if !matches!(k.kind, NodeKind::Rectangle | NodeKind::Frame { .. }) || k.corners.uniform() != Some(0.0) {
+    if !matches!(k.kind, NodeKind::Rectangle | NodeKind::Frame) || k.corners.uniform() != Some(0.0) {
         return false;
     }
     let [a, b, c, d, tx, ty] = k.transform.as_coeffs();
