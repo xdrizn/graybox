@@ -123,6 +123,9 @@ Death are only *examples* in the starter kit, never required.
 - [x] Auto layout eases its other layers in and out when a layer is dropped in or taken out.
 - [x] No light line around frames covered by a screenshot or background.
 - [x] Alt and a drag anywhere on a number field changes its value (normal rate; Shift ×10).
+- [x] CRT effect in Effects: a layer over the screen gives what lies behind it curvature, vignette,
+  scanlines (size, thickness, opacity, bleed, direction), RGB split, phosphor, glow and brightness;
+  static. Spec: [`specs/2026-11-06-crt-effect-design.md`](specs/2026-11-06-crt-effect-design.md).
 
 ## Later
 Third-person preset, 2D platformer and top-down presets, safe-area guides and resolution presets,
