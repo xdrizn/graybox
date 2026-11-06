@@ -9,13 +9,13 @@ pub mod backdrop;
 pub mod blur;
 pub mod boolean;
 mod covered;
+mod crt;
 pub mod dots;
 pub mod draw;
 mod effect_cache;
 mod export_depth;
 pub mod fx;
 pub mod glass;
-mod crt;
 pub mod grain;
 pub mod image_profile;
 pub mod images;
@@ -318,11 +318,9 @@ pub fn render_alone(doc: &Document, id: NodeId, view: &View, how: Alone) -> Opti
     let n = tmp.node_mut(id)?;
     n.is_mask = false;
     match how {
-        Alone::WithEffects => {
-            n.effects.retain(|e| {
-                !matches!(e.kind, figcraft_doc::EffectKind::BackgroundBlur(_) | figcraft_doc::EffectKind::Glass(_) | figcraft_doc::EffectKind::Crt(_))
-            })
-        }
+        Alone::WithEffects => n.effects.retain(|e| {
+            !matches!(e.kind, figcraft_doc::EffectKind::BackgroundBlur(_) | figcraft_doc::EffectKind::Glass(_) | figcraft_doc::EffectKind::Crt(_))
+        }),
         Alone::Plain => {
             n.effects.clear();
             n.opacity = 1.0;

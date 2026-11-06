@@ -1328,9 +1328,9 @@ mod client_id_tests;
 #[cfg(test)]
 mod colors_tests;
 #[cfg(test)]
-mod diff_tests;
-#[cfg(test)]
 mod crt_tests;
+#[cfg(test)]
+mod diff_tests;
 #[cfg(test)]
 mod effects_tests;
 #[cfg(test)]

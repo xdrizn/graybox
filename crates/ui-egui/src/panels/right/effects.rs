@@ -1,7 +1,7 @@
 use super::menu::{context_popup, menu_check, menu_item, menu_popup, row, row_context_menu, row_rect};
 use super::{
-    Blur, BlurType, Document, Effect, EffectKind, FieldEdit, FigApp, Glass, GridAlign, GridKind, Icon, Id, LayoutGrid, Lead, ListDrag,
-    MAX_BLUR_RADIUS, NodeId, Noise, NoiseMode, Paint, Sense, Shadow, StyleSlot, Texture, Ui, VariableType, common, icons, json, move_flags,
+    Blur, BlurType, Crt, CrtDirection, Document, Effect, EffectKind, FieldEdit, FigApp, Glass, GridAlign, GridKind, Icon, Id, LayoutGrid, Lead,
+    ListDrag, MAX_BLUR_RADIUS, NodeId, Noise, NoiseMode, Paint, Sense, Shadow, StyleSlot, Texture, Ui, VariableType, common, icons, json, move_flags,
     moved_index, remove_flags, removed_index, style_picker, tr, trf, trn, vec2, widgets,
 };
 
@@ -332,9 +332,76 @@ fn effect_settings(app: &mut FigApp, ui: &mut Ui, ids: &[NodeId], i: usize, e: &
                 edit(app, ed, &|v| with(&|gl| gl.splay = unit(v)));
             });
         }
-        EffectKind::Crt(_) => {}
+        // Graybox: the CRT effect (its fields take no variables yet).
+        EffectKind::Crt(c) => {
+            let with = |f: &dyn Fn(&mut Crt)| {
+                tweaked(e, |k| {
+                    if let EffectKind::Crt(c2) = k {
+                        f(c2);
+                    }
+                })
+            };
+            let pct = |v: f64| Some((v * 100.0).round());
+            let unit = |v: f64| (v / 100.0).clamp(0.0, 1.0);
+            let field = |ui: &mut Ui, prop: &str, label: &str, v: Option<f64>, suffix: &str| {
+                widgets::number_field(ui, Id::unique(("crt", prop, i)), Lead::Text(tr(label)), v, suffix, half, 1.0)
+            };
+            let pair = |app: &mut FigApp, ui: &mut Ui, a: CrtField<'_>, b: Option<CrtField<'_>>| {
+                row(ui, 32.0, |ui| {
+                    for (prop, label, v, f) in std::iter::once(a).chain(b) {
+                        let suffix = if prop == "lineSize" { "" } else { "%" };
+                        let ed = field(ui, prop, label, v, suffix);
+                        edit(app, ed, &|x| with(&|c2| f(c2, x)));
+                    }
+                });
+            };
+            pair(
+                app,
+                ui,
+                ("curvature", "Curvature", pct(c.curvature), &|c2, x| c2.curvature = unit(x)),
+                Some(("vignette", "Vignette", pct(c.vignette), &|c2, x| c2.vignette = unit(x))),
+            );
+            let size = |c2: &mut Crt, x: f64| c2.line_size = x.clamp(Crt::MIN_LINE_SIZE, Crt::MAX_LINE_SIZE);
+            pair(
+                app,
+                ui,
+                ("lineSize", "Line size", Some(c.line_size), &size),
+                Some(("thickness", "Thickness", pct(c.thickness), &|c2, x| c2.thickness = unit(x))),
+            );
+            pair(
+                app,
+                ui,
+                ("lineOpacity", "Line opacity", pct(c.line_opacity), &|c2, x| c2.line_opacity = unit(x)),
+                Some(("bleed", "Bleed", pct(c.bleed), &|c2, x| c2.bleed = unit(x))),
+            );
+            row(ui, 32.0, |ui| {
+                let resp = widgets::dropdown(ui, tr(c.direction.label()), half, None);
+                menu_popup(&resp).show(|ui| {
+                    for d in CrtDirection::ALL {
+                        if menu_item(ui, tr(d.label()), "") {
+                            set(app, with(&|c2| c2.direction = d), None);
+                            ui.close();
+                        }
+                    }
+                });
+                let ed = field(ui, "rgbSplit", "RGB split", pct(c.rgb_split), "%");
+                edit(app, ed, &|x| with(&|c2| c2.rgb_split = unit(x)));
+            });
+            pair(
+                app,
+                ui,
+                ("phosphor", "Phosphor", pct(c.phosphor), &|c2, x| c2.phosphor = unit(x)),
+                Some(("glow", "Glow", pct(c.glow), &|c2, x| c2.glow = unit(x))),
+            );
+            let bright = |c2: &mut Crt, x: f64| c2.brightness = (x / 100.0).clamp(Crt::MIN_BRIGHTNESS, Crt::MAX_BRIGHTNESS);
+            pair(app, ui, ("brightness", "Brightness", pct(c.brightness), &bright), None);
+        }
     }
 }
+
+/// Graybox: a CRT field in the Effects panel: (field key, label, shown value, how a typed value
+/// lands on the effect).
+type CrtField<'a> = (&'a str, &'a str, Option<f64>, &'a dyn Fn(&mut Crt, f64));
 
 /// Applies a new colour to an effect: (app, secondary colour, colour, scrubbing: `Some(done)`).
 type ColorEdit<'a> = dyn Fn(&mut FigApp, bool, figcraft_color::Color, Option<bool>) + 'a;
