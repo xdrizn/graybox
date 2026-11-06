@@ -235,10 +235,8 @@ impl Session {
             Gesture::Reshape { id, portion, start } => self.reshape_up(ev, id, portion, start)?,
             // Graybox: a click (no drag) on the background of a top-level frame selects the frame, as
             // its hover outline suggests; a drag there still draws a marquee inside it.
-            Gesture::Marquee { start, additive, within: Some(board), .. } if within_slop(ev, start) && !ev.cmd => {
-                self.board_click(board, start, additive, ev.tol() * 2.0)?;
-            }
-            Gesture::TextSelect { .. } | Gesture::TextBox { .. } | Gesture::Marquee { .. } | Gesture::None => {}
+            Gesture::Marquee { start, additive, within, .. } => self.board_click(ev, within, start, additive)?,
+            Gesture::TextSelect { .. } | Gesture::TextBox { .. } | Gesture::None => {}
             Gesture::PenDrag { .. } | Gesture::ShapeBuild { .. } | Gesture::Origin => {}
             Gesture::Vector(_) => self.commit_interaction()?,
         }
@@ -250,9 +248,12 @@ impl Session {
 }
 
 impl Session {
-    /// Graybox: a click on the background of top-level frame `board` (nothing of its own layers
-    /// under the pointer) selects it; with Shift it joins the selection.
-    fn board_click(&mut self, board: NodeId, at: Point, additive: bool, tol: f64) -> Result<()> {
+    /// Graybox: a marquee that ended as a click (no drag, no Cmd/Ctrl) on the background of
+    /// top-level frame `within` (nothing of its own layers under the pointer) selects the frame;
+    /// with Shift it joins the selection.
+    fn board_click(&mut self, ev: &PointerEvent, within: Option<NodeId>, at: Point, additive: bool) -> Result<()> {
+        let Some(board) = within.filter(|_| within_slop(ev, at) && !ev.cmd) else { return Ok(()) };
+        let tol = ev.tol() * 2.0;
         let doc = self.doc()?.clone();
         let page = self.page()?;
         if self.hit(&doc, page, at, tol) != Some(board) || doc.node(board).is_none_or(|n| n.parent != Some(page)) {
