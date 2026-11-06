@@ -8,6 +8,7 @@
 pub mod backdrop;
 pub mod blur;
 pub mod boolean;
+mod covered;
 pub mod dots;
 pub mod draw;
 mod effect_cache;

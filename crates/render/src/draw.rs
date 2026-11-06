@@ -965,7 +965,8 @@ fn draw_content(ctx: &Ctx, pix: &mut Pixmap, n: &Node, xf: Affine, depth: usize,
             // The outline fills, clips children to rounded corners and strokes booleans.
             let outline =
                 if styled_network.is_some() || (splatted && !(clips && n.corners.uniform() != Some(0.0))) { None } else { node_outline(doc, n) };
-            if !splatted && closed {
+            // Graybox: a fill a layer inside hides completely isn't drawn (no light seam at its edge).
+            if !splatted && closed && !(clips && crate::covered::fill_hidden(doc, n)) {
                 if let Some(network) = styled_network {
                     fill_vector_regions(ctx, pix, n, network, xf);
                 } else if let Some((path, rule)) = &outline
