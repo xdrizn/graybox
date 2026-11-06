@@ -11,6 +11,7 @@ pub mod editor;
 pub mod fonts;
 pub mod hotbar;
 pub(crate) mod input;
+pub(crate) mod layout_ease;
 pub mod look_ui;
 pub mod looks;
 pub mod map;
