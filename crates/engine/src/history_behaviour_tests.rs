@@ -81,6 +81,8 @@ fn scene(s: &mut Session) -> Scene {
     let f = frame(s, 0.0, 0.0, 400.0, 300.0, None);
     let r = rect(s, 20.0, 20.0, Some(f));
     let n = frame(s, 200.0, 20.0, 150.0, 150.0, Some(f));
+    // Graybox: anchored by hand as upstream's default (by position it would anchor right).
+    ex(s, "node.set", json!({"ids": [n], "props": {"constraints": {"horizontal": "left", "vertical": "top"}}}));
     let h = frame(s, 600.0, 0.0, 100.0, 100.0, None);
     ex(s, "object.toggleVisible", json!({"ids": [h], "visible": false}));
     rect(s, 800.0, 0.0, None);

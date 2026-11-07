@@ -880,6 +880,8 @@ fn apply_sizing(cmd: &str, doc: &mut Document, id: NodeId, k: &str, v: &Value) -
             if let Some(vv) = v.get("vertical") {
                 n.constraints.vertical = enum_of(vv).ok_or_else(|| bad(cmd, "vertical: top|bottom|topBottom|center|scale"))?;
             }
+            // Graybox: set by hand, they no longer follow the layer's position.
+            doc.game.anchored.insert(id);
         }
         _ => return Ok(false),
     }

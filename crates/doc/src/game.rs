@@ -181,6 +181,10 @@ pub struct GameSettings {
     /// Font files (base64) of the font store families the file uses, added when it is shared so
     /// whoever opens it (in the browser too) sees its text as designed. Family → files.
     pub fonts: BTreeMap<String, Vec<String>>,
+    /// Layers whose constraints were set by hand: they no longer follow where the layer sits
+    /// (the others anchor by position, like a 9-slice).
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub anchored: BTreeSet<NodeId>,
 }
 
 #[derive(Deserialize)]
@@ -200,6 +204,7 @@ struct StoredGameSettings {
     inputs: BTreeMap<String, Vec<String>>,
     hotbars: BTreeMap<NodeId, HotbarSettings>,
     fonts: BTreeMap<String, Vec<String>>,
+    anchored: BTreeSet<NodeId>,
 }
 
 impl Default for StoredGameSettings {
@@ -218,6 +223,7 @@ impl Default for StoredGameSettings {
             inputs: settings.inputs,
             hotbars: settings.hotbars,
             fonts: settings.fonts,
+            anchored: settings.anchored,
         }
     }
 }
@@ -239,6 +245,7 @@ impl TryFrom<StoredGameSettings> for GameSettings {
             inputs: stored.inputs,
             hotbars: stored.hotbars,
             fonts: stored.fonts,
+            anchored: stored.anchored,
         };
         settings.validate()?;
         Ok(settings)
@@ -275,6 +282,7 @@ impl Default for GameSettings {
             inputs: default_inputs(),
             hotbars: BTreeMap::new(),
             fonts: BTreeMap::new(),
+            anchored: BTreeSet::new(),
         }
     }
 }

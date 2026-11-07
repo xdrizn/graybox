@@ -133,6 +133,8 @@ pub fn normalize(doc: &mut Document, before: &Document) {
         }
     }
     touched.extend(doc.take_dirty());
+    // Graybox: layers placed or moved in a frame anchor by where they sit (until set by hand).
+    crate::anchors::settle(doc, before, &touched);
     // 4. Auto layout for frames where something that sizes or places layers changed.
     let mut frames: BTreeSet<NodeId> = BTreeSet::new();
     let moved = live(doc, &touched).into_iter().filter(|id| affects_layout(before, doc, *id));

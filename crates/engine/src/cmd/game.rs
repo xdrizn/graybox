@@ -65,6 +65,13 @@ pub fn specs() -> Vec<CommandSpec> {
             s.request_ui("game.settings", json!({}));
             ok()
         }),
+        spec!(
+            "game.anchors.auto",
+            "Anchor by position",
+            "{ids? (layers; a frame: every layer in it)}  constraints from where each layer sits in its frame (thirds, like a 9-slice), and they follow it when it moves again → {anchored}",
+            true,
+            anchors_auto
+        ),
         spec!("game.starterKit", "Create game UI starter kit", "{} → {hud, inventory, pause, map, death, components, variables}", true, starter_kit),
     ]
 }
@@ -797,4 +804,23 @@ pub fn embed_shared_fonts(s: &mut Session) -> Result<()> {
     settings.validate().map_err(|e| bad("game.share", e))?;
     s.doc_mut()?.game = settings;
     Ok(())
+}
+
+/// Graybox: hand the listed layers' constraints back to their position (a frame: every layer in it).
+fn anchors_auto(s: &mut Session, p: &Value) -> Result<Value> {
+    let ids = crate::automation::params::targets(s, p);
+    let doc = s.doc_mut()?;
+    let mut all: Vec<NodeId> = Vec::new();
+    for id in ids {
+        all.extend(doc.subtree(id));
+    }
+    all.sort();
+    all.dedup();
+    let mut anchored = 0;
+    for id in all {
+        doc.game.anchored.remove(&id);
+        crate::anchors::apply(doc, id);
+        anchored += 1;
+    }
+    Ok(json!({"anchored": anchored}))
 }
