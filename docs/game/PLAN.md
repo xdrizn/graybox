@@ -132,6 +132,8 @@ Death are only *examples* in the starter kit, never required.
 - [x] A boolean (union, subtract, intersect, exclude) has its result's box, not all its shapes'.
 - [x] No padding handles on the canvas (they took clicks near frame edges).
 - [x] Delete leaves Play, like F10.
+- [x] Layers anchor by where they sit in their frame (9-slice thirds, stretch across) until set by
+  hand; Figma-like Constraints box; "Auto (by position)"; "Anchor layers by position" on a frame.
 - [x] CRT effect in Effects: a layer over the screen gives what lies behind it curvature, vignette,
   scanlines (size, thickness, opacity, bleed, direction), RGB split, phosphor, glow and brightness;
   static. Spec: [`specs/2026-11-06-crt-effect-design.md`](specs/2026-11-06-crt-effect-design.md).

@@ -95,6 +95,12 @@ pub fn apply(doc: &mut Document, id: NodeId) -> bool {
     let Some(frame) = anchoring_frame(doc, id) else { return false };
     let (Some(n), Some(f)) = (doc.node(id), doc.node(frame)) else { return false };
     let r = figcraft_geom::transform_rect_bbox(n.transform, n.local_rect());
+    // A layer whose middle is outside the frame (content to scroll to, say) isn't on its screen:
+    // it keeps its constraints.
+    let mid = r.center();
+    if !(0.0..=f.width).contains(&mid.x) || !(0.0..=f.height).contains(&mid.y) {
+        return false;
+    }
     let c = guess(r, f.width, f.height);
     if n.constraints == c {
         return false;

@@ -195,6 +195,8 @@ fn a_selected_layer_shows_its_constraint_guides_in_its_frame() {
     let mut s = Session::new();
     let f = id(&s.execute("frame.create", &json!({"x": 0, "y": 0, "width": 200, "height": 120})).unwrap());
     let c = id(&s.execute("node.create", &json!({"type": "rectangle", "x": 80, "y": 40, "width": 40, "height": 40, "parent": f})).unwrap());
+    // Graybox: anchored left by hand (by position, this centred child would anchor to the centre).
+    s.execute("node.set", &json!({"id": c, "props": {"constraints": {"horizontal": "left", "vertical": "top"}}})).unwrap();
     s.execute("select.set", &json!({"ids": [c]})).unwrap();
     let mut u = Ui::new(s);
     let guide = |u: &mut Ui| {

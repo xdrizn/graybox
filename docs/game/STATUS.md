@@ -114,6 +114,12 @@
   fill hidden by a covering layer isn't drawn, which removes the light line around screenshot
   frames. "Padding 0 stays 10" not reproduced (frame, instance and main all apply 0): tests pin it;
   waiting for the owner's steps.
+- G9 anchoring (2026-11-07): a layer in a frame without auto layout takes the constraints of the
+  third (each way) holding most of it; two thirds or more, or first third into last, stretches. Only
+  when its middle is inside the frame (scroll content keeps its own), not inside instances, and not
+  when the frame itself was resized (its layers move by their constraints then). Set by hand →
+  `GameSettings::anchored` (not plugin data: `.fig` export warns about plugin data). Older layers
+  change only when moved or with "Anchor layers by position".
 - Branding stops at what the user sees. Internal names stay upstream's: crates, `figcraft.exe`,
   the `.figcraft` extension, the settings folder (`FigCraft`, so settings are kept) and command ids.
   Messages that mention FigCraft in passing (errors, sharing) still do; renaming them would mean
@@ -191,6 +197,13 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   boolean group's box is its result's bounds (after `fit_to_children`).
 - `crates/ui-egui/src/canvas/handles.rs` `al_zones`: no padding bands (no padding handles on the
   canvas; gap handles stay).
+- `crates/engine/src/anchors.rs` (new, `pub(crate) mod` in `lib.rs`), `derived.rs` `normalize` (after step
+  3) and `cmd/props.rs` `"constraints"`: layers placed or moved in a frame without auto layout anchor
+  by position (9-slice thirds) until set by hand (`GameSettings::anchored`); `game.anchors.auto`.
+- `crates/ui-egui/src/panels/right.rs` `position_fields`: `game::anchor_ui` (Figma-like constraints
+  with a clickable box; "Anchor layers by position" for a frame); `constraints_row`/`pretty` kept unused.
+- Upstream tests changed for position anchoring: `history_behaviour_tests` scene and
+  `canvas_fixes_tests::a_selected_layer_shows_its_constraint_guides_in_its_frame` anchor by hand.
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one

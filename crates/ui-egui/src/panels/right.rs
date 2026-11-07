@@ -592,7 +592,10 @@ fn position_fields(app: &mut FigApp, ui: &mut Ui, doc: &Arc<Document>, sel: &[No
     position_row(app, ui, doc, sel, &pv, col);
     rotation_row(app, ui, sel, pv.rot, col);
     if pv.in_frame {
-        constraints_row(app, ui, sel, pv.constraints, col);
+        // Graybox: Figma-like constraints that anchor by position until set by hand.
+        crate::game::anchor_ui::row(app, ui, doc, sel, pv.constraints, col);
+    } else {
+        crate::game::anchor_ui::frame_button(app, ui, doc, sel);
     }
 }
 
@@ -685,6 +688,8 @@ fn rotation_row(app: &mut FigApp, ui: &mut Ui, sel: &[NodeId], rot: Option<f64>,
 }
 
 /// The horizontal and vertical constraints of children of frames without auto layout.
+// Graybox: replaced by `game::anchor_ui::row`; kept so upstream merges cleanly.
+#[allow(dead_code)]
 fn constraints_row(app: &mut FigApp, ui: &mut Ui, sel: &[NodeId], c: Option<figcraft_doc::Constraints>, col: f32) {
     let ids = sel.to_vec();
     widgets::sublabels(ui, tr("Constraints"), None);
@@ -798,6 +803,7 @@ fn points_section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[NodeId])
 }
 
 /// Constraint names as shown (English keys, translated at display).
+#[allow(dead_code)] // Graybox: only `constraints_row` (unused) calls it.
 fn pretty(s: &str) -> String {
     match s {
         "LeftRight" => "Left & right".into(),
