@@ -338,12 +338,8 @@ fn al_zones(app: &FigApp) -> Option<Zones> {
     let band = |x0: f64, y0: f64, x1: f64, y1: f64| Rect::from_two_pos(to(x0, y0), to(x1, y1));
     let [pt, pr, pb, pl] = al.padding;
     let (fw, fh) = (n.width, n.height);
-    let bands = vec![
-        (0, band(0.0, 0.0, fw, pt.max(4.0)), pt),
-        (1, band(fw - pr.max(4.0), 0.0, fw, fh), pr),
-        (2, band(0.0, fh - pb.max(4.0), fw, fh), pb),
-        (3, band(0.0, 0.0, pl.max(4.0), fh), pl),
-    ];
+    // Graybox: no padding handles on the canvas (they took clicks meant for layers near the edge).
+    // (upstream built the four padding bands here, one per side).
     // An auto gap shows (and is dragged from) the distance the layout gives it; the drag makes it a
     // fixed gap again, as typing one does.
     let (auto_main, auto_cross) =
@@ -412,7 +408,7 @@ fn al_zones(app: &FigApp) -> Option<Zones> {
         }
     }
     gaps.retain(|g| g.rect.width() > 0.5 && g.rect.height() > 0.5);
-    Some(Zones { id, bands, gaps, tracks })
+    Some(Zones { id, bands: Vec::new(), gaps, tracks })
 }
 
 /// The gradient's line, stops and end handles on the canvas.
