@@ -21,7 +21,8 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
             p.relayout();
         }
     }
-    if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::F10)) {
+    // F10 or Delete leaves Play.
+    if leave_key(&ctx) {
         leave(app, &ctx, p);
         return;
     }
@@ -153,6 +154,11 @@ fn set_cursor(app: &mut FigApp, ctx: &Context, captured: bool) {
     if let Err(e) = app.services.game_cursor(captured) {
         app.toast(e);
     }
+}
+
+/// Whether F10 or Delete was pressed this frame (taken, so nothing else acts on it).
+fn leave_key(ctx: &Context) -> bool {
+    ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::F10) || i.consume_key(egui::Modifiers::NONE, Key::Delete))
 }
 
 fn leave(app: &mut FigApp, ctx: &Context, p: Presenter) {
@@ -325,7 +331,7 @@ fn settle(p: &mut Presenter) {
 }
 
 /// Escape frees the mouse while no screen is open, unless the prototype uses Escape itself
-/// (a pause menu, say: its interaction decides). F10 always leaves Play.
+/// (a pause menu, say: its interaction decides). F10 and Delete always leave Play.
 fn escape_frees_cursor(p: &mut Presenter, ctx: &Context) {
     if !p.overlays.is_empty() || !ctx.input(|i| i.key_pressed(Key::Escape)) {
         return;
@@ -456,13 +462,13 @@ fn help(p: &Presenter, ui: &Ui, rect: Rect) {
     let Some(play) = &p.game else { return };
     let t = crate::theme::Tokens::get(ui.ctx());
     let text = if play.game.player.dead {
-        "Enter: respawn  ·  F10: editor"
+        "Enter: respawn  ·  F10 / Del: editor"
     } else if play.game.paused {
-        "Paused  ·  close the menu to resume  ·  F10: editor"
+        "Paused  ·  close the menu to resume  ·  F10 / Del: editor"
     } else if !play.captured {
-        "Click to capture cursor  ·  F10: editor"
+        "Click to capture cursor  ·  F10 / Del: editor"
     } else {
-        "WASD: move  ·  mouse: look/shoot  ·  R: reload  ·  H: heal  ·  F10: editor"
+        "WASD: move  ·  mouse: look/shoot  ·  R: reload  ·  H: heal  ·  F10 / Del: editor"
     };
     // Graybox: low and see-through, so it covers as little of the HUD as it can.
     let r = Rect::from_center_size(pos2(rect.center().x, rect.max.y - 16.0), vec2(rect.width().min(650.0) - 24.0, 24.0));
@@ -602,6 +608,22 @@ mod screen_tests {
 
     /// Play takes the monitor's shape: layers anchored by their constraints reach the monitor's
     /// corners, centre and edges whatever its size, and the saved design keeps its size.
+    /// F10 and Delete leave Play; other keys don't.
+    #[test]
+    fn f10_and_delete_leave_play() {
+        let press = |key: Key| {
+            let ctx = egui::Context::default();
+            let mut left = false;
+            let ev = |pressed| egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers: egui::Modifiers::NONE };
+            let mut out = ctx.run_ui(egui::RawInput { events: vec![ev(true), ev(false)], ..Default::default() }, |ui| left = leave_key(ui.ctx()));
+            out.textures_delta.clear();
+            left
+        };
+        assert!(press(Key::F10));
+        assert!(press(Key::Delete));
+        assert!(!press(Key::Escape) && !press(Key::E));
+    }
+
     #[test]
     fn constraints_anchor_layers_to_any_monitor() {
         use figcraft_doc::{Constraints, HConstraint, VConstraint};
