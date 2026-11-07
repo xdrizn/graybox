@@ -192,7 +192,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   menu row removed), `menus.rs` (`help.checkForUpdates` does nothing) and `dialogs/updates_ui.rs`
   (`check` kept, unused): no FigCraft update check or prompt; its menu string is kept in `game/brand.rs`.
 - `crates/ui-egui/src/lib.rs` (`font_watch` field) and `app.rs` `frame`: `game::font_watch::tick`
-  walks the system font folders again in the background when the window comes back to the front.
+  looks at the font folders in the background when the window comes back to the front and walks them
+  again only when a font file came or went (no refit: a walk reports most families as changed).
 - `crates/engine/src/boolean_box.rs` (new, `mod` in `lib.rs`) and `derived.rs` `normalize` step 3: a
   boolean group's box is its result's bounds (after `fit_to_children`).
 - `crates/ui-egui/src/canvas/handles.rs` `al_zones`: no padding bands (no padding handles on the
