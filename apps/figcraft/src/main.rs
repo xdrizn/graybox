@@ -234,7 +234,8 @@ fn main() -> eframe::Result {
     // open (no frame then).
     figcraft_ui_egui::i18n::set(&session.prefs.language, figcraft_ui_egui::Services::system_language(&svc).as_deref());
     let mut fig = FigApp::new(session, Box::new(svc));
-    fig.set_startup_update_check(true);
+    // Graybox: no check for FigCraft releases at start (Graybox ships its own builds).
+    fig.set_startup_update_check(false);
     fig.automation_roots = roots;
     fig.ui.home = false;
     // Files named on the command line are the user's too: their missing fonts are listed.

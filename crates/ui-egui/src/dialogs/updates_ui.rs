@@ -53,6 +53,8 @@ impl FigApp {
     }
 }
 
+// Graybox: unused (no FigCraft update check); kept so upstream merges cleanly.
+#[allow(dead_code)]
 pub(crate) fn check(app: &mut FigApp) {
     #[cfg(not(target_arch = "wasm32"))]
     {

@@ -7,13 +7,15 @@ use crate::theme::Tokens;
 /// Upstream's About texts, which our About replaces. Still marked for translation so the shared
 /// language catalogs (`locales/*.toml`) stay as upstream has them and merge cleanly.
 #[allow(dead_code)]
-const UPSTREAM_ABOUT: [&str; 4] = [
+const UPSTREAM_ABOUT: [&str; 5] = [
     tr_noop("About FigCraft"),
     tr_noop(
         "Interface design and prototyping. A free, open-source, clean-room design tool written from scratch in Rust, part of the ArtCraft Crafting Apps.",
     ),
     tr_noop("Join us on Discord"),
     tr_noop("Dual-licensed MIT OR Apache-2.0. Made by the ArtCraft team and community."),
+    // The Help menu's FigCraft update check, which Graybox leaves out.
+    tr_noop("Check for updates…"),
 ];
 
 /// The short name, for sentences.
