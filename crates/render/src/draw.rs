@@ -181,6 +181,9 @@ fn side_strokes(n: &Node) -> Option<Arc<BezPath>> {
     let c = &n.corners;
     Some(Arc::new(if c.uniform() == Some(0.0) {
         figcraft_pathops::rect_side_strokes(n.width, n.height, sides, props.align)
+    } else if !c.style.is_round() {
+        // Graybox: chamfered, scooped and notched corners.
+        figcraft_doc::corner_style::side_strokes(n.width, n.height, c.radii, c.style, sides, props.align)
     } else {
         figcraft_pathops::rounded_side_strokes(n.width, n.height, c.radii, c.smoothing, sides, props.align)
     }))
@@ -204,6 +207,19 @@ pub fn stroke_area(n: &Node, path: &BezPath, closed: bool) -> Arc<BezPath> {
                 return None;
             }
             match n.kind {
+                NodeKind::Rectangle
+                | NodeKind::Frame
+                | NodeKind::Component { .. }
+                | NodeKind::ComponentSet { .. }
+                | NodeKind::Instance { .. }
+                | NodeKind::Section { .. }
+                    if !n.corners.style.is_round() =>
+                {
+                    // Graybox: styled corners move their cuts parallel to themselves (mitred; other
+                    // joins take the generic outline).
+                    (props.join == StrokeJoin::Miter)
+                        .then(|| figcraft_doc::corner_style::offset_outline(n.width, n.height, n.corners.radii, n.corners.style, [inset; 4]))
+                }
                 NodeKind::Rectangle
                 | NodeKind::Frame
                 | NodeKind::Component { .. }

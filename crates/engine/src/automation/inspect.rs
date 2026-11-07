@@ -27,6 +27,7 @@ pub const NODE_KEYS: &[&str] = &[
     "constraints",
     "cornerRadius",
     "cornerSmoothing",
+    "cornerStyle",
     "dashes",
     "description",
     "devChanged",
@@ -280,6 +281,9 @@ fn paint_props(n: &Node, o: &mut serde_json::Map<String, Value>, options: &Inspe
         });
         if n.corners.smoothing > 0.0 {
             insert_prop(o, options, "cornerSmoothing", || json!(n.corners.smoothing));
+        }
+        if !n.corners.style.is_round() {
+            insert_prop(o, options, "cornerStyle", || json!(n.corners.style.id()));
         }
     }
 }

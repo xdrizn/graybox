@@ -84,6 +84,10 @@ pub(super) fn appearance(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[N
             }
         }
     });
+    // Graybox: the shape the corner radius draws (chamfer, scoop, notch…).
+    if indep_ok {
+        crate::game::corner_style_ui::section(app, ui, doc, sel, col);
+    }
     if smooth_ok && ui.data(|d| d.get_temp::<bool>(Id::unique("indep_corners"))).unwrap_or(false) {
         let radii = common(doc, sel, |n| n.corners.radii);
         // `k` indexes `radii` ([top left, top right, bottom right, bottom left]); the fields sit
@@ -114,14 +118,18 @@ pub(super) fn appearance(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[N
             });
         }
         let sm = common(doc, sel, |n| n.corners.smoothing * 100.0);
-        widgets::sublabels(ui, tr("Corner smoothing"), None);
-        row(ui, 32.0, |ui| {
-            let e = widgets::number_field(ui, Id::unique("smoothing"), Lead::Icon(Icon::CornerSmoothing, tr("Corner smoothing")), sm, "%", col, 1.0);
-            app.field(&ids, "cornerSmoothing", e, |v| json!((v / 100.0).clamp(0.0, 1.0)));
-            if widgets::button(ui, tr("iOS"), false, true).on_hover_text(tr("Set corner smoothing to 60%")).clicked() {
-                app.set_props(&ids, json!({"cornerSmoothing": 0.6}));
-            }
-        });
+        // Graybox: smoothing shapes round corners only.
+        if crate::game::corner_style_ui::smoothing_applies(doc, sel) {
+            widgets::sublabels(ui, tr("Corner smoothing"), None);
+            row(ui, 32.0, |ui| {
+                let e =
+                    widgets::number_field(ui, Id::unique("smoothing"), Lead::Icon(Icon::CornerSmoothing, tr("Corner smoothing")), sm, "%", col, 1.0);
+                app.field(&ids, "cornerSmoothing", e, |v| json!((v / 100.0).clamp(0.0, 1.0)));
+                if widgets::button(ui, tr("iOS"), false, true).on_hover_text(tr("Set corner smoothing to 60%")).clicked() {
+                    app.set_props(&ids, json!({"cornerSmoothing": 0.6}));
+                }
+            });
+        }
     }
     let blend = common(doc, sel, |n| n.blend);
     let show_blend = ui.data(|d| d.get_temp::<bool>(Id::unique("blend_open"))).unwrap_or(false)

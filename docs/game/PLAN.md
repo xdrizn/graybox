@@ -137,6 +137,8 @@ Death are only *examples* in the starter kit, never required.
 - [x] CRT effect in Effects: a layer over the screen gives what lies behind it curvature, vignette,
   scanlines (size, thickness, opacity, bleed, direction), RGB split, phosphor, glow and brightness;
   static. Spec: [`specs/2026-11-06-crt-effect-design.md`](specs/2026-11-06-crt-effect-design.md).
+- [x] Corner styles: the corner radius draws Round, Chamfer, Scoop, Notch or V-notch corners
+  (per corner sizes, strokes, clipping, hit testing, SVG/PDF); a Corner style picker in Design.
 
 ## Later
 Third-person preset, 2D platformer and top-down presets, safe-area guides and resolution presets,

@@ -1000,6 +1000,9 @@ impl Effect {
 pub struct Corners {
     pub radii: [f64; 4],
     pub smoothing: f64,
+    /// Graybox: the shape the radii draw (round unless set; files without it load round).
+    #[serde(skip_serializing_if = "crate::CornerStyle::is_round")]
+    pub style: crate::CornerStyle,
 }
 
 impl Corners {

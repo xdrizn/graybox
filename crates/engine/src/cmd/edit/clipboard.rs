@@ -338,6 +338,7 @@ pub(super) fn copy_props_of(doc: &Document, id: NodeId) -> Value {
     if !matches!(n.kind, NodeKind::Vector { .. }) {
         v["cornerRadius"] = json!(n.corners.radii);
         v["cornerSmoothing"] = json!(n.corners.smoothing);
+        v["cornerStyle"] = json!(n.corners.style.id());
     }
     if let NodeKind::Text(t) = &n.kind {
         v["fontFamily"] = json!(t.style.font_family);
@@ -370,6 +371,7 @@ pub(super) fn paste_props(s: &mut Session, p: &Value) -> Result<Value> {
         if !doc.get(i)?.kind.has_corner_radius() {
             m.remove("cornerRadius");
             m.remove("cornerSmoothing");
+            m.remove("cornerStyle");
         }
         crate::cmd::props::apply("edit.pasteProperties", doc, i, &m)?;
     }

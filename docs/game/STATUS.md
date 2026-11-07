@@ -120,6 +120,16 @@
   when the frame itself was resized (its layers move by their constraints then). Set by hand →
   `GameSettings::anchored` (not plugin data: `.fig` export warns about plugin data). Older layers
   change only when moved or with "Anchor layers by position".
+- G9 corner styles (2026-11-07): `Corners::style` (`figcraft_doc::CornerStyle`, our
+  `doc/src/corner_style.rs`): Round (upstream's, the only one smoothing shapes), Chamfer (straight
+  cut, CSS `bevel`), Scoop (concave quarter circle around the corner, CSS `scoop`), Notch (square
+  step, CSS `notch`), V-notch (a V opening half the size along each side, its tip at the full size
+  on the diagonal). Every style fits the same size × size square, clamped like round corners, so
+  the radius field grows and shrinks it. Round is not written to files (older files load as they
+  were). Strokes offset each cut parallel to itself (mitred); other joins take the generic stroke
+  outline. `node.set` `cornerStyle` (aliases bevel, inverse round, inset, inverted chamfer; null =
+  round). The picker shows only when the selection has a radius or a style. `.fig` export warns
+  (Figma draws round corners); code export (CSS, SwiftUI…) still writes plain border radius.
 - Branding stops at what the user sees. Internal names stay upstream's: crates, `figcraft.exe`,
   the `.figcraft` extension, the settings folder (`FigCraft`, so settings are kept) and command ids.
   Messages that mention FigCraft in passing (errors, sharing) still do; renaming them would mean
@@ -227,6 +237,18 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     `render/src/retained.rs` (`sensitive`).
   - `ui-egui/src/panels/right.rs` (imports), `ui-egui/src/panels/right/effects.rs` (the CRT
     fields arm and `CrtField`).
+- Corner styles (`crates/doc/src/corner_style.rs`, `ui-egui/src/game/corner_style_ui.rs` are ours):
+  - `doc/src/props.rs` `Corners::style`; `doc/src/lib.rs` (`pub mod corner_style`, `CornerStyle`,
+    `mod corner_style_tests`); `doc/src/node.rs` (component set corners use `..Default`);
+    `doc/src/geometry.rs` `shape_path` (rect-like outlines through `corner_style::outline`).
+  - `render/src/draw.rs` `side_strokes` and `stroke_area` (styled rings), `render/src/glass.rs`
+    `RoundedRect::of` (round only), `svg/src/lib.rs` stroke shortcut (round only).
+  - `format/src/fig/export/shape.rs` (stroke geometry), `layer.rs` (warning).
+  - `engine/src/cmd/props.rs` (`cornerStyle` / `cornerShape`, help, override group "corners"),
+    `automation/inspect.rs` (`cornerStyle` when not round), `cmd/edit/clipboard.rs` (copied and
+    pasted with the radius), `tests.rs` (junk sweep rows), `lib.rs` (`mod corner_style_tests`).
+  - `ui-egui/src/panels/right/paints.rs` `appearance`: `game::corner_style_ui::section` after the
+    radius row; Corner smoothing only for round corners. `ui-egui/src/game/mod.rs`: the module.
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.
 

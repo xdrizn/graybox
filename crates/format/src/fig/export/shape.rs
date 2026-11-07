@@ -297,6 +297,9 @@ impl<'d> Exporter<'d> {
                 }
                 let mut p = if whole {
                     figcraft_doc::geom::ellipse(gw, gh, 0.0, std::f64::consts::TAU, 0.0)
+                } else if !n.corners.style.is_round() {
+                    // Graybox: styled corners, already in the layer's own coordinates.
+                    return Some(figcraft_doc::corner_style::offset_outline(w, h, n.corners.radii, n.corners.style, [-d; 4]));
                 } else {
                     let radii = n.corners.radii.map(|r| if r > 0.0 { (r + d).max(0.0) } else { 0.0 });
                     figcraft_doc::geom::rounded_rect(gw, gh, radii, n.corners.smoothing)

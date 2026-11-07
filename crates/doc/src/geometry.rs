@@ -14,7 +14,7 @@ pub fn shape_path(n: &Node) -> Option<BezPath> {
         | NodeKind::Component { .. }
         | NodeKind::ComponentSet { .. }
         | NodeKind::Instance { .. }
-        | NodeKind::Section { .. } => figcraft_geom::rounded_rect(w, h, c.radii, c.smoothing),
+        | NodeKind::Section { .. } => crate::corner_style::outline(w, h, c.radii, c.smoothing, c.style),
         NodeKind::Slice => figcraft_geom::rounded_rect(w, h, [0.0; 4], 0.0),
         NodeKind::Ellipse { start, sweep, inner } => figcraft_geom::ellipse(w, h, *start, *sweep, *inner),
         NodeKind::Polygon { count } => figcraft_geom::smoothed_polygon(&figcraft_geom::polygon_points(w, h, *count), c.radii[0], c.smoothing),

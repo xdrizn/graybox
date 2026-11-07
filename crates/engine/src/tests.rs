@@ -409,6 +409,10 @@ fn every_command_survives_junk_params() {
         json!({"id": 2, "type": "rectangle", "props": {"fill": {"$var": ""}, "stroke": {"$var": []}}}),
         json!({"id": 2, "type": "rectangle", "props": {"fill": {"$var": "x", "extra": true}, "width": {"$var": "x"}}}),
         json!({"id": 2, "type": "rectangle", "props": {"fill": {"$var": {"$ref": "x"}}, "stroke": {"$var": "x", "$ref": "x"}}}),
+        // Graybox corner styles as junk.
+        json!({"id": 2, "type": "rectangle", "props": {"cornerStyle": 5, "cornerShape": {"x": 1}, "cornerRadius": "NaN"}}),
+        json!({"ids": [2, 3], "props": {"cornerStyle": "vNotch", "cornerRadius": [1e308, -1, "x", null]}}),
+        json!({"id": 2, "props": {"cornerStyle": null, "cornerShape": ["notch"]}}),
         // Templates and the Getting started tips as junk.
         json!({"template": {"id": 1}, "name": [1e308], "show": "yes"}),
         // Links (dev resources) and indexes as junk.

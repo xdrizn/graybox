@@ -9,6 +9,7 @@ pub mod audio;
 pub mod brand;
 pub(crate) mod color_fold;
 pub mod components;
+pub(crate) mod corner_style_ui;
 pub mod editor;
 pub(crate) mod font_watch;
 pub mod fonts;

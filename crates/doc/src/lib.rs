@@ -41,6 +41,8 @@ pub use node::*;
 pub use props::*;
 pub mod crt;
 pub use crt::{Crt, CrtDirection};
+pub mod corner_style;
+pub use corner_style::CornerStyle;
 pub use styles::*;
 pub use text::*;
 pub use vector::*;
@@ -1327,6 +1329,8 @@ mod boolean_hit_tests;
 mod client_id_tests;
 #[cfg(test)]
 mod colors_tests;
+#[cfg(test)]
+mod corner_style_tests;
 #[cfg(test)]
 mod crt_tests;
 #[cfg(test)]

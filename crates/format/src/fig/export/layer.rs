@@ -227,6 +227,10 @@ impl<'d> Exporter<'d> {
             if n.corners.smoothing > 0.0 {
                 f.push(("cornerSmoothing", fl(n.corners.smoothing)));
             }
+            // Graybox: Figma has round corners only.
+            if !n.corners.style.is_round() && r.iter().any(|x| *x > 0.0) {
+                self.warn("chamfered, scooped and notched corners were written as round corners");
+            }
         }
         let h = match n.constraints.horizontal {
             HConstraint::Left => "MIN",

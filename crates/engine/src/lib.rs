@@ -641,6 +641,8 @@ mod selection_reorder_tests;
 mod selection_spacing_tests;
 
 #[cfg(test)]
+mod corner_style_tests;
+#[cfg(test)]
 #[path = "cmd/audio_tests.rs"]
 mod game_audio_tests;
 #[cfg(test)]
