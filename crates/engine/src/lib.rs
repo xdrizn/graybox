@@ -12,6 +12,7 @@
 mod assets;
 mod automation;
 mod boards;
+mod boolean_box;
 mod canvas;
 pub mod catalog;
 pub mod cmd;

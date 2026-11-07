@@ -128,6 +128,8 @@ pub fn normalize(doc: &mut Document, before: &Document) {
             let _ = doc.remove(id);
         } else {
             let _ = doc.fit_to_children(id);
+            // Graybox: a boolean group's box is its result's.
+            crate::boolean_box::fit_to_result(doc, id);
         }
     }
     touched.extend(doc.take_dirty());
