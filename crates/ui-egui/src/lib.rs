@@ -799,6 +799,8 @@ pub struct FigApp {
     pub(crate) ime: egui::ime_context::ImeContextTracker,
     /// The check for a newer release and its prompt (desktop; [`updates_ui`]).
     pub(crate) updates_rt: updates_ui::Runtime,
+    /// Graybox: fonts installed while the app runs are found when the window comes back to the front.
+    pub(crate) font_watch: crate::game::font_watch::Watch,
     /// Test-only count of the one IME observation each viewport pass makes.
     #[cfg(test)]
     pub(crate) ime_observations: u32,

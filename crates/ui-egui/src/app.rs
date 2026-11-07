@@ -58,6 +58,7 @@ impl FigApp {
             ui_frame_stamp: None,
             ime: egui::ime_context::ImeContextTracker::new(),
             updates_rt: updates_ui::Runtime::default(),
+            font_watch: Default::default(),
             #[cfg(test)]
             ime_observations: 0,
         }
@@ -232,6 +233,7 @@ impl FigApp {
         crate::control::drain(self, &ctx);
         // Graybox: fonts that came inside a shared file.
         crate::game::fonts::load_shared(self);
+        crate::game::font_watch::tick(self, &ctx);
         if let Some(error) = crate::game::audio::take_error(&ctx) {
             self.toast(error);
         }

@@ -9,6 +9,7 @@ pub mod brand;
 pub(crate) mod color_fold;
 pub mod components;
 pub mod editor;
+pub(crate) mod font_watch;
 pub mod fonts;
 pub mod frames;
 pub mod hotbar;

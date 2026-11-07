@@ -182,6 +182,11 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - `crates/ui-egui/src/widgets.rs` `scrub` (+ `scrub_rated`) and `number_field_impl`, and
   `panels/typography/spacing.rs` `spacing_input`: Alt and a drag anywhere on a number field's value
   scrubs it (`game::alt_scrub`, a drag-only area under the field's click area, out of Tab order).
+- `apps/figcraft/src/main.rs` (`set_startup_update_check(false)`), `crates/ui-egui/src/toolbar.rs` (Help
+  menu row removed), `menus.rs` (`help.checkForUpdates` does nothing) and `dialogs/updates_ui.rs`
+  (`check` kept, unused): no FigCraft update check or prompt; its menu string is kept in `game/brand.rs`.
+- `crates/ui-egui/src/lib.rs` (`font_watch` field) and `app.rs` `frame`: `game::font_watch::tick`
+  walks the system font folders again in the background when the window comes back to the front.
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one
