@@ -64,7 +64,8 @@ pub fn section(app: &mut FigApp, ui: &mut Ui, doc: &Arc<Document>, ids: &[NodeId
     let Ok(ds) = app.session.ds() else { return };
     let interacting = ds.interaction.is_some();
     let colors = colors(ui, ds.uid, doc, ids, interacting);
-    if colors.len() < 2 {
+    // Graybox: one colour shows too when it comes from more than the one layer selected (Figma).
+    if !crate::game::color_fold::shown(&colors, ids) {
         return;
     }
     let t = Tokens::get(ui.ctx());
@@ -256,6 +257,9 @@ mod tests {
         let Some(PickerTarget::SelectionColor { targets, .. }) = &p.app.ui.picker else { panic!("the swatch must open its picker") };
         assert_eq!(targets.iter().map(|t| t.id).collect::<Vec<_>>(), [a]);
         p.app.run("fill.set", json!({"id":b,"color":"#ff0000"}));
+        // Graybox: one colour over two layers shows (as in Figma); one layer's own colour doesn't.
+        assert!(p.frame(vec![]).iter().any(|(s, _)| s == "Selection colors"));
+        p.app.run("select.set", json!({"ids":[a]}));
         assert!(!p.frame(vec![]).iter().any(|(s, _)| s == "Selection colors"));
     }
 

@@ -3,6 +3,7 @@
 //! open, more start folded; the choice is kept while the app runs.
 
 use egui::{Align2, Id, Rect, Sense, Ui, pos2, vec2};
+use figcraft_doc::NodeId;
 use figcraft_engine::selection_colors::SelectionColor;
 
 use crate::icons::{self, Icon};
@@ -15,6 +16,17 @@ const PREVIEW: usize = 3;
 /// Whether the list starts open for `count` colours (before the player opens or closes it).
 pub(crate) fn opens_by_default(count: usize) -> bool {
     count <= PREVIEW
+}
+
+/// Whether the section shows for `colors` of selection `ids`: two colours or more, or one that
+/// comes from more than the one layer selected (a frame's layers, or several layers). One colour on
+/// the one selected layer is its Fill or Stroke already.
+pub(crate) fn shown(colors: &[SelectionColor], ids: &[NodeId]) -> bool {
+    match colors {
+        [] => false,
+        [one] => ids.len() > 1 || one.targets.iter().any(|t| !ids.contains(&t.id)),
+        _ => true,
+    }
 }
 
 /// Draw the header for `colors`; returns whether the list below it is open.
@@ -48,4 +60,30 @@ pub(crate) fn header(ui: &mut Ui, title: &str, colors: &[SelectionColor]) -> boo
     }
     let toggled = resp.clicked();
     open != toggled
+}
+
+#[cfg(test)]
+mod tests {
+    use figcraft_doc::NodeId;
+    use figcraft_engine::Session;
+    use serde_json::json;
+
+    /// A frame (no fill) holding layers of one colour shows that colour; a lone layer doesn't.
+    #[test]
+    fn one_colour_inside_a_frame_shows() {
+        let mut s = Session::new();
+        let f = NodeId(s.execute("frame.create", &json!({"width": 100, "height": 100, "props": {"fill": "none"}})).unwrap()["id"].as_u64().unwrap());
+        let mut kids = Vec::new();
+        for x in [0, 30] {
+            let r = s.execute("shape.rectangle", &json!({"parent": f, "x": x, "width": 20, "height": 20, "props": {"fill": "#5effd0"}})).unwrap();
+            kids.push(NodeId(r["id"].as_u64().unwrap()));
+        }
+        let doc = s.doc().unwrap();
+        let colors = figcraft_engine::selection_colors::collect(doc, &[f]);
+        assert_eq!(colors.len(), 1);
+        assert!(super::shown(&colors, &[f]), "a frame's one colour");
+        let own = figcraft_engine::selection_colors::collect(doc, &kids[..1]);
+        assert!(!super::shown(&own, &kids[..1]), "one layer's own colour is its Fill already");
+        assert!(super::shown(&figcraft_engine::selection_colors::collect(doc, &kids), &kids), "two layers of one colour");
+    }
 }

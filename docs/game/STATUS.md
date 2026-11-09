@@ -189,7 +189,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   row changed to match.
 - `crates/engine/src/selection/selection_colors.rs` `collect`: colours group by how they read
   (8-bit channels, whole percent), so near-equal greys are one row.
-- `crates/ui-egui/src/panels/selection_colors.rs` `section`: header from `game::color_fold` (folds
+- `crates/ui-egui/src/panels/selection_colors.rs` `section`: shows by `game::color_fold::shown` (one
+  colour too, when it comes from more than the one selected layer); header from `game::color_fold` (folds
   past three colours to a preview and "+N").
 - `crates/render/src/covered.rs` (new, `mod` in `lib.rs`) and `draw.rs` `draw_content`: a frame fill
   a layer inside covers completely (opaque, axis-aligned, whole box) is not drawn (no light seam).
