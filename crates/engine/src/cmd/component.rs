@@ -330,7 +330,8 @@ fn create(s: &mut Session, p: &Value) -> Result<Value> {
         let r = super::structure::specs()
             .into_iter()
             .find(|x| x.id == "object.frameSelection")
-            .map(|x| (x.run)(s, &json!({"ids": ids})))
+            // Graybox: `wrapOnly` keeps a single rectangle inside the new frame.
+            .map(|x| (x.run)(s, &json!({"ids": ids, "wrapOnly": true})))
             .ok_or_else(|| EngineError::Other("frame selection unavailable".into()))??;
         let fid = id_of(&r["id"]).ok_or_else(|| EngineError::Other("wrap failed".into()))?;
         let doc = s.doc_mut()?;

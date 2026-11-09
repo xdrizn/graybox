@@ -19,7 +19,13 @@ pub fn specs() -> Vec<CommandSpec> {
     vec![
         spec!("object.group", "Group selection", "{ids?, name?}", true, |s, p| wrap(s, p, "object.group", Wrap::Group)),
         spec!("object.ungroup", "Ungroup selection", "{ids?}", true, ungroup),
-        spec!("object.frameSelection", "Frame selection", "{ids?, name?}", true, |s, p| wrap(s, p, "object.frameSelection", Wrap::Frame)),
+        spec!(
+            "object.frameSelection",
+            "Frame selection",
+            "{ids?, name?, wrapOnly? (one rectangle alone becomes the frame unless set)}",
+            true,
+            |s, p| wrap(s, p, "object.frameSelection", Wrap::Frame)
+        ),
         spec!("object.removeFrame", "Remove frame", "{ids?}", true, ungroup),
         spec!(
             "object.convertToGroup",
@@ -183,6 +189,13 @@ pub(crate) fn wrap_boolean(s: &mut Session, p: &Value, cmd: &str, op: BoolOp) ->
 /// the command that asked.
 fn wrap(s: &mut Session, p: &Value, cmd: &str, w: Wrap) -> Result<Value> {
     let ids = req_targets(cmd, s, p)?;
+    // Graybox: one rectangle framed becomes the frame itself (`wrapOnly`: Create component wraps it).
+    if matches!(w, Wrap::Frame)
+        && p.get("wrapOnly").is_none()
+        && let Some(done) = crate::rect_to_frame::convert(s, &ids)?
+    {
+        return Ok(done);
+    }
     let doc = s.doc_mut()?;
     let ids = z_sorted(doc, &roots(doc, &ids));
     let top = *ids.last().ok_or_else(|| bad(cmd, "nothing selected"))?;

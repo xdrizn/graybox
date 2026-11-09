@@ -26,6 +26,7 @@ pub mod guard;
 pub mod keymap;
 pub mod measure;
 pub mod proto_run;
+mod rect_to_frame;
 mod selection;
 mod sharing;
 mod shift_select;
