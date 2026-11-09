@@ -551,9 +551,12 @@ impl Session {
                 // Text reflow and auto layout can recompute this box after the preview (a size bound
                 // to a variable lets go of it: the resize is an explicit edit).
                 let n = doc.get(*id)?;
-                let crop_images = ev.cmd
-                    && !matches!(n.kind, NodeKind::Text(_))
-                    && !std::iter::once(*id).chain(doc.ancestors(*id)).any(|a| doc.node(a).is_some_and(|n| n.layout.is_some()));
+                // Graybox: inside auto layout too, unless the layout recomputes the box (the layer's own
+                // auto layout, or a min/max size in an auto layout parent).
+                let cl = &n.child_layout;
+                let in_layout = n.parent.and_then(|p| doc.node(p)).is_some_and(|p| p.layout.is_some()) && !cl.absolute;
+                let bounded = cl.min_w.is_some() || cl.max_w.is_some() || cl.min_h.is_some() || cl.max_h.is_some();
+                let crop_images = ev.cmd && !matches!(n.kind, NodeKind::Text(_)) && n.layout.is_none() && !(in_layout && bounded);
                 if crop_images {
                     // Crop the layer's image fills without moving their pixels on the page.
                     // Work from the interaction snapshot, just like the geometry on every move.

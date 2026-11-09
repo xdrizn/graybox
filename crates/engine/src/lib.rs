@@ -18,6 +18,8 @@ mod canvas;
 pub mod catalog;
 pub mod cmd;
 mod content;
+#[cfg(test)]
+mod crop_in_layout_tests;
 mod dev;
 pub mod events;
 mod extensions;
