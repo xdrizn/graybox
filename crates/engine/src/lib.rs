@@ -28,6 +28,7 @@ pub mod measure;
 pub mod proto_run;
 mod selection;
 mod sharing;
+mod shift_select;
 pub use assets::components;
 pub use assets::library;
 pub use assets::library_server;

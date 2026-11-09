@@ -88,7 +88,14 @@ impl Session {
         let target = label.or_else(|| {
             self.hit(&doc, page, ev.p(), ev.tol() * 2.0)
                 .filter(|leaf| ev.cmd || !board_background(*leaf))
-                .map(|leaf| select_target(&doc, leaf, &sel, ev.cmd))
+                // Graybox: Shift adds the layer at the selected layers' depth.
+                .map(|leaf| {
+                    if ev.shift && !ev.cmd && !sel.is_empty() {
+                        crate::shift_select::target(&doc, leaf, &sel)
+                    } else {
+                        select_target(&doc, leaf, &sel, ev.cmd)
+                    }
+                })
         });
         // A press inside the selection's box that reaches nothing above it (an unfilled shape's
         // inside, the frame or canvas behind it, or a layer stacked below the selected layer the

@@ -216,6 +216,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   with a clickable box; "Anchor layers by position" for a frame); `constraints_row`/`pretty` kept unused.
 - Upstream tests changed for position anchoring: `history_behaviour_tests` scene and
   `canvas_fixes_tests::a_selected_layer_shows_its_constraint_guides_in_its_frame` anchor by hand.
+- `crates/engine/src/shift_select.rs` (new, `mod` in `lib.rs`) and `canvas/tools/drag.rs` press: Shift-click
+  adds the layer at the selected layers' depth (same top-level frame), not the plain click's level.
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one
