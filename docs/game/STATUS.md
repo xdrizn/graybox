@@ -220,6 +220,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   adds the layer at the selected layers' depth (same top-level frame), not the plain click's level.
 - `crates/engine/src/rect_to_frame.rs` (new, `mod` in `lib.rs`), `cmd/structure.rs` `wrap` and
   `cmd/component.rs` (passes `wrapOnly`): "Frame selection" on one rectangle makes it the frame.
+- `crates/ui-egui/src/menus.rs` canvas context menu: "Set as frame background" (`game.image.toBackground`,
+  in `cmd/game.rs`) after "Crop image" for one image layer in a frame.
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one

@@ -544,6 +544,13 @@ pub fn popups(app: &mut FigApp, ctx: &egui::Context) {
                 }
                 if crop && let Some(at) = entries.iter().position(|e| e.1 == "object.mask") {
                     entries.insert(at + 1, (tr("Crop image"), "image.crop"));
+                    // Graybox: an image in a frame can become the frame's background.
+                    let in_frame = app.session.doc().ok().is_some_and(|doc| {
+                        matches!(app.session.selection().as_slice(), [id] if figcraft_engine::cmd::game::background_frame(doc, *id).is_some())
+                    });
+                    if in_frame {
+                        entries.insert(at + 2, ("Set as frame background", "game.image.toBackground"));
+                    }
                 }
                 // An instance's actions reach its main component: replace "Create component" with
                 // "Go to main component" (as in Figma's context menu).

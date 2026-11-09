@@ -72,6 +72,13 @@ pub fn specs() -> Vec<CommandSpec> {
             true,
             anchors_auto
         ),
+        spec!(
+            "game.image.toBackground",
+            "Set as frame background",
+            "{ids? (one layer with an image fill, in a frame)}  its image becomes its frame's fill (filling the frame), and the layer goes → {frame}",
+            true,
+            image_to_background
+        ),
         spec!("game.starterKit", "Create game UI starter kit", "{} → {hud, inventory, pause, map, death, components, variables}", true, starter_kit),
     ]
 }
@@ -823,4 +830,70 @@ fn anchors_auto(s: &mut Session, p: &Value) -> Result<Value> {
         anchored += 1;
     }
     Ok(json!({"anchored": anchored}))
+}
+
+/// Graybox: the frame a layer with an image fill can hand its image to (its parent frame, not a
+/// group or the inside of an instance), if any.
+pub fn background_frame(doc: &Document, id: NodeId) -> Option<NodeId> {
+    let n = doc.node(id)?;
+    crate::cmd::image::top_image_fill(n)?;
+    let p = n.parent?;
+    let pn = doc.node(p)?;
+    let ok = pn.kind.is_frame_like() && !pn.kind.bounds_follow_children() && crate::components::owning_instance(doc, id).is_none();
+    ok.then_some(p)
+}
+
+/// Graybox: a layer's image becomes its frame's fill (on top of the frame's other fills, filling
+/// the frame), and the layer is removed.
+fn image_to_background(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "game.image.toBackground";
+    let ids = crate::automation::params::targets(s, p);
+    let [id] = ids[..] else { return Err(bad(cmd, "Select one image layer")) };
+    let doc = s.doc_mut()?;
+    let frame = background_frame(doc, id).ok_or_else(|| bad(cmd, "Select an image layer inside a frame"))?;
+    let images: Vec<Paint> = doc
+        .get(id)?
+        .fills
+        .iter()
+        .filter(|f| f.visible && matches!(f.kind, figcraft_color::PaintKind::Image(_)))
+        .cloned()
+        .map(|mut f| {
+            if let figcraft_color::PaintKind::Image(img) = &mut f.kind {
+                img.scale_mode = figcraft_color::ImageScaleMode::Fill;
+            }
+            f
+        })
+        .collect();
+    doc.get_mut(frame)?.fills.extend(images);
+    doc.remove(id)?;
+    s.set_selection(vec![frame]);
+    Ok(json!({"frame": frame}))
+}
+
+#[cfg(test)]
+mod image_background_tests {
+    use crate::Session;
+    use figcraft_doc::NodeId;
+    use serde_json::json;
+
+    /// An image layer in a frame becomes the frame's top fill, filling it; the layer is gone.
+    #[test]
+    fn an_image_becomes_its_frames_background() {
+        let mut s = Session::new();
+        let f = NodeId(s.execute("frame.create", &json!({"width": 200, "height": 100})).unwrap()["id"].as_u64().unwrap());
+        let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+        let img = s.execute("image.place", &json!({"data": png, "parent": f, "x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
+        let img = NodeId(img["id"].as_u64().unwrap());
+        s.execute("game.image.toBackground", &json!({"ids": [img]})).unwrap();
+        let doc = s.doc().unwrap();
+        assert!(doc.node(img).is_none(), "the layer is gone");
+        let fills = &doc.node(f).unwrap().fills;
+        assert!(
+            matches!(fills.last().map(|p| &p.kind), Some(figcraft_color::PaintKind::Image(i)) if i.scale_mode == figcraft_color::ImageScaleMode::Fill)
+        );
+        assert_eq!(s.selection(), vec![f]);
+        // A layer without an image, or not in a frame, is refused.
+        let r = s.execute("shape.rectangle", &json!({"parent": f, "width": 10, "height": 10})).unwrap()["id"].as_u64().unwrap();
+        assert!(s.execute("game.image.toBackground", &json!({"ids": [r]})).is_err());
+    }
 }
