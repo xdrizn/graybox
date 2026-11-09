@@ -26,6 +26,7 @@ pub mod renderer;
 pub mod screen_fit;
 pub mod screen_ui;
 pub mod share;
+pub(crate) mod style_fill;
 
 /// Platform hosts read these markers inside the browser's trusted input event, before egui's
 /// next frame. Fullscreen and pointer lock cannot reliably be requested from that later frame.

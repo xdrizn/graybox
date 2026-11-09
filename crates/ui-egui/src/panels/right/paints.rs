@@ -331,9 +331,14 @@ pub(super) fn paints(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[NodeI
             ui.close();
         }
     });
-    style_picker::chip(app, ui, doc, &ids, slot);
+    // Graybox: a paint style shows as one row (swatch, name, detach), not as its paints.
+    let styled = crate::game::style_fill::row(app, ui, doc, &ids, fills);
+    if !styled {
+        style_picker::chip(app, ui, doc, &ids, slot);
+    }
     match &list {
         None => widgets::note(ui, tr("Click + to replace mixed content"), t.text_secondary),
+        Some(_) if styled => {}
         Some(l) => {
             // The last paint is on top: shown first. Rows drag to reorder.
             let mut drag = ListDrag::new(ui, if fills { "fills" } else { "strokes" });
