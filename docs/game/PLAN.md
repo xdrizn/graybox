@@ -140,6 +140,12 @@ Death are only *examples* in the starter kit, never required.
 - [x] Corner styles: the corner radius draws Round, Chamfer, Scoop, Notch or V-notch corners
   (per corner sizes, strokes, clipping, hit testing, SVG/PDF); a Corner style picker in Design.
 
+- [x] Shift-click adds the layer at the selected layer's depth (frames in different auto layouts).
+- [x] Frame selection on one rectangle turns it into the frame.
+- [x] Right-click an image in a frame: Set as frame background.
+- [x] Ctrl-drag crops images inside auto layout too.
+- [x] A fill or stroke with a colour style shows only the style (swatch, name, detach).
+- [x] Gradient Rotate 90° turns about the layer's middle.
 ## Later
 Third-person preset, 2D platformer and top-down presets, safe-area guides and resolution presets,
 export package for engines (assets + spec sheet, 9-slice), Godot scene export, Unity plugin,
