@@ -14,6 +14,7 @@ pub mod editor;
 pub(crate) mod font_watch;
 pub mod fonts;
 pub mod frames;
+pub(crate) mod gradient_turn;
 pub mod hotbar;
 pub(crate) mod input;
 pub(crate) mod layout_ease;

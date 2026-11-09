@@ -895,10 +895,8 @@ fn gradient_controls(
             write(app, target, paint, false);
         }
         if ui.small_button(tr("Rotate 90°")).clicked() {
-            let (fx, fy) = g.from;
-            let rot = |(x, y): (f64, f64)| (fx - (y - fy), fy + (x - fx));
-            g.to = rot(g.to);
-            g.width = rot(g.width);
+            // Graybox: a linear gradient turns about the layer's middle (it stays centred in it).
+            crate::game::gradient_turn::quarter(&mut g);
             paint.kind = PaintKind::Gradient(g.clone());
             write(app, target, paint, false);
         }

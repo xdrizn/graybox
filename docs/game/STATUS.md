@@ -226,6 +226,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   (not a layer with its own auto layout, nor one with a min/max size in an auto layout parent).
 - `crates/ui-egui/src/panels/right/paints.rs` `paints`: a Fill/Stroke linked to one paint style is one row
   (`game::style_fill`: swatch, name, detach), not the style's paints.
+- `crates/ui-egui/src/widgets/colorpicker.rs` gradient "Rotate 90°": `game::gradient_turn::quarter` (a
+  linear gradient turns about the layer's middle; others about their centre).
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one
