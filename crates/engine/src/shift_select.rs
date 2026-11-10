@@ -82,13 +82,6 @@ mod tests {
     }
 }
 
-/// Graybox: whether a Cmd/Ctrl press on `leaf` (the deepest layer under it) starts a marquee instead
-/// of picking it: `leaf` is a frame holding layers (the press is on its own background), as in
-/// Figma, so a drag selects the layers inside it.
-pub(crate) fn cmd_marquees(doc: &Document, leaf: NodeId) -> bool {
-    doc.node(leaf).is_some_and(|n| n.kind.is_frame_like() && !n.children.is_empty() && !n.kind.bounds_follow_children())
-}
-
 #[cfg(test)]
 mod cmd_marquee_tests {
     use crate::Session;
@@ -117,5 +110,53 @@ mod cmd_marquee_tests {
         }
         assert_eq!(s.selection(), vec![r]);
         assert_eq!(s.doc().unwrap().world_bounds(inner).unwrap().origin(), figcraft_geom::Point::new(20.0, 20.0), "the frame stays");
+    }
+}
+
+#[cfg(test)]
+mod ctrl_over_image_tests {
+    use crate::Session;
+    use crate::tools::{PointerEvent, PointerKind};
+    use figcraft_doc::NodeId;
+    use serde_json::json;
+
+    /// The owner's case: a background image covering a frame is selected; Ctrl-dragging over it
+    /// draws a selection box (selecting the layer it touches) and the image stays put. A Ctrl-click
+    /// on it, not dragged, keeps it selected.
+    #[test]
+    fn ctrl_drag_over_a_selected_background_image_marquees() {
+        let mut s = Session::new();
+        let f = NodeId(s.execute("frame.create", &json!({"x": 0, "y": 0, "width": 400, "height": 300})).unwrap()["id"].as_u64().unwrap());
+        let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+        let bg = NodeId(
+            s.execute("image.place", &json!({"data": png, "parent": f, "x": 0, "y": 0, "width": 400, "height": 300})).unwrap()["id"]
+                .as_u64()
+                .unwrap(),
+        );
+        let r = NodeId(
+            s.execute("shape.rectangle", &json!({"parent": f, "x": 250, "y": 200, "width": 40, "height": 40})).unwrap()["id"].as_u64().unwrap(),
+        );
+        s.execute("select.set", &json!({"ids": [bg]})).unwrap();
+        let ctrl = |s: &mut Session, steps: &[(PointerKind, f64, f64)]| {
+            for (kind, x, y) in steps {
+                let mut e = PointerEvent::at(*kind, *x, *y, 1.0);
+                e.cmd = true;
+                s.pointer(&e).unwrap();
+            }
+        };
+        ctrl(
+            &mut s,
+            &[
+                (PointerKind::Down, 200.0, 150.0),
+                (PointerKind::Move, 260.0, 210.0),
+                (PointerKind::Move, 300.0, 250.0),
+                (PointerKind::Up, 300.0, 250.0),
+            ],
+        );
+        assert_eq!(s.selection(), vec![r], "the box selects the layer it touches");
+        assert_eq!(s.doc().unwrap().world_bounds(bg).unwrap().origin(), figcraft_geom::Point::new(0.0, 0.0), "the image stays put");
+        s.execute("select.set", &json!({"ids": [bg]})).unwrap();
+        ctrl(&mut s, &[(PointerKind::Down, 100.0, 100.0), (PointerKind::Up, 100.0, 100.0)]);
+        assert_eq!(s.selection(), vec![bg], "a Ctrl-click on the selected image keeps it");
     }
 }

@@ -252,7 +252,7 @@ impl Session {
             Gesture::Reshape { id, portion, start } => self.reshape_up(ev, id, portion, start)?,
             // Graybox: a click (no drag) on the background of a top-level frame selects the frame, as
             // its hover outline suggests; a drag there still draws a marquee inside it.
-            Gesture::Marquee { start, additive, within, .. } => self.board_click(ev, within, start, additive)?,
+            Gesture::Marquee { start, additive, within, base } => self.board_click(ev, within, start, additive, &base)?,
             Gesture::TextSelect { .. } | Gesture::TextBox { .. } | Gesture::None => {}
             Gesture::PenDrag { .. } | Gesture::ShapeBuild { .. } | Gesture::Origin => {}
             Gesture::Vector(_) => self.commit_interaction()?,
@@ -268,20 +268,22 @@ impl Session {
     /// Graybox: a marquee that ended as a click (no drag, no Cmd/Ctrl) on the background of
     /// top-level frame `within` (nothing of its own layers under the pointer) selects the frame;
     /// with Shift it joins the selection.
-    fn board_click(&mut self, ev: &PointerEvent, within: Option<NodeId>, at: Point, additive: bool) -> Result<()> {
+    fn board_click(&mut self, ev: &PointerEvent, within: Option<NodeId>, at: Point, additive: bool, before: &[NodeId]) -> Result<()> {
         let tol = ev.tol() * 2.0;
         let doc = self.doc()?.clone();
         let page = self.page()?;
-        // Graybox: a Cmd/Ctrl press on a frame's background marquees its layers when dragged; as a
-        // plain click it still selects that frame (the deepest layer there), as before.
+        // Graybox: a Cmd/Ctrl press marquees when dragged; as a plain click it selects the deepest
+        // layer there, as before (a layer already selected keeps the whole selection; Shift adds).
         if ev.cmd && within_slop(ev, at) {
-            if let Some(leaf) = self.hit(&doc, page, at, tol).filter(|l| crate::shift_select::cmd_marquees(&doc, *l)) {
-                let mut sel = if additive { self.selection() } else { Vec::new() };
-                if !sel.contains(&leaf) {
-                    sel.push(leaf);
-                }
-                self.set_selection(sel);
-            }
+            let leaf = self.hit(&doc, page, at, tol);
+            let sel = match leaf {
+                Some(l) if before.contains(&l) => before.to_vec(),
+                Some(l) if additive => before.iter().copied().chain(std::iter::once(l)).collect(),
+                Some(l) => vec![l],
+                None if additive => before.to_vec(),
+                None => Vec::new(),
+            };
+            self.set_selection(sel);
             return Ok(());
         }
         let Some(board) = within.filter(|_| within_slop(ev, at)) else { return Ok(()) };

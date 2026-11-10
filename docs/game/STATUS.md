@@ -236,7 +236,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   (`ellipse_points.rs`, new, `mod` in `lib.rs`).
 - `crates/ui-egui/src/canvas/overlays.rs` selection overlay: hidden while the Pen draws a path.
 - `crates/engine/src/canvas/tools/drag.rs` pen drag: 8 screen px pull out no handle (was 3); press
-  filter: Cmd/Ctrl on a frame's own background starts a marquee (`shift_select::cmd_marquees`).
+  filter: a Cmd/Ctrl press always starts a marquee (not the selection-box drag either), leaving out
+  the layer it began on; `draw.rs` `board_click` turns a Cmd/Ctrl click into the deep select.
+  `selection_cache_tests` moves with Control (snapping off) instead of Cmd.
 - `crates/engine/src/cmd/structure.rs` `join`: several layers joined have their meeting ends welded
   (`weld.rs`, new, `mod` in `lib.rs`; 2 units).
 - `crates/ui-egui/src/toolbar.rs`: no Game settings button beside Play (`main_width` counts 5 cells).

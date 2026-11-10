@@ -87,8 +87,9 @@ impl Session {
         let label = label_at(&doc, page, &self.tool.labels, ev.p());
         let target = label.or_else(|| {
             self.hit(&doc, page, ev.p(), ev.tol() * 2.0)
-                // Graybox: with Cmd/Ctrl, a press on a frame's own background starts a marquee of its layers.
-                .filter(|leaf| if ev.cmd { !crate::shift_select::cmd_marquees(&doc, *leaf) } else { !board_background(*leaf) })
+                // Graybox: with Cmd/Ctrl a press on a layer starts a marquee (a click without a drag
+                // still selects the deepest layer there: `board_click`), as in Figma.
+                .filter(|leaf| !ev.cmd && !board_background(*leaf))
                 // Graybox: Shift adds the layer at the selected layers' depth.
                 .map(|leaf| {
                     if ev.shift && !ev.cmd && !sel.is_empty() {
@@ -110,7 +111,14 @@ impl Session {
         // its drag target instead; that fallback is not a clicked layer.
         let clicked = target;
         let target = match sel.iter().copied().find(|s| !locked_in(&doc, *s)) {
-            Some(first) if label.is_none() && !ev.shift && behind_sel(target) && selection_box(&doc, &sel).is_some_and(|q| in_quad(&q, ev.p())) => {
+            // Graybox: not with Cmd/Ctrl (it marquees, even inside the selection's box).
+            Some(first)
+                if label.is_none()
+                    && !ev.shift
+                    && !ev.cmd
+                    && behind_sel(target)
+                    && selection_box(&doc, &sel).is_some_and(|q| in_quad(&q, ev.p())) =>
+            {
                 Some(first)
             }
             _ => target,
@@ -182,7 +190,9 @@ impl Session {
                 if !ev.shift {
                     self.set_selection(vec![]);
                 }
-                self.tool.gesture = Gesture::Marquee { start: ev.p(), additive: ev.shift, base: if ev.shift { sel } else { vec![] }, within };
+                // Graybox: a Cmd/Ctrl marquee keeps what was selected, for a click that ends it (`board_click`).
+                self.tool.gesture =
+                    Gesture::Marquee { start: ev.p(), additive: ev.shift, base: if ev.shift || ev.cmd { sel } else { vec![] }, within };
             }
         }
         Ok(())
@@ -209,7 +219,17 @@ impl Session {
                 let r = Rect::from_points(*start, ev.p());
                 self.tool.overlay.marquee = Some([r.x0, r.y0, r.x1, r.y1]);
                 // Cmd/Ctrl: the nested layers it touches.
-                let sel = self.marquee_selection(r, *within, ev.cmd, base, *additive)?;
+                // Graybox: a Cmd/Ctrl marquee's base is only for its click (not added to the box).
+                let mut sel = self.marquee_selection(r, *within, ev.cmd, if *additive { base } else { &[] }, *additive)?;
+                // Graybox: the layer the Cmd/Ctrl drag began on (a frame or background image) and
+                // what holds it are left out: the box takes what lies above it.
+                if ev.cmd {
+                    let doc = self.doc()?.clone();
+                    let page = self.page()?;
+                    if let Some(under) = self.hit(&doc, page, *start, ev.tol() * 2.0) {
+                        sel.retain(|h| *h != under && !doc.is_ancestor(*h, under));
+                    }
+                }
                 self.set_selection(sel);
                 Ok(())
             }

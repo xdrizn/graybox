@@ -189,7 +189,8 @@ fn boxes(app: &FigApp, ctx: &Context) -> Vec<Rect> {
 
 /// A drag of the selection held at (`x`, `y`) on the page, from (10, 10); snapping is off (Cmd).
 fn drag_to(app: &mut FigApp, x: f64, y: f64) {
-    let ev = |kind, x, y| PointerEvent { cmd: true, ..PointerEvent::at(kind, x, y, 1.0) };
+    // Graybox: Control (not Cmd) turns snapping off for the move; a Cmd/Ctrl press marquees.
+    let ev = |kind, x, y| PointerEvent { ctrl: true, ..PointerEvent::at(kind, x, y, 1.0) };
     if app.session.ds().unwrap().interaction.is_none() {
         app.session.pointer(&ev(PointerKind::Down, 10.0, 10.0)).unwrap();
     }
