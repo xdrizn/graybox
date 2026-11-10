@@ -268,7 +268,9 @@ fn alt_drag_on_a_number_field_scrubs_it() {
     let at = egui::pos2(((b.x0 + b.x1) / 2.0) as f32 + 10.0, ((b.y0 + b.y1) / 2.0) as f32);
     let drag = |u: &mut crate::layers_drag_tests::Ui, mods: Modifiers| {
         let button = |pos, pressed| Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: mods };
-        u.frame_with(vec![Event::PointerMoved(at), button(at, true)], mods);
+        // Alt is held over the field before the press, as a hand does (upstream's Alt-scrub).
+        u.frame_with(vec![Event::PointerMoved(at)], mods);
+        u.frame_with(vec![button(at, true)], mods);
         for i in 1..=4 {
             u.frame_with(vec![Event::PointerMoved(at + egui::vec2(5.0 * i as f32, 0.0))], mods);
         }

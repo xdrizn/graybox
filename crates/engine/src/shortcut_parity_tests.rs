@@ -235,6 +235,8 @@ static ROWS: &[Row] = &[
         "then the arrows move it, Cmd/Ctrl+arrows draw it out (Shift: farther), Enter selects, Escape closes; F8 kept")
         .reserved("Ctrl+Space switches the input method with some Chinese, Japanese and Korean input methods on Windows and Linux"),
     doc(Selection, "Select nested layers", &["Cmd"], &[], Gesture("Deep select"), "held while clicking or dragging"),
+    doc(Selection, "Pick select (while the keyboard box selection shows)", &["Tab"], &[], Gesture("Selection box: switch to pick select"),
+        "or the chord again; then Tab and Shift+Tab move the pick cursor between layers, Enter and Shift+Enter into and out of a layer, Space selects, Escape ends"),
     pin(Selection, "object.rename", &["F2"], &[]),
     pin(Selection, "select.area", &["F8"], &[]),
     // Edit
@@ -279,9 +281,12 @@ static ROWS: &[Row] = &[
     doc(Arrange, "Add auto layout", &["Shift+A"], &[], Bound("layout.add"), ""),
     doc(Arrange, "Remove auto layout", &["Alt+Shift+A"], &[], Bound("layout.remove"), ""),
     doc(Arrange, "Suggest auto layout", &["Ctrl+Shift+A"], &["Ctrl+Alt+Shift+A"], Bound("layout.suggest"), "was unbound"),
+    doc(Arrange, "Edit padding on all sides (from right panel)", &["Cmd"], &["Ctrl"], Gesture("Edit padding on all sides"), "held while clicking a padding field: the value typed goes to every side"),
     pin(Arrange, "distribute.horizontal", &["Ctrl+Alt+H"], &["Alt+Shift+H"]),
     pin(Arrange, "distribute.vertical", &["Ctrl+Alt+V"], &["Alt+Shift+V"]),
     pin(Arrange, "arrange.tidy", &["Ctrl+Alt+T"], &["Ctrl+Alt+Shift+T"]),
+    // Graybox: F9 enters Play.
+    pin(Prototype, "game.play", &["F9"], &[]),
     // Components
     doc(Components, "Create a component", &["Alt+Cmd+K"], &["Ctrl+Alt+K"], Bound("component.create"), ""),
     doc(Components, "Detach an instance", &["Alt+Cmd+B"], &["Ctrl+Alt+B"], Bound("component.detach"), ""),
@@ -390,6 +395,30 @@ fn vector_edit_tool_keys() {
         }
         assert_eq!(tool.shortcut(), row.mac[0], "the tooltip shows the documented key");
     }
+}
+
+#[test]
+fn every_default_binding_is_in_the_table() {
+    for b in KEYS {
+        for p in PLATFORMS {
+            for k in b.keys(p) {
+                let listed = ROWS.iter().filter_map(|r| r.ours(p)).any(|(id, keys)| id == b.id && keys.iter().any(|x| chord(p, x) == chord(p, k)));
+                assert!(listed, "{p:?}: `{k}` ({}) has no row: add it, documented or pinned", b.id);
+            }
+        }
+    }
+}
+
+#[test]
+fn counts_match_the_docs() {
+    let documented: Vec<&Row> = ROWS.iter().filter(|r| r.documented).collect();
+    let bound = documented.iter().filter(|r| matches!(r.ours, Bound(_) | Gesture(_) | VectorTool(_))).count();
+    let moved = documented.iter().filter(|r| matches!(r.ours, Moved(..))).count();
+    let missing = documented.iter().filter(|r| matches!(r.ours, Missing)).count();
+    let reserved = documented.iter().filter(|r| !r.reserved.is_empty()).count();
+    let pinned = ROWS.len() - documented.len();
+    // docs/ui-parity.md quotes these.
+    assert_eq!((documented.len(), bound, moved, missing, reserved, pinned), (136, 135, 1, 0, 2, 58));
 }
 
 #[test]

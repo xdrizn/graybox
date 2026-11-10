@@ -69,7 +69,7 @@ pub(super) fn spacing_input(ui: &mut Ui, field: &SpacingField, value: &str, widt
     if response.hovered() || response.dragged() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
     }
-    match widgets::scrub(ui, field.id, &response, numeric, 1.0) {
+    match widgets::scrub(ui, field.id, &response, numeric, 1.0, true) {
         Some(FieldEdit::Scrub(v, done)) => Some(SpacingEdit::Scrub(v, done)),
         _ => typed.map(SpacingEdit::Typed),
     }

@@ -274,7 +274,6 @@ impl eframe::App for WebShell {
                 }
             }
         }
-        crate::api::poll_replies();
         // The fonts on this computer that text asked for this frame are read; once one is in,
         // auto-sizing text measured in a fallback fits it.
         crate::local_fonts::load_wanted(ui.ctx());

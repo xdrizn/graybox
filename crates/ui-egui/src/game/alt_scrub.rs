@@ -1,4 +1,5 @@
-//! Graybox: holding Alt over a number field and dragging left or right changes its value from
+//! Graybox: holding Alt over a typography spacing field (upstream's number fields do it themselves)
+//! and dragging left or right changes its value from
 //! anywhere on the field, not only from its label. Here Alt doesn't make the drag finer (it does
 //! on the label); Shift still makes it ten times faster. Once a drag starts with Alt, letting go
 //! of Alt doesn't stop it; a drag started without Alt changes nothing.
@@ -29,5 +30,5 @@ pub(crate) fn scrub(ui: &mut Ui, id: Id, rect: Rect, value: Option<f64>, step: f
     if resp.drag_stopped() || !resp.dragged() {
         ui.data_mut(|d| d.remove::<bool>(on));
     }
-    widgets::scrub_rated(ui, id, &resp, value, step, false)
+    widgets::scrub(ui, id, &resp, value, step, false)
 }
