@@ -81,3 +81,41 @@ mod tests {
         assert_eq!(s.selection(), vec![list]);
     }
 }
+
+/// Graybox: whether a Cmd/Ctrl press on `leaf` (the deepest layer under it) starts a marquee instead
+/// of picking it: `leaf` is a frame holding layers (the press is on its own background), as in
+/// Figma, so a drag selects the layers inside it.
+pub(crate) fn cmd_marquees(doc: &Document, leaf: NodeId) -> bool {
+    doc.node(leaf).is_some_and(|n| n.kind.is_frame_like() && !n.children.is_empty() && !n.kind.bounds_follow_children())
+}
+
+#[cfg(test)]
+mod cmd_marquee_tests {
+    use crate::Session;
+    use crate::tools::{PointerEvent, PointerKind};
+    use figcraft_doc::NodeId;
+    use serde_json::json;
+
+    /// Ctrl-dragging from a frame's background selects the layers the box touches inside it, not
+    /// the frame (which doesn't move).
+    #[test]
+    fn ctrl_drag_on_a_frame_marquees_its_layers() {
+        let mut s = Session::new();
+        let f = NodeId(s.execute("frame.create", &json!({"x": 0, "y": 0, "width": 300, "height": 300})).unwrap()["id"].as_u64().unwrap());
+        let inner =
+            NodeId(s.execute("frame.create", &json!({"parent": f, "x": 20, "y": 20, "width": 260, "height": 260})).unwrap()["id"].as_u64().unwrap());
+        let r = NodeId(
+            s.execute("shape.rectangle", &json!({"parent": inner, "x": 180, "y": 180, "width": 50, "height": 50})).unwrap()["id"].as_u64().unwrap(),
+        );
+        s.execute("select.none", &json!({})).unwrap();
+        for (kind, x, y) in
+            [(PointerKind::Down, 40.0, 40.0), (PointerKind::Move, 150.0, 150.0), (PointerKind::Move, 260.0, 260.0), (PointerKind::Up, 260.0, 260.0)]
+        {
+            let mut e = PointerEvent::at(kind, x, y, 1.0);
+            e.cmd = true;
+            s.pointer(&e).unwrap();
+        }
+        assert_eq!(s.selection(), vec![r]);
+        assert_eq!(s.doc().unwrap().world_bounds(inner).unwrap().origin(), figcraft_geom::Point::new(20.0, 20.0), "the frame stays");
+    }
+}

@@ -269,10 +269,22 @@ impl Session {
     /// top-level frame `within` (nothing of its own layers under the pointer) selects the frame;
     /// with Shift it joins the selection.
     fn board_click(&mut self, ev: &PointerEvent, within: Option<NodeId>, at: Point, additive: bool) -> Result<()> {
-        let Some(board) = within.filter(|_| within_slop(ev, at) && !ev.cmd) else { return Ok(()) };
         let tol = ev.tol() * 2.0;
         let doc = self.doc()?.clone();
         let page = self.page()?;
+        // Graybox: a Cmd/Ctrl press on a frame's background marquees its layers when dragged; as a
+        // plain click it still selects that frame (the deepest layer there), as before.
+        if ev.cmd && within_slop(ev, at) {
+            if let Some(leaf) = self.hit(&doc, page, at, tol).filter(|l| crate::shift_select::cmd_marquees(&doc, *l)) {
+                let mut sel = if additive { self.selection() } else { Vec::new() };
+                if !sel.contains(&leaf) {
+                    sel.push(leaf);
+                }
+                self.set_selection(sel);
+            }
+            return Ok(());
+        }
+        let Some(board) = within.filter(|_| within_slop(ev, at)) else { return Ok(()) };
         if self.hit(&doc, page, at, tol) != Some(board) || doc.node(board).is_none_or(|n| n.parent != Some(page)) {
             return Ok(());
         }

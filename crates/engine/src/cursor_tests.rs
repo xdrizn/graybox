@@ -235,11 +235,12 @@ fn a_pen_click_that_wobbles_a_pixel_is_still_a_click() {
     let out = s.tool.pen.as_ref().and_then(|p| p.points.first()).map(|(_, _, o)| *o);
     assert_eq!(out.map(|o| o.hypot()), Some(0.0), "no handle pulled out");
     assert!(s.tool.overlay.pen_handles.is_empty());
-    // Past the slop it is a drag: the handle follows the pointer from where it was pressed.
+    // Past the slop it is a drag: the handle follows the pointer from where it was pressed
+    // (Graybox: the Pen's slop is 8 screen px).
     s.pointer(&ev(PointerKind::Down, (200.0, 100.0), NONE)).unwrap();
-    s.pointer(&ev(PointerKind::Move, (204.0, 100.0), NONE)).unwrap();
+    s.pointer(&ev(PointerKind::Move, (210.0, 100.0), NONE)).unwrap();
     let out = s.tool.pen.as_ref().and_then(|p| p.points.last()).map(|(_, _, o)| (o.x, o.y));
-    assert_eq!(out, Some((4.0, 0.0)));
+    assert_eq!(out, Some((10.0, 0.0)));
 }
 
 #[test]

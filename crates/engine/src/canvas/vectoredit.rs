@@ -327,6 +327,8 @@ pub fn ensure_vector(doc: &mut Document, id: NodeId) -> Result<()> {
         return Err(EngineError::Other(format!("{} layers can't be edited as vectors", n.kind.label())));
     }
     let (path, rule) = figcraft_render::node_outline(doc, &n).ok_or_else(|| EngineError::Other("no outline".into()))?;
+    // Graybox: a whole ellipse edits with four points.
+    let path = crate::ellipse_points::four(&n).unwrap_or(path);
     let mut net = VectorNetwork::from_path(&path);
     if matches!(n.kind, NodeKind::Line) {
         net.regions.clear();

@@ -21,17 +21,21 @@ mod content;
 #[cfg(test)]
 mod crop_in_layout_tests;
 mod dev;
+mod ellipse_points;
 pub mod events;
 mod extensions;
 pub mod fonts;
 pub mod guard;
 pub mod keymap;
 pub mod measure;
+#[cfg(test)]
+mod pen_tests;
 pub mod proto_run;
 mod rect_to_frame;
 mod selection;
 mod sharing;
 mod shift_select;
+mod weld;
 pub use assets::components;
 pub use assets::library;
 pub use assets::library_server;

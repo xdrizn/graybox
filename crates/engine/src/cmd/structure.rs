@@ -1007,7 +1007,12 @@ fn join(s: &mut Session, p: &Value) -> Result<Value> {
         }
         return ok();
     }
-    flatten(s, &json!({"ids": ids}))
+    // Graybox: the joined layers' meeting ends become one point.
+    let out = flatten(s, &json!({"ids": ids}))?;
+    if let Some(id) = crate::params::id_of(&out["id"]) {
+        crate::weld::after_join(s, id)?;
+    }
+    Ok(out)
 }
 
 /// Fit containers to their visible children's bounds, keeping the children where they are on the

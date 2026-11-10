@@ -87,7 +87,8 @@ impl Session {
         let label = label_at(&doc, page, &self.tool.labels, ev.p());
         let target = label.or_else(|| {
             self.hit(&doc, page, ev.p(), ev.tol() * 2.0)
-                .filter(|leaf| ev.cmd || !board_background(*leaf))
+                // Graybox: with Cmd/Ctrl, a press on a frame's own background starts a marquee of its layers.
+                .filter(|leaf| if ev.cmd { !crate::shift_select::cmd_marquees(&doc, *leaf) } else { !board_background(*leaf) })
                 // Graybox: Shift adds the layer at the selected layers' depth.
                 .map(|leaf| {
                     if ev.shift && !ev.cmd && !sel.is_empty() {
@@ -447,8 +448,9 @@ impl Session {
                 return Ok(());
             }
             Gesture::PenDrag { anchor } => {
-                // A click's wobble pulls out no handle.
-                let out = if within_slop(ev, *anchor) { Vec2::ZERO } else { ev.p() - *anchor };
+                // A click's wobble pulls out no handle (Graybox: within 8 screen px, not 3: a
+                // high polling rate mouse moves a few pixels during a plain click).
+                let out = if (ev.p() - *anchor).hypot() * ev.zoom.max(1e-6) < 8.0 { Vec2::ZERO } else { ev.p() - *anchor };
                 if let Some(pen) = self.tool.pen.as_mut()
                     && let Some(last) = pen.points.last_mut()
                 {
