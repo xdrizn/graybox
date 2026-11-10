@@ -86,6 +86,13 @@ pub fn specs() -> Vec<CommandSpec> {
             true,
             nine_slice_set
         ),
+        spec!(
+            "game.unity.export",
+            "Export to Unity",
+            "{frame? (one screen; default: the frames marked for Unity), dir? (default: the file's Unity folder), scale? (sprite pixels a unit, default 1), mark? (frame: true marks it for Unity, false unmarks), setDir? (the Unity folder to remember)}  writes <dir>/<screen>/layout.json and sprites/*.png for the Graybox Live Link package → {screens: [{frame, folder, sprites}]}",
+            true,
+            unity_export
+        ),
         spec!("game.starterKit", "Create game UI starter kit", "{} → {hud, inventory, pause, map, death, components, variables}", true, starter_kit),
     ]
 }
@@ -995,4 +1002,56 @@ mod nine_slice_tests {
         );
         assert!(s.execute("game.nineSlice.set", &json!({"ids": [al], "enabled": true})).is_err());
     }
+}
+
+/// Graybox: export screens for Unity, or mark frames and remember the folder ([`crate::unity_export`]).
+fn unity_export(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "game.unity.export";
+    // Settings first: the folder to remember, and frames marked or unmarked.
+    let set_dir = p.get("setDir").and_then(Value::as_str).map(str::to_string);
+    let mark = match p.get("mark") {
+        None | Some(Value::Null) => None,
+        Some(v) => Some(v.as_bool().ok_or_else(|| bad(cmd, "mark must be true or false"))?),
+    };
+    let frame = match p.get("frame") {
+        None | Some(Value::Null) => None,
+        Some(_) => Some(crate::params::req_id(cmd, p, "frame")?),
+    };
+    if set_dir.is_some() || mark.is_some() {
+        let doc = s.doc_mut()?;
+        if let Some(d) = &set_dir {
+            doc.game.unity_dir = d.trim().to_string();
+        }
+        if let Some(m) = mark {
+            let f = frame.ok_or_else(|| bad(cmd, "mark needs a frame"))?;
+            if !doc.node(f).is_some_and(|n| n.kind.is_frame_like()) {
+                return Err(bad(cmd, "Choose a frame"));
+            }
+            if m {
+                doc.game.unity_frames.insert(f);
+            } else {
+                doc.game.unity_frames.remove(&f);
+            }
+        }
+        return Ok(json!({"dir": doc.game.unity_dir, "frames": doc.game.unity_frames}));
+    }
+    let doc = s.doc()?;
+    let dir = p.get("dir").and_then(Value::as_str).map(str::to_string).unwrap_or_else(|| doc.game.unity_dir.clone());
+    if dir.trim().is_empty() {
+        return Err(bad(cmd, "Choose the Unity export folder first"));
+    }
+    let scale = p.get("scale").and_then(Value::as_f64).filter(|v| v.is_finite() && *v > 0.0).unwrap_or(1.0).min(8.0);
+    let frames: Vec<NodeId> = match frame {
+        Some(f) => vec![f],
+        None => doc.game.unity_frames.iter().copied().filter(|f| doc.node(*f).is_some()).collect(),
+    };
+    if frames.is_empty() {
+        return Err(bad(cmd, "Mark a frame for Unity first (Prototype tab, frame selected)"));
+    }
+    let mut screens = Vec::new();
+    for f in frames {
+        let (folder, sprites) = crate::unity_export::export(doc, f, &dir, scale)?;
+        screens.push(json!({"frame": f, "folder": folder, "sprites": sprites}));
+    }
+    Ok(json!({"screens": screens}))
 }

@@ -36,6 +36,7 @@ mod rect_to_frame;
 mod selection;
 mod sharing;
 mod shift_select;
+mod unity_export;
 mod weld;
 pub use assets::components;
 pub use assets::library;

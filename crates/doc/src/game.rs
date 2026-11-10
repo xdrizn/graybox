@@ -185,6 +185,11 @@ pub struct GameSettings {
     /// (the others anchor by position, like a 9-slice).
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub anchored: BTreeSet<NodeId>,
+    /// Graybox Unity export: the folder screens go to (empty: none chosen) and the frames sent there.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub unity_dir: String,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub unity_frames: BTreeSet<NodeId>,
 }
 
 #[derive(Deserialize)]
@@ -205,6 +210,8 @@ struct StoredGameSettings {
     hotbars: BTreeMap<NodeId, HotbarSettings>,
     fonts: BTreeMap<String, Vec<String>>,
     anchored: BTreeSet<NodeId>,
+    unity_dir: String,
+    unity_frames: BTreeSet<NodeId>,
 }
 
 impl Default for StoredGameSettings {
@@ -224,6 +231,8 @@ impl Default for StoredGameSettings {
             hotbars: settings.hotbars,
             fonts: settings.fonts,
             anchored: settings.anchored,
+            unity_dir: settings.unity_dir,
+            unity_frames: settings.unity_frames,
         }
     }
 }
@@ -246,6 +255,8 @@ impl TryFrom<StoredGameSettings> for GameSettings {
             hotbars: stored.hotbars,
             fonts: stored.fonts,
             anchored: stored.anchored,
+            unity_dir: stored.unity_dir,
+            unity_frames: stored.unity_frames,
         };
         settings.validate()?;
         Ok(settings)
@@ -283,6 +294,8 @@ impl Default for GameSettings {
             hotbars: BTreeMap::new(),
             fonts: BTreeMap::new(),
             anchored: BTreeSet::new(),
+            unity_dir: String::new(),
+            unity_frames: BTreeSet::new(),
         }
     }
 }

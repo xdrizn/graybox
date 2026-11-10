@@ -31,6 +31,7 @@ pub mod screen_fit;
 pub mod screen_ui;
 pub mod share;
 pub(crate) mod style_fill;
+pub(crate) mod unity_ui;
 
 /// Platform hosts read these markers inside the browser's trusted input event, before egui's
 /// next frame. Fullscreen and pointer lock cannot reliably be requested from that later frame.
@@ -180,13 +181,14 @@ pub(crate) fn prototype_section(app: &mut crate::FigApp, ui: &mut egui::Ui) {
     });
     crate::widgets::separator(ui);
     type Part = fn(&mut crate::FigApp, &mut egui::Ui);
-    let parts: [(&str, Part); 6] = [
+    let parts: [(&str, Part); 7] = [
         ("Game controls", editor::controls),
         ("Game inputs", editor::inputs),
         ("Game events", editor::events),
         ("Sounds", audio::show),
         ("Share Play link", share::show),
         ("Example screens", editor::examples),
+        ("Unity export", unity_ui::settings),
     ];
     for (i, (title, show)) in parts.into_iter().enumerate() {
         if i > 0 {

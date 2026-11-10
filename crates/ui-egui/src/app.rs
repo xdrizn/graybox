@@ -242,6 +242,7 @@ impl FigApp {
         // Graybox: fonts that came inside a shared file.
         crate::game::fonts::load_shared(self);
         crate::game::font_watch::tick(self, &ctx);
+        crate::game::unity_ui::tick(self);
         if let Some(error) = crate::game::audio::take_error(&ctx) {
             self.toast(error);
         }

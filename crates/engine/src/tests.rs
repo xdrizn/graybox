@@ -494,6 +494,8 @@ fn every_command_survives_junk_params() {
                 | "file.placeImage"
                 | "image.place"
                 | "file.revert"
+                // Graybox: writes screens into a folder.
+                | "game.unity.export"
                 // Takes no params and walks the font folders: one walk per junk is slow.
                 | "text.rescanFonts"
         ) {
