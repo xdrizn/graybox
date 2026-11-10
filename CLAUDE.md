@@ -127,3 +127,14 @@ Leave `.github/workflows/` as upstream has it unless Adriel asks; run `cargo xta
 
 ## Agents
 Unity export and the Live Link package: use the `unity-livelink` agent (`.claude/agents/unity-livelink.md`).
+
+## Project skills
+Load these with the Skill tool when the task matches (`.claude/skills/<name>/SKILL.md`):
+- `graybox-app-check` — verify UI in the real app over the control channel, on a scratch copy.
+- `graybox-update-stable` — update Adriel's installed Graybox copy and smoke-test it.
+- `graybox-upstream-merge` — merge FigCraft updates and keep every Graybox hook.
+- `graybox-hooks` — how to touch upstream files (hooks, CRLF, i18n, junk-sweep pitfalls).
+- `graybox-egui-tests` — egui test pitfalls and the known failing tests.
+- `graybox-commit` — one-task commits, PLAN/STATUS updates, stage only your own files.
+- `grilling`, `diagnosing-bugs`, `tdd`, `handoff`, `wait-what` — general workflow skills adapted from
+  mattpocock/skills (MIT, see `.claude/skills/THIRD-PARTY.md`).
