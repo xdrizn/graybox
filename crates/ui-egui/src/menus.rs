@@ -538,6 +538,13 @@ pub fn popups(app: &mut FigApp, ctx: &egui::Context) {
                 {
                     entries.insert(at + 1, (label, "component.combineVariants"));
                 }
+                // Graybox: two layers or more can be joined into one path, their meeting ends welded.
+                let join = i18n::command("vector.join", "Join selection");
+                if app.session.selection().len() > 1
+                    && let Some(at) = entries.iter().position(|e| e.1 == "vector.flatten")
+                {
+                    entries.insert(at + 1, (&*join, "vector.join"));
+                }
                 if crop && let Some(at) = entries.iter().position(|e| e.1 == "object.mask") {
                     entries.insert(at + 1, (tr("Crop image"), "image.crop"));
                     // Graybox: an image in a frame can become the frame's background.

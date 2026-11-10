@@ -148,7 +148,8 @@ fn main_width(groups: &[Group], board: bool) -> f32 {
     let tools: f32 = groups.iter().map(|g| TOOL_CELL + if g.has_flyout() { FLYOUT_GAP + FLYOUT_W } else { 0.0 }).sum();
     // The end, and the gaps that aren't a group's own: after Actions and after the divider (and
     // between a board's two buttons, which the end counts as one item).
-    let (end, gaps) = if board { (2.0 * TOOL_CELL, 3.0) } else { (6.0 * TOOL_CELL, 4.0) };
+    // Graybox: the mode switcher, then Play (no Game settings button).
+    let (end, gaps) = if board { (2.0 * TOOL_CELL, 3.0) } else { (5.0 * TOOL_CELL, 3.0) };
     PAD * 2.0 + tools + (groups.len() as f32 + gaps) * GAP + TOOL_CELL + DIVIDER + end
 }
 
@@ -192,10 +193,6 @@ fn main_toolbar(app: &mut FigApp, ui: &mut Ui, canvas: Rect, t: &Tokens, board: 
         let response = tool_cell(ui, t, play, "game_play", Icon::Play, true, tr("Play game  F9"));
         if response.clicked() {
             app.run("game.play", json!({}));
-        }
-        let settings = play.translate(vec2(TOOL_CELL + GAP, 0.0));
-        if tool_cell(ui, t, settings, "game_settings", Icon::Menu, false, tr("Game settings")).clicked() {
-            app.run("game.settings", json!({}));
         }
     }
     ui.set_clip_rect(outer_clip);

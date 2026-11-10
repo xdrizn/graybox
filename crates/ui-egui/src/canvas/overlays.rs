@@ -124,7 +124,8 @@ pub(super) fn overlays(app: &FigApp, painter: &egui::Painter, t: &Tokens) -> Vec
     }
     // Selection.
     let editing = ds.text_edit.clone();
-    if !sel.is_empty() && editing.is_none() && ds.vector_edit.is_none() {
+    // Graybox: not while the Pen draws a path (its box shows once the path ends, Escape).
+    if !sel.is_empty() && editing.is_none() && ds.vector_edit.is_none() && app.session.tool.pen.is_none() {
         size_label = selection_overlay(app, painter, ds, &doc, &sel, zoom);
     }
     if app.session.tool.tool == ToolId::ShapeBuilder

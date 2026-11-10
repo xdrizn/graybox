@@ -162,14 +162,19 @@ fn dimensions(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[NodeId], has
     let ids = sel.to_vec();
     let w_of = |n: &Node| (n.width * 100.0).round() / 100.0;
     let h_of = |n: &Node| (n.height * 100.0).round() / 100.0;
+    // Graybox: an upright line shows its length as H (`game::line_dims`).
+    let swap = crate::game::line_dims::vertical(doc, sel);
+    let (wk, hk) = if swap { ("height", "width") } else { ("width", "height") };
+    let w_of = move |n: &Node| if swap { h_of(n) } else { w_of(n) };
+    let h_of = move |n: &Node| if swap { (n.width * 100.0).round() / 100.0 } else { h_of(n) };
     let (w, h) = (common(doc, sel, w_of), common(doc, sel, h_of));
     let col = widgets::col_width(ui.available_width());
     widgets::sublabels(ui, tr("Dimensions"), None);
     row(ui, 32.0, |ui| {
-        let e = crate::variable_ui::number_field_mixed(app, ui, &ids, "width", Id::unique("lay_w"), Lead::Text("W"), w, "", col);
-        app.field_of(&ids, "width", e, w_of, |v| json!(v.max(0.0)));
-        let e = crate::variable_ui::number_field_mixed(app, ui, &ids, "height", Id::unique("lay_h"), Lead::Text("H"), h, "", col);
-        app.field_of(&ids, "height", e, h_of, |v| json!(v.max(0.0)));
+        let e = crate::variable_ui::number_field_mixed(app, ui, &ids, wk, Id::unique("lay_w"), Lead::Text("W"), w, "", col);
+        app.field_of(&ids, wk, e, w_of, |v| json!(v.max(0.0)));
+        let e = crate::variable_ui::number_field_mixed(app, ui, &ids, hk, Id::unique("lay_h"), Lead::Text("H"), h, "", col);
+        app.field_of(&ids, hk, e, h_of, |v| json!(v.max(0.0)));
         let locked = common(doc, sel, |n| n.constrain_proportions).unwrap_or(false);
         let link = ui
             .add_enabled_ui(!nested, |ui| {

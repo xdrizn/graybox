@@ -29,6 +29,22 @@ pub(crate) fn shown(colors: &[SelectionColor], ids: &[NodeId]) -> bool {
     }
 }
 
+/// A panel section header that folds (the game parts of the Prototype tab): the title where the
+/// panel's other section titles are, a chevron before it, closed at first; returns whether open.
+pub(crate) fn section(ui: &mut Ui, key: Id, title: &str) -> bool {
+    let open = ui.data(|d| d.get_temp::<bool>(key)).unwrap_or(false);
+    let t = Tokens::get(ui.ctx());
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::click());
+    let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+    if resp.clicked() {
+        ui.data_mut(|d| d.insert_temp(key, !open));
+    }
+    let chevron = Rect::from_center_size(pos2(rect.min.x + widgets::PAD - 6.0, rect.center().y), vec2(10.0, 10.0));
+    icons::paint(ui.painter(), chevron, if open { Icon::Chevron } else { Icon::ChevronRight }, t.icon_secondary);
+    ui.painter().text(pos2(rect.min.x + widgets::PAD + 2.0, rect.center().y), Align2::LEFT_CENTER, title, crate::theme::semibold(11.0), t.text);
+    open != resp.clicked()
+}
+
 /// Draw the header for `colors`; returns whether the list below it is open.
 pub(crate) fn header(ui: &mut Ui, title: &str, colors: &[SelectionColor]) -> bool {
     let key = Id::unique("graybox_selection_colors_open");

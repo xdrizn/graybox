@@ -18,6 +18,7 @@ pub(crate) mod gradient_turn;
 pub mod hotbar;
 pub(crate) mod input;
 pub(crate) mod layout_ease;
+pub(crate) mod line_dims;
 pub mod look_ui;
 pub mod looks;
 pub mod map;
@@ -178,13 +179,17 @@ pub(crate) fn prototype_section(app: &mut crate::FigApp, ui: &mut egui::Ui) {
         ("Share Play link", share::show),
         ("Example screens", editor::examples),
     ];
-    for (title, show) in parts {
-        egui::CollapsingHeader::new(title).id_salt(("greybox_prototype_section", title)).default_open(false).show(ui, |ui| {
+    for (i, (title, show)) in parts.into_iter().enumerate() {
+        if i > 0 {
+            crate::widgets::separator(ui);
+        }
+        // Headers in the panel's grid, like Prototype settings and Flow starting points.
+        if color_fold::section(ui, egui::Id::unique(("greybox_prototype_section", title)), title) {
             padded(ui, |ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(8.0, 6.0);
                 show(app, ui);
             });
-        });
+        }
     }
 }
 
