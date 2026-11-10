@@ -31,6 +31,8 @@ namespace Indirect.Graybox.Editor
         public string fontStyle = "";
         public float fontSize = 14f;
         public string color = "";
+        // widthAndHeight | height | none | truncate (absent in older exports: a fixed width).
+        public string autoResize = "height";
         public string align = "left";
         public string alignVertical = "top";
     }
@@ -128,21 +130,66 @@ namespace Indirect.Graybox.Editor
         }
 
         /// The screen folders in the export folder (those with a layout.json).
-        IEnumerable<string> Screens()
+        IEnumerable<string> Screens() => ScreenFolders(folder);
+
+        static IEnumerable<string> ScreenFolders(string root)
         {
-            if (!Directory.Exists(folder)) yield break;
-            foreach (var d in Directory.GetDirectories(folder))
+            if (!Directory.Exists(root)) yield break;
+            foreach (var d in Directory.GetDirectories(root))
                 if (File.Exists(Path.Combine(d, "layout.json"))) yield return d;
+        }
+
+        /// For batch mode and scripts: imports every screen in the export folder given as
+        /// `-grayboxFolder <dir>` into the open scene (saved as `-grayboxScene <Assets/…unity>` when
+        /// given), then quits. Run it as
+        /// `Unity -batchmode -projectPath <p> -executeMethod Indirect.Graybox.Editor.GrayboxLiveLink.ImportBatch -grayboxFolder <dir>`.
+        public static void ImportBatch()
+        {
+            var args = Environment.GetCommandLineArgs();
+            var root = CommandLineValue(args, "-grayboxFolder");
+            var scenePath = CommandLineValue(args, "-grayboxScene");
+            int code = 0;
+            try
+            {
+                if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) throw new DirectoryNotFoundException("-grayboxFolder <dir> is missing or not a folder");
+                if (!string.IsNullOrEmpty(scenePath) && File.Exists(scenePath)) UnityEditor.SceneManagement.EditorSceneManager.OpenScene(scenePath);
+                Canvas canvas = null;
+                int n = 0;
+                foreach (var screen in ScreenFolders(root))
+                {
+                    Import(screen, ref canvas);
+                    n++;
+                }
+                if (!string.IsNullOrEmpty(scenePath))
+                    UnityEditor.SceneManagement.EditorSceneManager.SaveScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene(), scenePath);
+                Debug.Log($"Graybox Live Link: imported {n} screen{(n == 1 ? "" : "s")} from {root}");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"Graybox Live Link: {e}");
+                code = 1;
+            }
+            if (Application.isBatchMode) EditorApplication.Exit(code);
+        }
+
+        static string CommandLineValue(string[] args, string key)
+        {
+            for (int i = 0; i + 1 < args.Length; i++)
+                if (args[i] == key) return args[i + 1];
+            return "";
         }
 
         void Rewatch()
         {
             StopWatching();
             if (!watch || !Directory.Exists(folder)) return;
-            watcher = new FileSystemWatcher(folder, "layout.json") { IncludeSubdirectories = true, NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName };
-            FileSystemEventHandler on = (_, __) => changed = true;
+            // Watch every file and pick layout.json by name: a "layout.json" filter never fires for the
+            // screen folders under `folder` in Unity's Mono (found by running it in the editor).
+            watcher = new FileSystemWatcher(folder) { IncludeSubdirectories = true };
+            FileSystemEventHandler on = (_, e) => { if (Path.GetFileName(e.FullPath) == "layout.json") changed = true; };
             watcher.Changed += on;
             watcher.Created += on;
+            watcher.Renamed += (_, e) => { if (Path.GetFileName(e.FullPath) == "layout.json") changed = true; };
             watcher.EnableRaisingEvents = true;
         }
 
@@ -216,6 +263,7 @@ namespace Indirect.Graybox.Editor
                 var parentData = n.id == root.id ? null : byId.TryGetValue(n.parent, out var pd) ? pd : null;
                 Place(rt, n, parentData);
                 Look(go, n, sprites);
+                SetOpacity(go, n.opacity);
                 built[n.id] = rt;
                 seen.Add(n.id);
             }
@@ -342,8 +390,15 @@ namespace Indirect.Graybox.Editor
                 img.sprite = sprite;
                 var sliced = n.border != null && n.border.Length == 4 && (n.border[0] > 0 || n.border[1] > 0 || n.border[2] > 0 || n.border[3] > 0);
                 img.type = sliced ? Image.Type.Sliced : Image.Type.Simple;
-                img.color = new Color(1f, 1f, 1f, Mathf.Clamp01(n.opacity));
+                img.color = Color.white;
                 img.raycastTarget = true;
+            }
+            else
+            {
+                // The layer no longer paints: take its old sprite off (an Image you added yourself stays).
+                var img = go.GetComponent<Image>();
+                if (img != null && img.sprite != null && AssetDatabase.GetAssetPath(img.sprite).StartsWith(AssetRoot + "/"))
+                    UnityEngine.Object.DestroyImmediate(img);
             }
         }
 
@@ -357,14 +412,18 @@ namespace Indirect.Graybox.Editor
         {
             var t = n.text ?? new TextData();
             var color = ParseColor(t.color);
-            color.a *= Mathf.Clamp01(n.opacity);
+            // Auto width texts stay on one line whatever font Unity uses (its letters are not
+            // Graybox's, so a box sized for Graybox's font could wrap them); the others wrap.
+            bool oneLine = t.autoResize == "widthAndHeight";
+            bool ellipsis = t.autoResize == "truncate";
 #if GRAYBOX_TMP
             var tmp = go.GetComponent<TextMeshProUGUI>();
             if (tmp == null) tmp = go.AddComponent<TextMeshProUGUI>();
             tmp.text = t.characters;
             tmp.fontSize = t.fontSize;
             tmp.color = color;
-            tmp.enableWordWrapping = true;
+            tmp.enableWordWrapping = !oneLine;
+            tmp.overflowMode = ellipsis ? TextOverflowModes.Ellipsis : TextOverflowModes.Overflow;
             tmp.alignment = TmpAlign(t.align, t.alignVertical);
 #else
             var txt = go.GetComponent<Text>();
@@ -373,8 +432,23 @@ namespace Indirect.Graybox.Editor
             txt.fontSize = Mathf.RoundToInt(t.fontSize);
             txt.color = color;
             if (txt.font == null) txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            txt.horizontalOverflow = oneLine ? HorizontalWrapMode.Overflow : HorizontalWrapMode.Wrap;
+            txt.verticalOverflow = ellipsis ? VerticalWrapMode.Truncate : VerticalWrapMode.Overflow;
             txt.alignment = LegacyAlign(t.align, t.alignVertical);
 #endif
+        }
+
+        /// The layer's opacity, as a CanvasGroup: its layers inherit it, as they do in Graybox (the
+        /// sprites are exported at full opacity).
+        static void SetOpacity(GameObject go, float opacity)
+        {
+            var group = go.GetComponent<CanvasGroup>();
+            if (opacity < 0.999f)
+            {
+                if (group == null) group = go.AddComponent<CanvasGroup>();
+                group.alpha = Mathf.Clamp01(opacity);
+            }
+            else if (group != null) group.alpha = 1f;
         }
 
 #if GRAYBOX_TMP

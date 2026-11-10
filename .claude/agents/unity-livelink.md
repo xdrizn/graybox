@@ -32,9 +32,9 @@ change, waits 0.5 s, and rebuilds the screen as uGUI under a Canvas.
     `spriteBorder` takes. (`nine_slice.rs` stores `insets` as top, right, bottom, left, in design units:
     don't mix the two orders.) A 9-sliced layer (`nine_slice::effective`) becomes ONE sprite at its
     base size with its layers inside it, and its children are not exported.
-  - `text` = `{characters, fontFamily, fontStyle, fontSize, color (hex or null), align, alignVertical}`;
+  - `text` = `{characters, fontFamily, fontStyle, fontSize, autoResize (widthAndHeight|height|none|truncate), color (hex or null), align, alignVertical}`;
     `align` is the Debug name lowercased (left/center/right/justified), `alignVertical` top|center|bottom.
-  - Sprites: a layer that paints (fill/stroke/effect) gets a sprite of its own look without its
+  - Sprites: a layer that paints (fill/stroke/effect) gets a sprite of its own look (at full opacity: the layer's `opacity` becomes a `CanvasGroup` in Unity) without its
     children; vector/boolean groups and childless layers are drawn whole; hidden layers and masks are skipped.
 - `crates/engine/src/cmd/game.rs` — command `game.unity.export` (fn `unity_export`, near the end).
   Params: `frame` (one screen; default all marked), `dir` (default the file's folder), `scale`
@@ -65,7 +65,7 @@ change, waits 0.5 s, and rebuilds the screen as uGUI under a Canvas.
   `TextMeshProUGUI`; without, legacy `UnityEngine.UI.Text` (`LegacyRuntime.ttf`). Both paths must compile.
 - `README.md` — user-facing steps and status. Update it when behaviour changes.
 
-## Verify without a Unity licence (compile with Unity's own Roslyn)
+## Verify without opening Unity (compile with its own Roslyn, quick)
 Editor install: `E="/c/Program Files/Unity/Hub/Editor/2022.3.39f1/Editor"` (Git Bash). The path has a
 space, so **use a function and arrays (quoted), not a flat `$CSC` string** — that failed silently once.
 Work in the scratchpad/temp folder, never in the repo; run from the repo root. Verified on 2022.3.39f1:
@@ -89,12 +89,28 @@ Do **not** add `Data/Managed/UnityEditor.dll`: it is a facade and duplicates the
 `.dll`s must exist afterwards. Delete `$O` when done. A compile does NOT prove behaviour (anchor math,
 importer settings).
 
-**Running it for real** needs an activated Unity licence (Adriel must sign in to Unity Hub; batch mode
-fails otherwise). Then: new empty project, add the package from disk, make a sample export with
-Graybox (`game.unity.export` via the control channel, see `CLAUDE.md`), and run
-`Unity.exe -batchmode -quit -projectPath <p> -executeMethod <Class.Method> -logFile -` with a small
-editor script that calls `GrayboxLiveLink.Import(dir, ref canvas)` (public static). Check the
-resulting hierarchy. Until then, say "compiled, not run in Unity" in reports and docs.
+**Running it for real** works since 2026-11-10 (Personal licence from Unity Hub; the licence-client
+"signature"/"handshake" errors in the log are noise, look for `Serial number assigned`). Recipe that
+passed (scratch project under `%TEMP%`, never in the repo):
+1. `Unity.exe -batchmode -quit -nographics -createProject <p> -logFile <log>`; add to
+   `Packages/manifest.json`: `com.unity.ugui` 1.0.0, `com.unity.textmeshpro` 3.0.6 (omit it to test the
+   legacy `Text` path; delete `Library/` after removing a package) and the package as
+   `"file:C:/…/integrations/unity/com.indirect.graybox-livelink"` (Unity writes `.meta` files into the
+   repo folder: commit new ones, scenes refer to `GrayboxNode` by its GUID).
+2. TMP needs its essentials once: a scratch editor script calling `AssetDatabase.ImportPackage("Packages/com.unity.textmeshpro/Package Resources/TMP Essential Resources.unitypackage", false)`
+   and exiting from `AssetDatabase.importPackageCompleted` (run without `-quit`).
+3. Export from a script: `figcraft-cli run script.json` (rebuild it first: `cargo build -p figcraft-cli`;
+   ids are sequential from 2 in a new document) with `game.unity.export` and `file.export` (PNG of the
+   frame) as the last steps.
+4. Import: `Unity.exe -batchmode -projectPath <p> -executeMethod Indirect.Graybox.Editor.GrayboxLiveLink.ImportBatch -grayboxFolder <dir> -grayboxScene Assets/Test.unity`
+   (no `-quit`: the method exits). Without `-nographics`, a scratch script can put a camera and a
+   RenderTexture on the Canvas (ScreenSpaceCamera) and write a PNG to compare with Graybox's.
+   `-nographics` cannot render.
+5. Watch: a scratch script sets the EditorPrefs, opens the window with
+   `EditorApplication.ExecuteMenuItem("Tools/Graybox Live Link")`, rewrites `layout.json` from an
+   `EditorApplication.update` callback and checks the scene a few seconds later.
+Mono's `FileSystemWatcher` with a `"layout.json"` filter never fires for files in sub-folders: keep
+the unfiltered watcher and the name check.
 
 ## Unity traps (some already bit us)
 - `JsonUtility` reads nothing deeper than **10 levels** and has no dictionaries/nullables/polymorphism:

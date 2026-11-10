@@ -51,6 +51,23 @@
   in parallel, blurs its glow at half/quarter size and reads one channel per split (~140 ms), and
   Play redraws a changed screen off the UI thread (`game/frames.rs`): the last image shows until
   the new one is ready, newest request wins. The browser draws at once, as before.
+- G9 Unity Live Link run in a real Unity (2022.3.39f1, Personal licence, 2026-11-10): a synthetic
+  screen (9-sliced panel with stroke and radius, gradient shape, texts left/centre/right/middle,
+  constraints left/right/centre/stretch/scale, three levels of nested frames, one translucent
+  layer) exported by `figcraft-cli run`, imported in batch mode with the new
+  `GrayboxLiveLink.ImportBatch` (`-executeMethod`, `-grayboxFolder`, optional `-grayboxScene`), and
+  the Canvas rendered to PNG through a camera: it matches Graybox's render (only the font differs:
+  Unity has no Inter) both at the design size and with the screen made larger (anchors act as
+  Graybox's constraints). Both text paths (TextMeshPro, legacy Text) import clean; a second export
+  after edits (move, recolour, text, rename, delete, add, fill removed) updates in place with no
+  duplicates. Found and fixed: Watch never fired (Mono's `FileSystemWatcher` filter `layout.json`
+  does not match files in sub-folders: now watches all files and picks `layout.json` by name);
+  opacity was applied twice (sprite and Image colour: now the sprite is exported opaque and the
+  layout's opacity becomes a `CanvasGroup`, which the layers inside inherit); auto-width texts
+  wrapped in Unity's wider font (the export now carries `text.autoResize`; auto width stays on one
+  line); a layer that lost its fill kept its old Image; the package had no `.meta` files (a
+  `GrayboxNode` in a scene is referenced by its script GUID, so those are committed). Not tried:
+  the window's buttons by hand (the editor opens the window and its Watch runs, headless).
 
 ## Decisions
 - Play redraws its whole screen when a variant changes on hover. Costly unchanged layers (layer blur,

@@ -156,7 +156,7 @@ Death are only *examples* in the starter kit, never required.
 - [x] 9-slice: a section under Layout, cuts dragged on the canvas, corners kept while the middle stretches.
 - [x] Pseudo-localization preview (Prototype tab switch, canvas only).
 - [x] Unity export (layout.json + sprites per screen, again on save) and the Graybox Live Link
-  package (compiles against Unity 2022.3; not yet run in Unity: needs an activated license here).
+  package (run in Unity 2022.3.39 with a test screen: the Canvas matches Graybox's render).
 
 ## Later
 Third-person preset, 2D platformer and top-down presets, safe-area guides and resolution presets,

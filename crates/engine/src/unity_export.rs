@@ -90,8 +90,13 @@ fn paints(n: &Node) -> bool {
 /// `sprites/<id>.png`. Returns its file name.
 fn sprite(doc: &Document, id: NodeId, b: Rect, with_layers: bool, sprites: &std::path::Path, scale: f64) -> Result<Option<String>> {
     let mut d = doc.clone();
-    if !with_layers && let Some(n) = d.node_mut(id) {
-        n.children.clear();
+    if let Some(n) = d.node_mut(id) {
+        if !with_layers {
+            n.children.clear();
+        }
+        // The layer's opacity goes to the layout (Unity applies it with a CanvasGroup, which its
+        // layers inherit), not into the picture too.
+        n.opacity = 1.0;
     }
     let Some(pix) = figcraft_render::render_area(&d, &[id], b, scale) else { return Ok(None) };
     let png = figcraft_render::encode_png(&pix).map_err(EngineError::Other)?;
@@ -155,6 +160,7 @@ fn node_json(
                 "fontFamily": style.font_family,
                 "fontStyle": style.font_style,
                 "fontSize": style.font_size,
+                "autoResize": json!(t.auto_resize),
                 "color": color,
                 "align": format!("{:?}", t.align_h).to_lowercase(),
                 "alignVertical": match t.align_v {
@@ -238,6 +244,44 @@ mod tests {
         let flat = layout["nodes"].as_array().unwrap();
         assert_eq!(flat.len(), 3, "the screen, the panel and the label");
         assert!(flat.iter().filter(|n| n["id"] != json!(screen)).all(|n| n["parent"] == json!(screen)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A translucent layer exports its opacity in the layout only (Unity applies it with a
+    /// CanvasGroup), so its sprite is opaque; a text says how its box resizes.
+    #[test]
+    fn opacity_stays_out_of_the_sprite_and_text_keeps_its_resize_mode() {
+        let dir = std::env::temp_dir().join(format!("graybox-unity-opacity-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut s = Session::new();
+        let screen =
+            s.execute("frame.create", &json!({"x": 0, "y": 0, "width": 200, "height": 100, "name": "Fade"})).unwrap()["id"].as_u64().unwrap();
+        let glass = s
+            .execute(
+                "frame.create",
+                &json!({"parent": screen, "x": 10, "y": 10, "width": 50, "height": 50, "props": {"fill": "#ff0000", "opacity": 0.5}}),
+            )
+            .unwrap()["id"]
+            .as_u64()
+            .unwrap();
+        let label = s.execute("text.create", &json!({"text": "Hi", "parent": screen, "x": 80, "y": 10})).unwrap()["id"].as_u64().unwrap();
+        let wrapped = s
+            .execute("text.create", &json!({"text": "Wraps", "parent": screen, "x": 80, "y": 50, "width": 60, "props": {"textAutoResize": "height"}}))
+            .unwrap()["id"]
+            .as_u64()
+            .unwrap();
+        let out = s.execute("game.unity.export", &json!({"frame": screen, "dir": dir.to_string_lossy()})).unwrap();
+        let folder = std::path::PathBuf::from(out["screens"][0]["folder"].as_str().unwrap());
+        let layout: serde_json::Value = serde_json::from_slice(&std::fs::read(folder.join("layout.json")).unwrap()).unwrap();
+        let flat = layout["nodes"].as_array().unwrap();
+        let node = |id: u64| flat.iter().find(|n| n["id"] == json!(id)).unwrap();
+        assert_eq!(node(glass)["opacity"], json!(0.5));
+        let png = std::fs::read(folder.join(node(glass)["sprite"].as_str().unwrap())).unwrap();
+        let pix = figcraft_render::images::decode(&png).unwrap();
+        let alpha = pix.data().get(3 + 4 * (pix.width() as usize * (pix.height() as usize / 2) + pix.width() as usize / 2)).copied().unwrap();
+        assert_eq!(alpha, 255, "the sprite is drawn at full opacity");
+        assert_eq!(node(label)["text"]["autoResize"], json!("widthAndHeight"));
+        assert_eq!(node(wrapped)["text"]["autoResize"], json!("height"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
