@@ -124,3 +124,6 @@ and parity docs are not ours to update.
 
 ## CI workflows
 Leave `.github/workflows/` as upstream has it unless Adriel asks; run `cargo xtask ci` locally.
+
+## Agents
+Unity export and the Live Link package: use the `unity-livelink` agent (`.claude/agents/unity-livelink.md`).
