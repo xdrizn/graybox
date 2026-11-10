@@ -1512,9 +1512,12 @@ pub fn resize_node(doc: &mut Document, id: NodeId, w: f64, h: f64) -> Result<()>
     let (ow, oh) = (n.width, n.height);
     let group = n.kind.bounds_follow_children();
     let section = matches!(n.kind, NodeKind::Section { .. });
+    // Graybox: a 9-sliced layer stretches its drawing, not its layers: they stay as they are.
+    let sliced = figcraft_doc::nine_slice::NineSlice::of(n).is_some();
     figcraft_layout::set_size(doc, id, w, h);
     if section {
         // Sections have no constraints: what's in them stays as it is.
+    } else if sliced {
     } else if group {
         let kx = if ow > 1e-9 { w / ow } else { 1.0 };
         let ky = if oh > 1e-9 { h / oh } else { 1.0 };

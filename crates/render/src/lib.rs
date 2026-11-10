@@ -21,6 +21,7 @@ pub mod image_profile;
 pub mod images;
 mod layer_budget;
 pub mod lod;
+mod nine_slice;
 pub mod paint;
 pub mod pattern;
 pub mod retained;

@@ -79,6 +79,13 @@ pub fn specs() -> Vec<CommandSpec> {
             true,
             image_to_background
         ),
+        spec!(
+            "game.nineSlice.set",
+            "9-slice",
+            "{ids?, enabled? (true: cut a quarter of the shorter side in; false: off), insets? ([top, right, bottom, left] at its base size)}  a 9-sliced layer drawn at another size keeps its corners, stretches its edges along their side and its middle both ways (images, shapes, frames, components; an instance takes its main's) → {sliced: [ids]}",
+            true,
+            nine_slice_set
+        ),
         spec!("game.starterKit", "Create game UI starter kit", "{} → {hud, inventory, pause, map, death, components, variables}", true, starter_kit),
     ]
 }
@@ -895,5 +902,97 @@ mod image_background_tests {
         // A layer without an image, or not in a frame, is refused.
         let r = s.execute("shape.rectangle", &json!({"parent": f, "width": 10, "height": 10})).unwrap()["id"].as_u64().unwrap();
         assert!(s.execute("game.image.toBackground", &json!({"ids": [r]})).is_err());
+    }
+}
+
+/// Graybox: turn 9-slice on or off for layers, or set its cuts ([`figcraft_doc::nine_slice`]).
+fn nine_slice_set(s: &mut Session, p: &Value) -> Result<Value> {
+    use figcraft_doc::nine_slice::{KEY, NineSlice};
+    let cmd = "game.nineSlice.set";
+    let ids = crate::automation::params::targets(s, p);
+    if ids.is_empty() {
+        return Err(bad(cmd, "Select a layer"));
+    }
+    let enabled = match p.get("enabled") {
+        None | Some(Value::Null) => None,
+        Some(v) => Some(v.as_bool().ok_or_else(|| bad(cmd, "enabled must be true or false"))?),
+    };
+    let insets = match p.get("insets") {
+        None | Some(Value::Null) => None,
+        Some(v) => {
+            let a = v.as_array().filter(|a| a.len() == 4).ok_or_else(|| bad(cmd, "insets: [top, right, bottom, left]"))?;
+            let mut out = [0.0; 4];
+            for (slot, x) in out.iter_mut().zip(a) {
+                *slot = x.as_f64().filter(|f| f.is_finite()).ok_or_else(|| bad(cmd, "insets must be numbers"))?;
+            }
+            Some(out)
+        }
+    };
+    let doc = s.doc_mut()?;
+    let mut sliced = Vec::new();
+    for id in ids {
+        let n = doc.get(id)?;
+        if n.is_page() || matches!(n.kind, NodeKind::Text(_) | NodeKind::Section { .. }) || n.kind.bounds_follow_children() {
+            return Err(bad(cmd, format!("\"{}\" can't be 9-sliced: pick an image, a shape, a frame or a component", n.name)));
+        }
+        if n.layout.is_some() {
+            return Err(bad(cmd, format!("\"{}\" has auto layout, which places its layers itself: remove it to 9-slice", n.name)));
+        }
+        let current = NineSlice::of(n);
+        let next = match (enabled, current) {
+            (Some(false), _) => None,
+            (_, Some(c)) => Some(c),
+            (Some(true), None) => NineSlice::new(n.width, n.height),
+            (None, None) if insets.is_some() => NineSlice::new(n.width, n.height),
+            (None, None) => None,
+        };
+        let next = next.map(|s| match insets {
+            Some(i) => NineSlice { insets: i, ..s }.clamped(),
+            None => s,
+        });
+        let node = doc.get_mut(id)?;
+        match next {
+            Some(s) => {
+                node.plugin_data.insert(KEY.into(), s.encode());
+                sliced.push(id);
+            }
+            None => {
+                node.plugin_data.remove(KEY);
+            }
+        }
+    }
+    Ok(json!({"sliced": sliced}))
+}
+
+#[cfg(test)]
+mod nine_slice_tests {
+    use crate::Session;
+    use figcraft_doc::NodeId;
+    use figcraft_doc::nine_slice::NineSlice;
+    use serde_json::json;
+
+    /// 9-slice on, cuts set, the layer resized: its base stays, its layers stay where they are; off
+    /// removes it. Auto layout frames and text are refused.
+    #[test]
+    fn nine_slice_turns_on_takes_cuts_and_keeps_layers_put() {
+        let mut s = Session::new();
+        let f = NodeId(s.execute("frame.create", &json!({"x": 0, "y": 0, "width": 80, "height": 40})).unwrap()["id"].as_u64().unwrap());
+        let r =
+            NodeId(s.execute("shape.rectangle", &json!({"parent": f, "x": 60, "y": 10, "width": 10, "height": 10})).unwrap()["id"].as_u64().unwrap());
+        s.execute("game.nineSlice.set", &json!({"ids": [f], "enabled": true})).unwrap();
+        let of = |s: &Session| NineSlice::of(s.doc().unwrap().node(f).unwrap());
+        assert_eq!(of(&s), Some(NineSlice { insets: [10.0; 4], base: (80.0, 40.0) }));
+        s.execute("game.nineSlice.set", &json!({"ids": [f], "insets": [4, 12, 4, 12]})).unwrap();
+        assert_eq!(of(&s).map(|x| x.insets), Some([4.0, 12.0, 4.0, 12.0]));
+        let before = s.doc().unwrap().world_bounds(r).unwrap();
+        s.execute("node.set", &json!({"ids": [f], "props": {"width": 200}})).unwrap();
+        assert_eq!(s.doc().unwrap().world_bounds(r).unwrap(), before, "its layers stay put");
+        assert_eq!(of(&s).map(|x| x.base), Some((80.0, 40.0)), "the base stays");
+        s.execute("game.nineSlice.set", &json!({"ids": [f], "enabled": false})).unwrap();
+        assert_eq!(of(&s), None);
+        let al = NodeId(
+            s.execute("frame.create", &json!({"width": 80, "height": 40, "props": {"layout": "horizontal"}})).unwrap()["id"].as_u64().unwrap(),
+        );
+        assert!(s.execute("game.nineSlice.set", &json!({"ids": [al], "enabled": true})).is_err());
     }
 }

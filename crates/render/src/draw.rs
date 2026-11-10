@@ -661,7 +661,7 @@ pub fn draw_node(ctx: &Ctx, pix: &mut Pixmap, id: NodeId, parent_xf: Affine, dep
 }
 
 /// [`draw_node`] for a node already looked up.
-fn draw_layer(ctx: &Ctx, pix: &mut Pixmap, n: &Node, parent_xf: Affine, depth: usize) {
+pub(crate) fn draw_layer(ctx: &Ctx, pix: &mut Pixmap, n: &Node, parent_xf: Affine, depth: usize) {
     let id = n.id;
     if depth > crate::MAX_EXPORT_DEPTH || ctx.skip.contains(&id) {
         return;
@@ -692,6 +692,10 @@ fn draw_layer(ctx: &Ctx, pix: &mut Pixmap, n: &Node, parent_xf: Affine, depth: u
     }
     if outline {
         draw_outline(&Ctx { outline_mode: true, ..*ctx }, pix, n, xf, depth);
+        return;
+    }
+    // Graybox: a 9-sliced layer drawn at another size than its base stretches only its middles.
+    if crate::nine_slice::draw(ctx, pix, n, xf, depth) {
         return;
     }
     if ctx.lod && dev.width().max(dev.height()) < lod::TINY_PX && lod::splattable_within(ctx.doc, n, 0, Some(ctx.bounds)).0 {

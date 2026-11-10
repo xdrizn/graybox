@@ -19,6 +19,7 @@ pub mod geometry;
 pub mod handoff;
 pub mod ids;
 pub mod library;
+pub mod nine_slice;
 pub mod node;
 pub mod props;
 pub mod proto;
