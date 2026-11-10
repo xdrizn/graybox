@@ -1,0 +1,14 @@
+{
+  "name": "com.indirect.graybox-livelink",
+  "displayName": "Graybox Live Link",
+  "version": "0.1.0",
+  "unity": "2022.3",
+  "description": "Builds the screens Graybox exports (layout.json and sprites) as uGUI under a Canvas, with anchors, 9-sliced sprites and text, and rebuilds them each time Graybox exports again.",
+  "dependencies": {
+    "com.unity.ugui": "1.0.0"
+  },
+  "author": {
+    "name": "INDIRECT"
+  },
+  "license": "MIT OR Apache-2.0"
+}

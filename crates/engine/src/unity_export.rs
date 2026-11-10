@@ -34,6 +34,10 @@ pub(crate) fn export(doc: &Document, frame: NodeId, dir: &str, scale: f64) -> Re
     let mut written = 0usize;
     let base = doc.world_bounds(frame).unwrap_or_default();
     let tree = node_json(doc, root, base, &sprites, scale, &mut count, &mut written, true)?;
+    // The same layers in a flat list, each naming its parent (Unity's JsonUtility reads no deeper
+    // than ten levels of nesting).
+    let mut nodes = Vec::new();
+    flatten(&tree, 0, &mut nodes);
     let layout = json!({
         "graybox": 1,
         "name": root.name,
@@ -42,6 +46,7 @@ pub(crate) fn export(doc: &Document, frame: NodeId, dir: &str, scale: f64) -> Re
         "height": root.height,
         "scale": scale,
         "root": tree,
+        "nodes": nodes,
     });
     let text = serde_json::to_string_pretty(&layout).map_err(|e| EngineError::Other(e.to_string()))?;
     file_access::write(out.join("layout.json"), text.as_bytes())?;
@@ -95,6 +100,21 @@ fn sprite(doc: &Document, id: NodeId, b: Rect, with_layers: bool, sprites: &std:
     Ok(Some(format!("sprites/{file}")))
 }
 
+/// `v` and the layers inside it, top first, each without its children and with `parent` (0 for
+/// the screen).
+fn flatten(v: &Value, parent: u64, out: &mut Vec<Value>) {
+    let mut one = v.clone();
+    if let Some(o) = one.as_object_mut() {
+        o.remove("children");
+        o.insert("parent".into(), json!(parent));
+    }
+    out.push(one);
+    let id = v["id"].as_u64().unwrap_or(0);
+    for c in v["children"].as_array().into_iter().flatten() {
+        flatten(c, id, out);
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn node_json(
     doc: &Document,
@@ -137,7 +157,11 @@ fn node_json(
                 "fontSize": style.font_size,
                 "color": color,
                 "align": format!("{:?}", t.align_h).to_lowercase(),
-                "alignVertical": format!("{:?}", t.align_v).to_lowercase(),
+                "alignVertical": match t.align_v {
+                    figcraft_doc::TextAlignV::Top => "top",
+                    figcraft_doc::TextAlignV::Middle => "center",
+                    figcraft_doc::TextAlignV::Bottom => "bottom",
+                },
             });
         }
         _ => {
@@ -211,6 +235,9 @@ mod tests {
         assert!(folder.join(p["sprite"].as_str().unwrap()).exists());
         let t = kids.iter().find(|k| k["text"].is_object()).unwrap();
         assert_eq!(t["text"]["characters"], json!("Play"));
+        let flat = layout["nodes"].as_array().unwrap();
+        assert_eq!(flat.len(), 3, "the screen, the panel and the label");
+        assert!(flat.iter().filter(|n| n["id"] != json!(screen)).all(|n| n["parent"] == json!(screen)));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

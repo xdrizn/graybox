@@ -1,0 +1,24 @@
+{
+  "name": "Indirect.Graybox.LiveLink.Editor",
+  "references": [
+    "Indirect.Graybox.LiveLink",
+    "UnityEngine.UI",
+    "Unity.TextMeshPro"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "autoReferenced": false,
+  "versionDefines": [
+    {
+      "name": "com.unity.textmeshpro",
+      "expression": "1.0.0",
+      "define": "GRAYBOX_TMP"
+    },
+    {
+      "name": "com.unity.ugui",
+      "expression": "2.0.0",
+      "define": "GRAYBOX_TMP"
+    }
+  ]
+}
