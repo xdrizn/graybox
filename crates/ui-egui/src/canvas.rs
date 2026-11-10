@@ -322,6 +322,7 @@ pub fn show(app: &mut FigApp, ui: &mut Ui, worker: &mut Worker) {
     crate::handles::draw(app, &painter);
     // Graybox: the selected layer's 9-slice cuts.
     crate::game::nine_slice_ui::draw(app, &painter);
+    crate::game::pseudo_view::banner(&painter, app.canvas.rect);
     crate::board_facilitate::badges(app, &painter);
     crate::board_bar::stamp_author(app, &painter, ctx.input(|i| i.pointer.hover_pos()).filter(|p| rect.contains(*p)));
     crate::board_bar::show(app, &ctx);

@@ -61,6 +61,8 @@ pub(super) fn request_render(app: &mut FigApp, worker: &mut Worker, ppp: f32, ma
     };
     // The edited text is drawn live (an IME composition included); the caret is an overlay.
     let doc = app.preedit_view().map(|p| p.doc.clone()).unwrap_or_else(|| ds.doc.clone());
+    // Graybox: the pseudo-localization preview, while it is on.
+    let doc = crate::game::pseudo_view::view(doc);
     // Graybox: layers an auto layout drop moved glide to their places.
     let doc = crate::game::layout_ease::view(ds.uid, ds.page, doc, &ds.selection);
     let outlined = if ds.view.outlines_selection { ds.selection.clone() } else { vec![] };

@@ -25,6 +25,7 @@ pub mod map;
 pub mod menu;
 pub(crate) mod nine_slice_ui;
 pub mod proto_targets;
+pub(crate) mod pseudo_view;
 pub mod renderer;
 pub mod screen_fit;
 pub mod screen_ui;
@@ -170,6 +171,13 @@ impl Play {
 /// The file's game settings, at the end of the Prototype tab when nothing is selected (beside
 /// upstream's prototype settings). Each part folds away; all are closed at first.
 pub(crate) fn prototype_section(app: &mut crate::FigApp, ui: &mut egui::Ui) {
+    crate::widgets::separator(ui);
+    // The pseudo-localization switch, open: it's for any screen, not one part of the game.
+    padded(ui, |ui| {
+        ui.add_space(8.0);
+        ui.spacing_mut().item_spacing = egui::vec2(8.0, 6.0);
+        pseudo_view::switch(ui);
+    });
     crate::widgets::separator(ui);
     type Part = fn(&mut crate::FigApp, &mut egui::Ui);
     let parts: [(&str, Part); 6] = [

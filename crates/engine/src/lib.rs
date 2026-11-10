@@ -31,6 +31,7 @@ pub mod measure;
 #[cfg(test)]
 mod pen_tests;
 pub mod proto_run;
+pub mod pseudo;
 mod rect_to_frame;
 mod selection;
 mod sharing;
