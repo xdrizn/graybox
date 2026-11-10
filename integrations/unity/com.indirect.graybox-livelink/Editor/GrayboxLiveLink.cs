@@ -254,6 +254,8 @@ namespace Indirect.Graybox.Editor
         static Dictionary<string, Sprite> ImportSprites(string dir, string assets, Layout layout)
         {
             var map = new Dictionary<string, Sprite>();
+            // Copy them all, then let the project see the folder and its files once.
+            var copied = new List<(NodeData node, string path)>();
             foreach (var n in layout.nodes)
             {
                 if (string.IsNullOrEmpty(n.sprite)) continue;
@@ -261,7 +263,11 @@ namespace Indirect.Graybox.Editor
                 if (!File.Exists(src)) continue;
                 var dst = $"{assets}/{Path.GetFileName(n.sprite)}";
                 File.Copy(src, dst, true);
-                AssetDatabase.ImportAsset(dst, ImportAssetOptions.ForceUpdate);
+                copied.Add((n, dst));
+            }
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            foreach (var (n, dst) in copied)
+            {
                 if (AssetImporter.GetAtPath(dst) is TextureImporter ti)
                 {
                     ti.textureType = TextureImporterType.Sprite;

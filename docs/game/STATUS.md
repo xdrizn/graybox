@@ -244,6 +244,18 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - `crates/ui-egui/src/toolbar.rs`: no Game settings button beside Play (`main_width` counts 5 cells).
 - `crates/ui-egui/src/panels/layout_panel.rs` `dimensions`: an upright line shows its length as H
   (`game::line_dims`).
+- 9-slice (`crates/doc/src/nine_slice.rs`, `pub mod` in doc `lib.rs`; stored as plugin data
+  `graybox.nineSlice`): `crates/render/src/draw.rs` `draw_layer` (now `pub(crate)`) calls
+  `nine_slice::draw` (new, `mod` in render `lib.rs`); `cmd/props.rs` `resize_node` keeps a sliced
+  layer's children put; `game.nineSlice.set` in `cmd/game.rs`; UI: `panels/right.rs` (section under
+  Layout), `canvas.rs` (cuts drawn), `canvas/input.rs` (cuts dragged) → `game::nine_slice_ui`.
+- Pseudo-localization: `crates/engine/src/pseudo.rs` (new, `pub mod`); `canvas/render.rs` draws
+  `game::pseudo_view::view(doc)`; `canvas.rs` banner; switch in `game::prototype_section`.
+- Unity export: `crates/engine/src/unity_export.rs` (new), `game.unity.export` in `cmd/game.rs`
+  (skipped by the junk sweep in `tests.rs`: it writes files), `GameSettings::{unity_dir,
+  unity_frames}`; UI `game::unity_ui` (frame switch via `panels/proto_panel.rs`, settings part, export
+  on save from `app.rs`). The Unity side is C# (`integrations/unity/`, a UPM package): the one place
+  that isn't Rust, as Unity plugins can't be.
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one

@@ -153,6 +153,10 @@ Death are only *examples* in the starter kit, never required.
 - [x] An upright line shows its length as H.
 - [x] No Game settings button beside Play; game sections in the Prototype tab use the panel's headers.
 - [ ] Line resized with Shift "behaves strangely": not reproduced (dragging an end with Shift is fine).
+- [x] 9-slice: a section under Layout, cuts dragged on the canvas, corners kept while the middle stretches.
+- [x] Pseudo-localization preview (Prototype tab switch, canvas only).
+- [x] Unity export (layout.json + sprites per screen, again on save) and the Graybox Live Link
+  package (compiles against Unity 2022.3; not yet run in Unity: needs an activated license here).
 
 ## Later
 Third-person preset, 2D platformer and top-down presets, safe-area guides and resolution presets,

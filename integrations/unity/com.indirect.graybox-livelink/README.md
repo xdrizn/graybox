@@ -15,6 +15,7 @@ What comes over: each layer's box and its constraints as RectTransform anchors, 
 (TextMeshPro when the project has it, else UI Text). Objects keep a `GrayboxNode`, so an update
 changes them in place and components you add stay.
 
-Status: written against Unity 2022.3; not yet run in a Unity project.
+Status: compiles against Unity 2022.3.39 (uGUI 1.0, TextMeshPro 3.0.6, both text paths); not yet run
+in a Unity project (that needs an activated Unity license on the machine).
 
 Code: MIT OR Apache-2.0, as Graybox (C#: Unity plugins can't be written in Rust).

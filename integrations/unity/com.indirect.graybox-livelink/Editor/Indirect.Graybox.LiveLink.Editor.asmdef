@@ -8,7 +8,7 @@
   "includePlatforms": [
     "Editor"
   ],
-  "autoReferenced": false,
+  "autoReferenced": true,
   "versionDefines": [
     {
       "name": "com.unity.textmeshpro",
