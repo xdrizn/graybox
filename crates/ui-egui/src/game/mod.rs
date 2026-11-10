@@ -23,6 +23,7 @@ pub mod look_ui;
 pub mod looks;
 pub mod map;
 pub mod menu;
+pub(crate) mod nine_slice_ui;
 pub mod proto_targets;
 pub mod renderer;
 pub mod screen_fit;

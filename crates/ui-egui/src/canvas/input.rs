@@ -291,6 +291,10 @@ pub(super) fn input(app: &mut FigApp, ui: &mut Ui, resp: &egui::Response) -> boo
     if !app.canvas.dragging && resp.hovered() && crate::handles::input(app, &ctx, pos) {
         return false;
     }
+    // Graybox: dragging a 9-slice cut.
+    if !app.canvas.dragging && resp.hovered() && crate::game::nine_slice_ui::input(app, &ctx, pos) {
+        return false;
+    }
     if resp.secondary_clicked() {
         open_context_menu(app, pos, mods.command);
         return true;

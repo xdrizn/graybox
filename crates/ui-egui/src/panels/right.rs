@@ -289,6 +289,10 @@ fn design(app: &mut FigApp, ui: &mut Ui) {
     if !points_selected {
         crate::layout_panel::layout_section(app, ui, &shown, &sel);
         widgets::separator(ui);
+        // Graybox: 9-slice, under Layout.
+        if crate::game::nine_slice_ui::section(app, ui, &shown, &sel) {
+            widgets::separator(ui);
+        }
     }
     if vector_edit_none && arc_section(app, ui, &shown, &sel) || points_section(app, ui, &shown, &sel) {
         widgets::separator(ui);
