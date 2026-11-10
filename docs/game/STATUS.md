@@ -196,9 +196,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   a layer inside covers completely (opaque, axis-aligned, whole box) is not drawn (no light seam).
 - `crates/ui-egui/src/canvas/render.rs` `request_render` and `canvas.rs`: the drawn document goes
   through `game::layout_ease::view`; the canvas repaints while layers glide.
-- `crates/ui-egui/src/widgets.rs` `scrub` (+ `scrub_rated`) and `number_field_impl`, and
-  `panels/typography/spacing.rs` `spacing_input`: Alt and a drag anywhere on a number field's value
-  scrubs it (`game::alt_scrub`, a drag-only area under the field's click area, out of Tab order).
+- `crates/ui-egui/src/panels/typography/spacing.rs` `spacing_input`: Alt and a drag anywhere on a
+  spacing field scrubs it (`game::alt_scrub`). Number fields do it upstream since v0.17 (merged
+  2026-11-10: our `widgets.rs` Alt-scrub was dropped for theirs).
 - `apps/figcraft/src/main.rs` (`set_startup_update_check(false)`), `crates/ui-egui/src/toolbar.rs` (Help
   menu row removed), `menus.rs` (`help.checkForUpdates` does nothing) and `dialogs/updates_ui.rs`
   (`check` kept, unused): no FigCraft update check or prompt; its menu string is kept in `game/brand.rs`.
@@ -228,6 +228,20 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   (`game::style_fill`: swatch, name, detach), not the style's paints.
 - `crates/ui-egui/src/widgets/colorpicker.rs` gradient "Rotate 90°": `game::gradient_turn::quarter` (a
   linear gradient turns about the layer's middle; others about their centre).
+- Upstream v0.17 merge (2026-11-10): `theme.rs` dark `text_tertiary` raised to 136 (upstream's 3:1
+  contrast test); `shortcut_parity_tests` pins F9 (`game.play`); `canvas_fixes_tests` pencil preview
+  uses a light page (Graybox pages start dark); `crates/text/build.rs` keeps Space Grotesk and
+  JetBrains Mono in web builds next to upstream's `FIGCRAFT_EMBED_SCRIPTS`/`FIGCRAFT_WEB_FONTS`.
+- `crates/engine/src/canvas/vectoredit.rs` `ensure_vector`: a whole ellipse edits with four points
+  (`ellipse_points.rs`, new, `mod` in `lib.rs`).
+- `crates/ui-egui/src/canvas/overlays.rs` selection overlay: hidden while the Pen draws a path.
+- `crates/engine/src/canvas/tools/drag.rs` pen drag: 8 screen px pull out no handle (was 3); press
+  filter: Cmd/Ctrl on a frame's own background starts a marquee (`shift_select::cmd_marquees`).
+- `crates/engine/src/cmd/structure.rs` `join`: several layers joined have their meeting ends welded
+  (`weld.rs`, new, `mod` in `lib.rs`; 2 units).
+- `crates/ui-egui/src/toolbar.rs`: no Game settings button beside Play (`main_width` counts 5 cells).
+- `crates/ui-egui/src/panels/layout_panel.rs` `dimensions`: an upright line shows its length as H
+  (`game::line_dims`).
 - `crates/ui-egui/src/bidi.rs` `single_line`: control height capped to the row, so rename fields edit
   on the same line as the name (theme interact size 24 > row 20).
 - `crates/ui-egui/src/panels/proto_panel.rs` `prototype`: calls `game::menu_section` for one

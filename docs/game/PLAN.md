@@ -145,6 +145,14 @@ Death are only *examples* in the starter kit, never required.
 - [x] Ctrl-drag crops images inside auto layout too.
 - [x] A fill or stroke with a colour style shows only the style (swatch, name, detach).
 - [x] Gradient Rotate 90° turns about the layer's middle.
+- [x] FigCraft v0.17 merged (Developer Mode, pick select, Alt-scrub on number fields, web fonts...).
+- [x] A whole ellipse edits with four points.
+- [x] The Pen shows no selection box while drawing; a click's wobble (8 px) makes no curve.
+- [x] Join selection welds the meeting ends of several layers (an arrow of three lines).
+- [x] Cmd/Ctrl-drag from a frame's background selects the layers inside it.
+- [x] An upright line shows its length as H.
+- [x] No Game settings button beside Play; game sections in the Prototype tab use the panel's headers.
+- [ ] Line resized with Shift "behaves strangely": not reproduced (dragging an end with Shift is fine).
 
 ## Later
 Third-person preset, 2D platformer and top-down presets, safe-area guides and resolution presets,
