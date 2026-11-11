@@ -189,6 +189,48 @@ fn side_strokes(n: &Node) -> Option<Arc<BezPath>> {
     }))
 }
 
+/// Graybox: the outline of a rectangle-like shape or full ellipse moved `inset` inwards (negative:
+/// outwards), the way the inside and outside stroke rings are built. `None` for other shapes.
+pub(crate) fn inset_outline(n: &Node, inset: f64) -> Option<BezPath> {
+    let props = &n.stroke;
+    let (x0, y0, ww, hh) = (inset, inset, n.width - 2.0 * inset, n.height - 2.0 * inset);
+    if ww <= 0.0 || hh <= 0.0 {
+        return None;
+    }
+    match n.kind {
+        NodeKind::Rectangle
+        | NodeKind::Frame
+        | NodeKind::Component { .. }
+        | NodeKind::ComponentSet { .. }
+        | NodeKind::Instance { .. }
+        | NodeKind::Section { .. }
+            if !n.corners.style.is_round() =>
+        {
+            // Graybox: styled corners move their cuts parallel to themselves (mitred; other
+            // joins take the generic outline).
+            (props.join == StrokeJoin::Miter)
+                .then(|| figcraft_doc::corner_style::offset_outline(n.width, n.height, n.corners.radii, n.corners.style, [inset; 4]))
+        }
+        NodeKind::Rectangle
+        | NodeKind::Frame
+        | NodeKind::Component { .. }
+        | NodeKind::ComponentSet { .. }
+        | NodeKind::Instance { .. }
+        | NodeKind::Section { .. }
+            if n.corners.smoothing == 0.0 =>
+        {
+            let radii = n.corners.radii.map(|r| if r > 0.0 { (r - inset).max(0.0) } else { 0.0 });
+            let mut p = figcraft_geom::rounded_rect(ww, hh, radii, 0.0);
+            p.apply_affine(Affine::translate((x0, y0)));
+            Some(p)
+        }
+        NodeKind::Ellipse { sweep, inner, .. } if figcraft_geom::full_sweep(sweep) && inner == 0.0 => {
+            Some(figcraft_geom::kurbo::Ellipse::from_rect(Rect::new(x0, y0, x0 + ww, y0 + hh)).to_path(0.05))
+        }
+        _ => None,
+    }
+}
+
 /// The stroke area of a node in local coordinates.
 pub fn stroke_area(n: &Node, path: &BezPath, closed: bool) -> Arc<BezPath> {
     let props = &n.stroke;
@@ -201,44 +243,7 @@ pub fn stroke_area(n: &Node, path: &BezPath, closed: bool) -> Arc<BezPath> {
         && !(props.align == StrokeAlign::Outside && props.join != StrokeJoin::Miter && n.corners.radii.contains(&0.0))
     {
         let w = props.weight;
-        let ring = |inset: f64| -> Option<BezPath> {
-            let (x0, y0, ww, hh) = (inset, inset, n.width - 2.0 * inset, n.height - 2.0 * inset);
-            if ww <= 0.0 || hh <= 0.0 {
-                return None;
-            }
-            match n.kind {
-                NodeKind::Rectangle
-                | NodeKind::Frame
-                | NodeKind::Component { .. }
-                | NodeKind::ComponentSet { .. }
-                | NodeKind::Instance { .. }
-                | NodeKind::Section { .. }
-                    if !n.corners.style.is_round() =>
-                {
-                    // Graybox: styled corners move their cuts parallel to themselves (mitred; other
-                    // joins take the generic outline).
-                    (props.join == StrokeJoin::Miter)
-                        .then(|| figcraft_doc::corner_style::offset_outline(n.width, n.height, n.corners.radii, n.corners.style, [inset; 4]))
-                }
-                NodeKind::Rectangle
-                | NodeKind::Frame
-                | NodeKind::Component { .. }
-                | NodeKind::ComponentSet { .. }
-                | NodeKind::Instance { .. }
-                | NodeKind::Section { .. }
-                    if n.corners.smoothing == 0.0 =>
-                {
-                    let radii = n.corners.radii.map(|r| if r > 0.0 { (r - inset).max(0.0) } else { 0.0 });
-                    let mut p = figcraft_geom::rounded_rect(ww, hh, radii, 0.0);
-                    p.apply_affine(Affine::translate((x0, y0)));
-                    Some(p)
-                }
-                NodeKind::Ellipse { sweep, inner, .. } if figcraft_geom::full_sweep(sweep) && inner == 0.0 => {
-                    Some(figcraft_geom::kurbo::Ellipse::from_rect(Rect::new(x0, y0, x0 + ww, y0 + hh)).to_path(0.05))
-                }
-                _ => None,
-            }
-        };
+        let ring = |inset: f64| inset_outline(n, inset);
         let (outer, inner) = match props.align {
             StrokeAlign::Inside => (ring(0.0), ring(w)),
             _ => (ring(-w), ring(0.0)),
@@ -1003,8 +1008,10 @@ fn draw_content(ctx: &Ctx, pix: &mut Pixmap, n: &Node, xf: Affine, depth: usize,
                 if let Some(network) = styled_network {
                     fill_vector_regions(ctx, pix, n, network, xf);
                 } else if let Some((path, rule)) = &outline
-                    && let Some(tp) = ts_path(path)
+                    && let Some(tp) =
+                        crate::covered::fill_under_stroke(n, xf.determinant().abs().sqrt()).and_then(|p| ts_path(&p)).or_else(|| ts_path(path))
                 {
+                    // Graybox: under an opaque inside stroke the fill stops inside the stroke's solid part.
                     fill_with(pix, &tp, &n.fills, w, h, xf, *rule, ctx, None);
                 }
             }

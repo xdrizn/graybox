@@ -4,7 +4,8 @@
 //! each let some of the other through.
 
 use figcraft_color::{BlendMode, PaintKind};
-use figcraft_doc::{Document, Node, NodeKind};
+use figcraft_doc::{Document, Node, NodeKind, StrokeAlign};
+use figcraft_geom::kurbo::BezPath;
 
 /// Whether some layer of frame `n` paints the frame's whole box opaque, over its fill.
 pub(crate) fn fill_hidden(doc: &Document, n: &Node) -> bool {
@@ -44,6 +45,34 @@ fn covers(doc: &Document, frame: &Node, k: &Node) -> bool {
                     _ => false,
                 }
         })
+}
+
+/// The outline `n`'s fill takes when an opaque inside stroke covers its edge, or `None` when the
+/// fill keeps the node's own outline. An inside stroke starts on the fill's edge: both edges are
+/// soft, so each let some of the other through (a thin light line along the stroke's outer edge
+/// when the stroke matches what lies behind). The fill stops a pixel inside the stroke's solid
+/// part instead, still reaching under its inner edge. `scale` is device pixels per local unit.
+pub(crate) fn fill_under_stroke(n: &Node, scale: f64) -> Option<BezPath> {
+    let props = &n.stroke;
+    let solid = |p: &&figcraft_color::Paint| {
+        p.visible && p.blend == BlendMode::Normal && p.opacity >= 1.0 && matches!(&p.kind, PaintKind::Solid { color } if color.a >= 1.0)
+    };
+    if props.align != StrokeAlign::Inside
+        || props.weight <= 0.0
+        || !props.weight.is_finite()
+        || !props.dashes.is_empty()
+        || props.sides.is_some()
+        || props.profile().is_some()
+        || props.brush.is_some()
+        || !(scale.is_finite() && scale > 0.0)
+        || !n.strokes.iter().filter(|p| p.visible).all(|p| solid(&p))
+        || !n.strokes.iter().any(|p| solid(&p))
+    {
+        return None;
+    }
+    // A pixel in (never more than half the stroke), measured on the screen.
+    let reach = props.weight - (1.0 / scale).min(props.weight / 2.0);
+    crate::draw::inset_outline(n, reach)
 }
 
 #[cfg(test)]

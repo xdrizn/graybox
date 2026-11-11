@@ -578,6 +578,8 @@ mod solo_tests;
 #[cfg(test)]
 mod spread_tests;
 #[cfg(test)]
+mod stroke_edge_tests;
+#[cfg(test)]
 mod stroke_reach_tests;
 #[cfg(test)]
 mod tests;

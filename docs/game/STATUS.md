@@ -3,6 +3,11 @@
 **Current milestone:** G7 — Share (and G0.3, G2.3 leftovers)
 
 ## Done
+- G9 (2026-11-11): an opaque inside stroke the colour of what lies behind a shape (a dark ring on a dark
+  frame) no longer shows a thin light line along its outer edge: the fill stops a pixel inside the
+  stroke instead of on the same curve (rectangles, rounded rectangles, ellipses; `render/covered.rs`
+  `fill_under_stroke`, tests in `render/stroke_edge_tests.rs`). Centre and outside strokes never had it.
+  Dashed, per-side, translucent, blended, gradient strokes and other shapes draw as before.
 - G0.1 (2026-11-03): `crates/game` (`figcraft-game`, pure simulation, L2) with the game's fixed
   60 Hz clock (`Game::advance`, `FixedClock`); `crates/ui-egui/src/game/` with `Play`, which
   drives the game from egui's frame time. Not shown in the app yet (Play mode is G1).
@@ -216,6 +221,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   past three colours to a preview and "+N").
 - `crates/render/src/covered.rs` (new, `mod` in `lib.rs`) and `draw.rs` `draw_content`: a frame fill
   a layer inside covers completely (opaque, axis-aligned, whole box) is not drawn (no light seam).
+  Same file: `draw.rs` `inset_outline` (the ring builder of `stroke_area`, pulled out as a function) and the
+  fill call in `draw_content` use `covered::fill_under_stroke` (fill inset under an opaque inside stroke).
 - `crates/ui-egui/src/canvas/render.rs` `request_render` and `canvas.rs`: the drawn document goes
   through `game::layout_ease::view`; the canvas repaints while layers glide.
 - `crates/ui-egui/src/panels/typography/spacing.rs` `spacing_input`: Alt and a drag anywhere on a
