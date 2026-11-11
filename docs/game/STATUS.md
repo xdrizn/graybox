@@ -121,9 +121,12 @@
   and drives the real `figcraft-cli mcp --attach`: "create a 400×300 frame named Menu with a centred
   title" made the frame and title (the agent avatar showed), "make the title orange" (a second
   message, `--resume`) changed that same title to #FF8800, Stop ended the process tree and said
-  "Stopped.", and the real `claude` printed the sign-in message in the panel. **Not run with the
-  real Claude**: the CLI's login on this PC has expired (`claude -p` answers "OAuth access token has
-  expired"); Adriel has to type `claude` once in a terminal and sign in, then try the chat.
+  "Stopped.", and the real `claude` printed the sign-in message in the panel (his login had
+  expired). After he signed in again, the same three steps were run with the **real Claude** (2026-11-11,
+  scratch file): it made the Menu frame (auto layout, dark navy, bold white "Menu" title centred) and
+  said what it did; "make the title orange" changed that same Title to #FF8A00; Stop ended
+  `claude.exe` and its tool server (no `figcraft-cli` left) and showed "Stopped.". The first reply
+  takes about 15 s to start ("Starting…").
   Part 2 (G10.2 icons) is not built; the runner takes extra image paths (`Turn::images`) and returns
   `Event`s, which is what it will use.
 
