@@ -224,6 +224,8 @@ struct Uniform {
     portal: [f32; 4],
     settings: [f32; 4],
     bloom: [f32; 4],
+    // Graybox: x the shadow softness in texels (0: the arena's filter), y 1 for smoothed edges. See `tps::TpsLook`.
+    look: [f32; 4],
 }
 
 fn linear(color: [f32; 3]) -> [f32; 3] {
@@ -256,6 +258,7 @@ impl Uniform {
             portal: theme.portal_position.extend(theme.portal_intensity).to_array(),
             settings: [if theme.pixel_textures { 1.0 } else { 0.0 }, theme.ambient, theme.portal_range, theme.portal_decay],
             bloom: [theme.bloom_intensity, theme.bloom_threshold, theme.bloom_smoothing, shadow_texel],
+            look: snapshot.tps.map_or([0.0; 4], |draw| draw.look.uniform()),
         }
     }
 }

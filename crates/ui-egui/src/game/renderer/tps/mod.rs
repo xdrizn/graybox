@@ -6,6 +6,7 @@
 mod gpu;
 mod grass;
 mod hero;
+mod look;
 mod props;
 mod scene;
 mod shapes;
@@ -19,7 +20,8 @@ use super::{Callback, SceneCallback, SceneTheme, Snapshot, Vertex};
 use figcraft_game::tps::{HeroPose, Tps};
 use glam::{Mat4, Vec3};
 
-pub(super) use gpu::{Targets, TpsGpu};
+pub(super) use gpu::{COLOR, Targets, TpsGpu};
+use look::TpsLook;
 pub(super) use scene::{SHADOW_SIZE, SceneData};
 
 /// What the third-person scene draws besides the world: the hero, and what moves the grass and the sky.
@@ -30,6 +32,8 @@ pub(super) struct Draw {
     pub eye: Vec3,
     /// Seconds since the app started (the wind and the water run on it).
     pub time: f32,
+    /// How the picture looks (see [`TpsLook`]).
+    pub look: TpsLook,
 }
 
 /// Add the third-person scene below any egui-designed HUD.
@@ -41,21 +45,12 @@ pub fn paint(ui: &egui::Ui, rect: egui::Rect, tps: &Tps, theme: &SceneTheme) {
     // The light follows the hero (in whole metres, so the shadow does not shimmer).
     let focus = (frame.hero.position / 2.0).round() * 2.0;
     let time = ui.input(|input| input.time) as f32;
-    let draw = Draw { pose: frame.hero, eye: frame.eye, time };
+    let look = TpsLook::default();
+    let draw = Draw { pose: frame.hero, eye: frame.eye, time, look };
     let snapshot = Snapshot { focus, tps: Some(draw), ..Snapshot::blank(Mat4::look_at_rh(frame.eye, frame.target, Vec3::Y), frame.eye) };
-    // The orange point light is the watchtower's beacon (no first-person light shines from the far
-    // end of the arena); the fog is thinner than in the arena, so the valley can be seen across.
-    // A night valley: dimmer than the arena, and clean (no pixel-noise textures, per the look update).
-    let theme = SceneTheme {
-        portal_position: tps.world().beacon(),
-        portal_range: 30.0,
-        fog_density: theme.fog_density * 0.55,
-        key_intensity: theme.key_intensity * 0.55,
-        hemi_intensity: theme.hemi_intensity * 0.6,
-        ambient: theme.ambient * 0.7,
-        pixel_textures: false,
-        ..*theme
-    };
+    // The look decides the lights, the fog, the sky, the shadows and the edges; the orange point light
+    // is the watchtower's beacon (no first-person light shines from the far end of the arena).
+    let theme = look.apply(theme, tps.world().beacon());
     ui.painter().add(Callback::new_paint_callback(rect, SceneCallback { snapshot, theme, rect }));
 }
 

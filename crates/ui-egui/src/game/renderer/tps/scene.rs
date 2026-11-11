@@ -67,9 +67,9 @@ impl SceneData {
     /// Draw calls in the worst frame: the shadow pass plus the picture.
     pub fn most_draw_calls(&self) -> u32 {
         let used = self.batches.iter().filter(|batch| !batch.instances.is_empty()).count() as u32;
-        // Shadow: ground and pieces, props, hero. Picture: ground, water, props, grass rows, hero and sky.
+        // Shadow: ground and pieces, props, hero. Picture: sky, ground, water, props, grass rows, hero and sky.
         let grass_rows = (grass::FADE_END * 2.0 / 8.0).ceil() as u32 + 2;
-        (1 + used + 1) + (1 + 1 + used + grass_rows + 1)
+        (1 + used + 1) + (1 + 1 + 1 + used + grass_rows + 1)
     }
 
     /// Bytes of GPU memory the scene holds with a shadow map of `shadow_size` squared (depth, 4 bytes

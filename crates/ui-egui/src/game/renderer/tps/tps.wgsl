@@ -5,11 +5,15 @@
 // - grass_vertex: tufts of blades that sway in the wind, bend away from the hero and shrink with
 //   distance, all in the vertex shader (no per-blade CPU work after placement).
 // - water_vertex / water_fragment: the river and the waterfall, with a glow that runs along them.
+// - sky_fragment: the smooth sky gradient on a dome.
 struct Tps {
     // xyz: the hero's feet; w: how far from the hero the grass bends away.
     hero: vec4<f32>,
     // x: seconds; y: wind strength; z: grass fade starts (m); w: grass is gone (m).
     wind: vec4<f32>,
+    // The sky at the horizon and straight up (linear colours).
+    horizon: vec4<f32>,
+    zenith: vec4<f32>,
 };
 @group(2) @binding(0) var<uniform> tps: Tps;
 
@@ -76,10 +80,20 @@ fn finish(world: vec3<f32>, normal: vec3<f32>, material: vec4<f32>) -> Output {
     local.z += outward.y * push * 0.75 * bend;
     let lowered = 1.0 - 0.5 * push * input.position.y;
     let world = base + vec3(local.x, input.position.y * height * lowered, local.z);
-    var material = input.material;
-    // A few tufts are a shade lighter, so a field is not one flat colour.
-    material.x = min(material.x + select(0.0, 1.0, fract(seed * 13.7) > 0.8), 5.0);
-    return finish(world, turn(input.normal, seed * 6.2831), material);
+    // Every tuft is the same solid tones (root to tip): the clean look has no random shades.
+    return finish(world, turn(input.normal, seed * 6.2831), input.material);
+}
+
+// The sky: a dome drawn first, coloured by the direction it is seen in (smooth, no steps).
+@fragment fn sky_fragment(input: Output) -> Lit {
+    let direction = normalize(input.world - scene.camera.xyz);
+    let up = clamp(direction.y, 0.0, 1.0);
+    // Close to the horizon the colour changes fast, then slowly towards the zenith.
+    let blend = smoothstep(0.0, 1.0, sqrt(up));
+    var lit: Lit;
+    lit.color = vec4(mix(tps.horizon.rgb, tps.zenith.rgb, blend), 1.0);
+    lit.emission = vec4(0.0, 0.0, 0.0, 1.0);
+    return lit;
 }
 
 struct Water {

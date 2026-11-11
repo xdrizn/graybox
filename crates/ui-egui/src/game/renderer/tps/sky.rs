@@ -11,7 +11,7 @@ const DIRECTION: Vec3 = Vec3::new(-0.15, 0.3, -1.0);
 const DISTANCE: f32 = 300.0;
 const OUTER: f32 = 24.0;
 const THIN: f32 = 1.6;
-const SIDES: u32 = 40;
+const SIDES: u32 = 96;
 
 /// The ring and a fainter halo around it, as triangles seen from the camera.
 pub(super) fn vertices(out: &mut Vec<Vertex>, eye: Vec3) {

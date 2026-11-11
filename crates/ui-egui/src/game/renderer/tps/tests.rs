@@ -46,7 +46,9 @@ fn the_ground_is_most_of_the_static_triangles_and_the_ground_alone_is_about_thir
     assert!(solid as usize >= world.terrain().triangles().count());
     assert!(data.statics.backdrop.end > data.statics.backdrop.start, "mountains and keep");
     assert!(data.statics.water.end > data.statics.water.start, "river");
-    assert_eq!(data.statics.vertices.len() as u32, data.statics.water.end);
+    assert!(data.statics.sky.end > data.statics.sky.start, "the sky dome");
+    assert_eq!(data.statics.sky.start, data.statics.water.end, "the sky follows the water");
+    assert_eq!(data.statics.vertices.len() as u32, data.statics.sky.end);
 }
 
 #[test]

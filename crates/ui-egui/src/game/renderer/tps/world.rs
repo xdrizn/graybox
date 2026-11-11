@@ -1,7 +1,7 @@
 //! The world's one-off geometry for the renderer, built once: the ground, the ruins and the tower,
 //! the mountains and keep in the fog, and the river with its waterfall.
 use super::super::mesh::{self, Vertex};
-use super::shapes::{hash, material, tri};
+use super::shapes::{material, tri};
 use figcraft_game::tps::{CELLS, RIVER_HALF_WIDTH, World};
 use glam::{Mat4, Vec3};
 use std::ops::Range;
@@ -9,9 +9,17 @@ use std::ops::Range;
 /// A river segment that drops more than this in one metre is the waterfall.
 const FALL_DROP: f32 = 0.6;
 
-/// What `build` makes: one vertex list in three runs.
+/// The sky dome is centred on the middle of the map and reaches past every point the camera can be at.
+const SKY_RADIUS: f32 = 300.0;
+const SKY_SECTORS: u32 = 24;
+const SKY_RINGS: u32 = 8;
+
+/// What `build` makes: one vertex list in runs.
 pub(super) struct Statics {
     pub vertices: Vec<Vertex>,
+    /// The sky dome: drawn first, with its own shader that colours it by the direction it is seen in
+    /// (a smooth gradient from the horizon to straight up).
+    pub sky: Range<u32>,
     /// The ground and the one-off pieces: drawn lit, and into the shadow map.
     pub solid: Range<u32>,
     /// Mountains and the keep (no fog, no shadow), drawn after the solid run with the same shader.
@@ -20,12 +28,10 @@ pub(super) struct Statics {
     pub water: Range<u32>,
 }
 
-/// The tone a ground triangle gets: dark where flat, lighter and rockier where steep.
-fn ground_tone(normal_y: f32, cell: u32, facet: u32) -> u32 {
-    // Flat ground is the darkest grey; it gets lighter as it gets steeper, and a few facets of the
-    // slopes are a shade lighter so a hillside is not one flat colour.
-    let speckle = hash(cell, facet) > 0.75;
-    let tone = if normal_y > 0.93 {
+/// The tone a ground triangle gets: dark where flat, lighter and rockier where steep. It depends on the
+/// slope only (no random facets): the clean look has no speckle.
+fn ground_tone(normal_y: f32) -> u32 {
+    if normal_y > 0.93 {
         0
     } else if normal_y > 0.8 {
         1
@@ -33,17 +39,16 @@ fn ground_tone(normal_y: f32, cell: u32, facet: u32) -> u32 {
         2
     } else {
         3
-    };
-    if speckle && normal_y <= 0.93 { tone + 1 } else { tone }
+    }
 }
 
 fn terrain(out: &mut Vec<Vertex>, world: &World) {
     let ground = world.terrain();
     for j in 0..CELLS {
         for i in 0..CELLS {
-            for (facet, points) in ground.cell_triangles(i, j).into_iter().enumerate() {
+            for points in ground.cell_triangles(i, j) {
                 let normal = (points[1] - points[0]).cross(points[2] - points[0]).normalize_or_zero();
-                let tone = ground_tone(normal.y, (j * CELLS + i) as u32, facet as u32);
+                let tone = ground_tone(normal.y);
                 // Low, wet ground by the river shines a little in the beacon's light.
                 let middle = (points[0].y + points[1].y + points[2].y) / 3.0;
                 let roughness = if middle < 1.0 { 0.45 } else { 0.9 };
@@ -98,6 +103,24 @@ fn water(out: &mut Vec<Vertex>, world: &World) {
     }
 }
 
+/// A dome from a little below the horizon up to the zenith. Only its position matters (the sky shader
+/// colours it by direction), and it is drawn from inside with culling off.
+fn sky(out: &mut Vec<Vertex>) {
+    let at = |sector: u32, ring: u32| {
+        // Elevation runs from -10 degrees to straight up.
+        let elevation = -0.17 + (std::f32::consts::FRAC_PI_2 + 0.17) * ring as f32 / SKY_RINGS as f32;
+        let angle = sector as f32 * std::f32::consts::TAU / SKY_SECTORS as f32;
+        Vec3::new(angle.cos() * elevation.cos(), elevation.sin(), angle.sin() * elevation.cos()) * SKY_RADIUS
+    };
+    for sector in 0..SKY_SECTORS {
+        for ring in 0..SKY_RINGS {
+            let (a, b, c, d) = (at(sector, ring), at(sector + 1, ring), at(sector + 1, ring + 1), at(sector, ring + 1));
+            tri(out, [a, b, c], material(0, 0.0, 1.0));
+            tri(out, [a, c, d], material(0, 0.0, 1.0));
+        }
+    }
+}
+
 /// Build the world's one-off geometry.
 pub(super) fn build(world: &World) -> Statics {
     let mut vertices = Vec::with_capacity(60_000);
@@ -108,5 +131,7 @@ pub(super) fn build(world: &World) -> Statics {
     let backdrop_end = vertices.len() as u32;
     water(&mut vertices, world);
     let water_end = vertices.len() as u32;
-    Statics { vertices, solid: 0..solid_end, backdrop: solid_end..backdrop_end, water: backdrop_end..water_end }
+    sky(&mut vertices);
+    let sky_end = vertices.len() as u32;
+    Statics { vertices, solid: 0..solid_end, backdrop: solid_end..backdrop_end, water: backdrop_end..water_end, sky: water_end..sky_end }
 }

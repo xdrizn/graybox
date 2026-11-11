@@ -27,6 +27,24 @@
   Failing test that is G11.3's: `renderer::tps::hero::tests::the_hero_is_drawn_where_it_stands_with_finite_vertices`
   assumes the ground is at y = 0 and says "feet on the ground: 8.78" now that the valley has hills. It
   should compare with `World::ground_height`.
+- G11 clean look (2026-11-11, Adriel's change to the spec: the third-person game must look clean, not
+  like the grainy first-person arena). The whole look is one struct, `TpsLook`
+  (`renderer/tps/look.rs`), applied by `paint`; the first-person look is untouched and could take
+  another `TpsLook` later. What it sets and does: no pixel-noise textures (every surface is its tone's
+  flat colour, the project's greys stay the palette; the hero takes its tones from the same theme), no
+  random facet or tuft shades (the ground tone depends on the slope only), a smooth sky gradient
+  (a dome shaded by view direction: `sky_fragment`) that is also the fog colour, the picture stored
+  sRGB-encoded so dark gradients have no steps, soft shadows (a 4 x 4 filter of a bilinear comparison
+  sampler, 1.5 texels wide, no acne or dither), bloom still only from the emission buffer, and edge
+  smoothing by a cheap luma-edge filter (FXAA's idea) in the composite pass. Multisampling was not
+  used: the scene has three targets, so 4x would add well over 100 MB at 1440p and a resolve per target;
+  the filter costs no memory and works on WebGL2. Neither shader had grain or dither already (checked
+  `scene.wgsl` and `post.wgsl`). Hooks (our renderer files, small): `Uniform.look` (x shadow softness,
+  y edge smoothing; 0 keeps the arena's behaviour) in `renderer/mod.rs`, `scene.wgsl` (the soft
+  filter behind `look.x > 0`), `post.wgsl` (`smooth_edges` behind `look.y`) and the frame colour format
+  in `renderer/gpu.rs`. Checked in the real app: the valley, shadows and sky are smooth, the arena looks
+  as before. Not checked: the browser build beyond `cargo xtask wasm`; a slow GPU (the shadow filter
+  is 16 taps a pixel).
 - G11.1 (2026-11-11): which game a file plays. `GameSettings::kind` (`figcraft_doc::game::GameKind`: First
   person, the default, or Third person; older files read as first person and are saved byte for byte as
   before); the undoable command `game.kind.set {kind: fps|thirdPerson}` (`cmd/game_kind.rs`); the "Game"

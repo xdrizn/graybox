@@ -6,12 +6,16 @@
 //! and the hero and sky from the dynamic buffer.
 use super::super::{Uniform, mesh};
 use super::grass::{FADE_END, FADE_START, Grass, TUFT_VERTICES};
+use super::look::TpsLook;
 use super::scene::{SHADOW_SIZE, SceneData};
 use egui_wgpu::wgpu::{self, util::DeviceExt as _};
 use glam::Vec3;
 use std::{borrow::Cow, ops::Range};
 
-const COLOR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+/// The picture is stored sRGB-encoded (the GPU converts as it writes and reads), so the dark gradients
+/// of the sky and fog keep their precision instead of showing steps. The emission buffer stays linear.
+pub(in crate::game::renderer) const COLOR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+const EMISSION: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth24Plus;
 /// How hard the wind blows on the grass, and how far from the hero it bends away (metres).
 const WIND: f32 = 0.9;
@@ -19,6 +23,8 @@ const BEND_RADIUS: f32 = 1.8;
 /// An instance of a prop is 8 floats (32 bytes); a grass tuft is 4 floats (16 bytes).
 const PROP_STRIDE: u64 = 32;
 const TUFT_STRIDE: u64 = 16;
+/// The wind-and-sky uniform: hero, wind, horizon and zenith, four floats each.
+const PARAMS_SIZE: u64 = 64;
 
 const PROP_ATTRIBUTES: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![3 => Float32x4, 4 => Float32x4];
 const TUFT_ATTRIBUTES: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![3 => Float32x4];
@@ -49,10 +55,12 @@ pub(in crate::game::renderer) struct TpsGpu {
     scene_prop: wgpu::RenderPipeline,
     scene_grass: wgpu::RenderPipeline,
     scene_water: wgpu::RenderPipeline,
+    scene_sky: wgpu::RenderPipeline,
     statics: wgpu::Buffer,
     solid: Range<u32>,
     backdrop: Range<u32>,
     water: Range<u32>,
+    sky: Range<u32>,
     props: Vec<PropBatch>,
     tuft: wgpu::Buffer,
     tufts: wgpu::Buffer,
@@ -105,12 +113,16 @@ struct Spec<'a> {
     fragment: Option<&'a str>,
     buffers: &'a [Option<wgpu::VertexBufferLayout<'a>>],
     cull: bool,
+    /// The sky dome: drawn first, behind everything (it neither tests nor writes depth).
+    sky: bool,
 }
 
 fn pipeline(device: &wgpu::Device, layout: &wgpu::PipelineLayout, shader: &wgpu::ShaderModule, spec: Spec<'_>) -> wgpu::RenderPipeline {
     let shadow = spec.fragment.is_none();
-    let target = Some(wgpu::ColorTargetState { format: COLOR, blend: None, write_mask: wgpu::ColorWrites::ALL });
-    let targets = [target.clone(), target];
+    let targets = [
+        Some(wgpu::ColorTargetState { format: COLOR, blend: None, write_mask: wgpu::ColorWrites::ALL }),
+        Some(wgpu::ColorTargetState { format: EMISSION, blend: None, write_mask: wgpu::ColorWrites::ALL }),
+    ];
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some(spec.fragment.unwrap_or(spec.vertex)),
         layout: Some(layout),
@@ -123,8 +135,8 @@ fn pipeline(device: &wgpu::Device, layout: &wgpu::PipelineLayout, shader: &wgpu:
         primitive: wgpu::PrimitiveState { cull_mode: if spec.cull { Some(wgpu::Face::Back) } else { None }, ..Default::default() },
         depth_stencil: Some(wgpu::DepthStencilState {
             format: DEPTH,
-            depth_write_enabled: Some(true),
-            depth_compare: Some(wgpu::CompareFunction::LessEqual),
+            depth_write_enabled: Some(!spec.sky),
+            depth_compare: Some(if spec.sky { wgpu::CompareFunction::Always } else { wgpu::CompareFunction::LessEqual }),
             stencil: wgpu::StencilState::default(),
             bias: if shadow { wgpu::DepthBiasState { constant: 2, slope_scale: 2.0, clamp: 0.0 } } else { wgpu::DepthBiasState::default() },
         }),
@@ -169,7 +181,7 @@ impl TpsGpu {
         });
         let params_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Greybox third-person wind and hero"),
-            entries: &[uniform_entry(32)],
+            entries: &[uniform_entry(PARAMS_SIZE)],
         });
         let shadow_view = device
             .create_texture(&wgpu::TextureDescriptor {
@@ -194,8 +206,9 @@ impl TpsGpu {
         let comparison = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("Greybox shadow comparison"),
             compare: Some(wgpu::CompareFunction::LessEqual),
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
+            // Linear: each tap is itself a 2 x 2 blend, so the soft shadow edge has no steps.
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
         let noise_view = noise.create_view(&wgpu::TextureViewDescriptor::default());
@@ -211,7 +224,7 @@ impl TpsGpu {
         });
         let params = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Greybox third-person wind and hero"),
-            size: 32,
+            size: PARAMS_SIZE,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -249,12 +262,23 @@ impl TpsGpu {
             Some(wgpu::VertexBufferLayout { array_stride: TUFT_STRIDE, step_mode: wgpu::VertexStepMode::Instance, attributes: &TUFT_ATTRIBUTES }),
         ];
         let single = [Some(vertex_buffer)];
-        let shadow_static = pipeline(device, &shadow_layout, &shader, Spec { vertex: "shadow_vertex", fragment: None, buffers: &single, cull: true });
-        let shadow_prop =
-            pipeline(device, &shadow_layout, &shader, Spec { vertex: "prop_shadow_vertex", fragment: None, buffers: &prop_buffers, cull: true });
+        let shadow_static =
+            pipeline(device, &shadow_layout, &shader, Spec { vertex: "shadow_vertex", fragment: None, buffers: &single, cull: true, sky: false });
+        let shadow_prop = pipeline(
+            device,
+            &shadow_layout,
+            &shader,
+            Spec { vertex: "prop_shadow_vertex", fragment: None, buffers: &prop_buffers, cull: true, sky: false },
+        );
         let lit = |vertex, fragment, buffers: &[Option<wgpu::VertexBufferLayout<'_>>], cull| {
-            pipeline(device, &scene_pipeline_layout, &shader, Spec { vertex, fragment: Some(fragment), buffers, cull })
+            pipeline(device, &scene_pipeline_layout, &shader, Spec { vertex, fragment: Some(fragment), buffers, cull, sky: false })
         };
+        let scene_sky = pipeline(
+            device,
+            &scene_pipeline_layout,
+            &shader,
+            Spec { vertex: "scene_vertex", fragment: Some("sky_fragment"), buffers: &single, cull: false, sky: true },
+        );
         let scene_static = lit("scene_vertex", "scene_fragment", &single, true);
         let scene_prop = lit("prop_vertex", "scene_fragment", &prop_buffers, true);
         let scene_grass = lit("grass_vertex", "scene_fragment", &grass_buffers, false);
@@ -288,10 +312,12 @@ impl TpsGpu {
             scene_prop,
             scene_grass,
             scene_water,
+            scene_sky,
             statics,
             solid: data.statics.solid.clone(),
             backdrop: data.statics.backdrop.clone(),
             water: data.statics.water.clone(),
+            sky: data.statics.sky.clone(),
             props,
             tuft,
             tufts,
@@ -302,9 +328,13 @@ impl TpsGpu {
 
     /// Per frame: where the hero is (the grass bends away from it), the time (the wind) and the camera
     /// (which grass is worth drawing).
-    pub fn update(&mut self, queue: &wgpu::Queue, hero: Vec3, time: f32, eye: Vec3) {
+    pub fn update(&mut self, queue: &wgpu::Queue, hero: Vec3, time: f32, eye: Vec3, look: &TpsLook) {
         self.camera = eye;
-        let values = [hero.x, hero.y, hero.z, BEND_RADIUS, time, WIND, FADE_START, FADE_END];
+        let (horizon, zenith) = look.sky();
+        let mut values = [0.0_f32; 16];
+        values[..8].copy_from_slice(&[hero.x, hero.y, hero.z, BEND_RADIUS, time, WIND, FADE_START, FADE_END]);
+        values[8..12].copy_from_slice(&horizon);
+        values[12..].copy_from_slice(&zenith);
         queue.write_buffer(&self.params, 0, bytemuck::cast_slice(&values));
     }
 
@@ -347,6 +377,10 @@ impl TpsGpu {
         pass.set_bind_group(0, uniform_group, &[]);
         pass.set_bind_group(1, &self.scene_group, &[]);
         pass.set_bind_group(2, &self.params_group, &[]);
+        // The sky first: everything else is drawn over it.
+        pass.set_pipeline(&self.scene_sky);
+        pass.set_vertex_buffer(0, self.statics.slice(..));
+        pass.draw(self.sky.clone(), 0..1);
         pass.set_pipeline(&self.scene_static);
         pass.set_vertex_buffer(0, self.statics.slice(..));
         pass.draw(self.solid.start..self.backdrop.end, 0..1);

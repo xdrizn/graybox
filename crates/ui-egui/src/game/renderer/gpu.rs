@@ -34,6 +34,8 @@ pub(super) struct Resources {
 
 struct Frame {
     size: [u32; 2],
+    /// The picture is sRGB-encoded (third person) rather than linear (the arena).
+    srgb: bool,
     color: wgpu::TextureView,
     emission: wgpu::TextureView,
     depth: wgpu::TextureView,
@@ -362,20 +364,21 @@ impl Resources {
         snapshot: &Snapshot,
         theme: &SceneTheme,
     ) {
-        if self.frame.as_ref().is_none_or(|frame| frame.size != size) {
-            self.frame = Some(Frame::new(device, size, &self.post_layout, &self.linear_sampler));
+        let third_person = snapshot.tps.is_some();
+        // Graybox: the third-person picture is stored sRGB-encoded (smooth dark gradients).
+        if self.frame.as_ref().is_none_or(|frame| frame.size != size || frame.srgb != third_person) {
+            self.frame = Some(Frame::new(device, size, &self.post_layout, &self.linear_sampler, third_person));
         }
         if self.grays != theme.grays {
             upload_noise(queue, &self.noise, theme.grays);
             self.grays = theme.grays;
         }
-        let third_person = snapshot.tps.is_some();
         if let Some(draw) = &snapshot.tps {
             let noise = &self.noise;
             let tps = self
                 .tps
                 .get_or_insert_with(|| super::tps::TpsGpu::new(device, noise, super::tps::SceneData::build(&figcraft_game::tps::World::new())));
-            tps.update(queue, draw.pose.position, draw.time, snapshot.eye);
+            tps.update(queue, draw.pose.position, draw.time, snapshot.eye, &draw.look);
         }
         queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&Uniform::new(snapshot, theme, size)));
         let world_count = dynamic(&mut self.dynamic_vertices, snapshot, &self.pistol);
@@ -509,9 +512,9 @@ fn color_attachment(view: &wgpu::TextureView, load: wgpu::LoadOp<wgpu::Color>) -
 }
 
 impl Frame {
-    fn new(device: &wgpu::Device, size: [u32; 2], layout: &wgpu::BindGroupLayout, sampler: &wgpu::Sampler) -> Self {
+    fn new(device: &wgpu::Device, size: [u32; 2], layout: &wgpu::BindGroupLayout, sampler: &wgpu::Sampler, srgb: bool) -> Self {
         let view = |label, size, format| texture(device, label, size, format).create_view(&wgpu::TextureViewDescriptor::default());
-        let color = view("Greybox linear scene", size, COLOR);
+        let color = view("Greybox linear scene", size, if srgb { super::tps::COLOR } else { COLOR });
         let emission = view("Greybox encoded orange emission", size, COLOR);
         let depth = view("Greybox scene depth", size, DEPTH);
         let half = [size[0].div_ceil(2).max(1), size[1].div_ceil(2).max(1)];
@@ -534,6 +537,6 @@ impl Frame {
         let horizontal_group = group(&threshold, &threshold);
         let vertical_group = group(&horizontal, &horizontal);
         let composite_group = group(&color, &blur);
-        Self { size, color, emission, depth, threshold, horizontal, blur, threshold_group, horizontal_group, vertical_group, composite_group }
+        Self { size, srgb, color, emission, depth, threshold, horizontal, blur, threshold_group, horizontal_group, vertical_group, composite_group }
     }
 }
