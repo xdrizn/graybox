@@ -434,6 +434,8 @@ impl FigApp {
         updates_ui::show(self, &ctx);
         // Graybox: the Claude chat panel.
         crate::game::claude::show(self, &ctx);
+        // Graybox: the card that asks which game a new file plays.
+        crate::game::kind_ui::show(self, &ctx);
         // A scrub that changed speed (the pointer moved up or down) says so at the bottom.
         if let Some(notice) = ctx.data_mut(|d| d.remove_temp::<&'static str>(widgets::scrub_notice_id())) {
             self.toast(i18n::tr(notice));

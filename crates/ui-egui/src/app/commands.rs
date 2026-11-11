@@ -16,6 +16,8 @@ impl FigApp {
         let layers_generation = self.session.clipboard.layers_generation;
         let r = self.session.execute(id, &params);
         self.clear_comment_draft_after_tool_set(id, r.is_ok());
+        // Graybox: a new file asks which game it plays.
+        crate::game::kind_ui::after_run(self, id, r.is_ok());
         self.handle_ui_requests();
         self.invalidate_synthetic_copy(layers_generation);
         // A command may change the file the window shows (`doc.switch`, `doc.nextTab`,

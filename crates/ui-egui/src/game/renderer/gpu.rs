@@ -23,6 +23,8 @@ pub(super) struct Resources {
     composite_pipeline: wgpu::RenderPipeline,
     static_buffer: wgpu::Buffer,
     static_ranges: [Range<u32>; 6],
+    /// The third-person world, built the first time that game is drawn.
+    static_tps: Option<(wgpu::Buffer, [Range<u32>; 6])>,
     dynamic_buffer: wgpu::Buffer,
     dynamic_capacity: u64,
     dynamic_vertices: Vec<mesh::Vertex>,
@@ -179,8 +181,7 @@ fn upload_noise(queue: &wgpu::Queue, texture: &wgpu::Texture, grays: [[f32; 3]; 
     );
 }
 
-fn static_mesh(device: &wgpu::Device) -> (wgpu::Buffer, [Range<u32>; 6]) {
-    let mut objects = figcraft_game::arena::objects();
+fn static_mesh(device: &wgpu::Device, mut objects: Vec<figcraft_game::arena::SceneObject>) -> (wgpu::Buffer, [Range<u32>; 6]) {
     objects.sort_by_key(|object| object.tone.min(5));
     let mut vertices = Vec::with_capacity(objects.len() * 36);
     let mut iter = objects.into_iter().peekable();
@@ -317,7 +318,7 @@ impl Resources {
                 shadow: false,
             },
         );
-        let (static_buffer, static_ranges) = static_mesh(device);
+        let (static_buffer, static_ranges) = static_mesh(device, figcraft_game::arena::objects());
         let dynamic_capacity = (std::mem::size_of::<mesh::Vertex>() * 4096) as u64;
         let dynamic_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Greybox dynamic geometry"),
@@ -343,6 +344,7 @@ impl Resources {
             composite_pipeline,
             static_buffer,
             static_ranges,
+            static_tps: None,
             dynamic_buffer,
             dynamic_capacity,
             dynamic_vertices: Vec::with_capacity(4096),
@@ -367,6 +369,10 @@ impl Resources {
             upload_noise(queue, &self.noise, theme.grays);
             self.grays = theme.grays;
         }
+        let third_person = snapshot.tps.is_some();
+        if third_person && self.static_tps.is_none() {
+            self.static_tps = Some(static_mesh(device, super::tps::world_objects()));
+        }
         queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&Uniform::new(snapshot, theme, size)));
         let world_count = dynamic(&mut self.dynamic_vertices, snapshot, &self.pistol);
         let bytes = bytemuck::cast_slice(&self.dynamic_vertices);
@@ -383,14 +389,22 @@ impl Resources {
         if !bytes.is_empty() {
             queue.write_buffer(&self.dynamic_buffer, 0, bytes);
         }
-        self.render_shadow(encoder, world_count);
+        self.render_shadow(encoder, world_count, third_person);
         if let Some(frame) = &self.frame {
-            self.render_scene(encoder, frame, world_count, theme);
+            self.render_scene(encoder, frame, world_count, theme, third_person);
             self.render_bloom(encoder, frame);
         }
     }
 
-    fn render_shadow(&self, encoder: &mut wgpu::CommandEncoder, world_count: u32) {
+    /// The static geometry of the game being drawn: the arena, or the third-person world.
+    fn statics(&self, third_person: bool) -> (&wgpu::Buffer, &[Range<u32>; 6]) {
+        match (&self.static_tps, third_person) {
+            (Some((buffer, ranges)), true) => (buffer, ranges),
+            _ => (&self.static_buffer, &self.static_ranges),
+        }
+    }
+
+    fn render_shadow(&self, encoder: &mut wgpu::CommandEncoder, world_count: u32, third_person: bool) {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Greybox directional shadow pass"),
             color_attachments: &[],
@@ -399,15 +413,16 @@ impl Resources {
         });
         pass.set_pipeline(&self.shadow_pipeline);
         pass.set_bind_group(0, &self.uniform_group, &[]);
-        pass.set_vertex_buffer(0, self.static_buffer.slice(..));
-        for range in &self.static_ranges {
+        let (buffer, ranges) = self.statics(third_person);
+        pass.set_vertex_buffer(0, buffer.slice(..));
+        for range in ranges {
             pass.draw(range.clone(), 0..1);
         }
         pass.set_vertex_buffer(0, self.dynamic_buffer.slice(..));
         pass.draw(0..world_count, 0..1);
     }
 
-    fn render_scene(&self, encoder: &mut wgpu::CommandEncoder, frame: &Frame, world_count: u32, theme: &SceneTheme) {
+    fn render_scene(&self, encoder: &mut wgpu::CommandEncoder, frame: &Frame, world_count: u32, theme: &SceneTheme, third_person: bool) {
         let [r, g, b] = linear(theme.background);
         let background = wgpu::Color { r: r as f64, g: g as f64, b: b as f64, a: 1.0 };
         {
@@ -424,8 +439,9 @@ impl Resources {
             pass.set_pipeline(&self.scene_pipeline);
             pass.set_bind_group(0, &self.uniform_group, &[]);
             pass.set_bind_group(1, &self.scene_group, &[]);
-            pass.set_vertex_buffer(0, self.static_buffer.slice(..));
-            for range in &self.static_ranges {
+            let (buffer, ranges) = self.statics(third_person);
+            pass.set_vertex_buffer(0, buffer.slice(..));
+            for range in ranges {
                 pass.draw(range.clone(), 0..1);
             }
             pass.set_vertex_buffer(0, self.dynamic_buffer.slice(..));

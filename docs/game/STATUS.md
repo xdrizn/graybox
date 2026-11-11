@@ -3,6 +3,37 @@
 **Current milestone:** G7 — Share (and G0.3, G2.3 leftovers)
 
 ## Done
+- G11.1 (2026-11-11): which game a file plays. `GameSettings::kind` (`figcraft_doc::game::GameKind`: First
+  person, the default, or Third person; older files read as first person and are saved byte for byte as
+  before); the undoable command `game.kind.set {kind: fps|thirdPerson}` (`cmd/game_kind.rs`); the "Game"
+  dropdown first in the Prototype tab (nothing selected); a new design file (File ▸ New, the + tab, Home)
+  shows a "Choose the game" card with two choices (Esc or the X keeps first person; programmatic
+  `file.new` never shows it); Play runs the chosen game. Third person is a **placeholder** that proves
+  the path: `crates/game/src/tps/` (fixed 60 Hz step, flat ground with scattered blocks, a faceted
+  capsule hero moving 360° relative to the camera with acceleration and smoothed facing, jump, an orbit
+  camera turned by mouse and right stick on its own, hero centred, drawn between two steps), drawn by the
+  same renderer, theme, fog, key light and shadow (`renderer/tps/`). Input is the file's own bindings
+  (WASD, mouse, Space, Shift, C, left/right stick, A). The first-person game is unchanged.
+  Checked in the real app on a scratch file: the + tab showed the card, "Third person" set the Game
+  dropdown, Play drew the hero and the ground with the same shadow and fog, W walked 5 m/s, the mouse
+  turned the camera with the hero staying put and centred, W then went the way the camera looked and the
+  hero turned to face it, Space jumped and landed; switching the dropdown back to First person and
+  pressing Play gave the usual arena. Not checked: a controller (the same input path), the browser build
+  beyond `cargo xtask wasm`, 60 fps on an iGPU.
+  File ownership for the next phases (so G11.2 and G11.3 can run side by side without touching each other):
+  - G11.2 World owns `crates/game/src/tps/world.rs` (+ new files for terrain, props, climb tags) and
+    `crates/ui-egui/src/game/renderer/tps/world.rs` (+ new files). It keeps `World::ground_height`,
+    `World::objects` (or replaces it by a mesh the renderer batches) and `World::spawn` as the boundary.
+    It may add grass/terrain pipelines in `renderer/gpu.rs` (the `statics(third_person)` switch).
+  - G11.3 Hero and animation owns `crates/game/src/tps/hero.rs` (`HeroPose`: the input of the rig; add
+    fields it needs, such as lean or a clip time) plus new rig/animation files in `crates/game/src/tps/`,
+    and `crates/ui-egui/src/game/renderer/tps/hero.rs` (+ new files). It draws from `HeroPose` only.
+  - G11.4 Movement and camera owns `tps/controller.rs` and `tps/camera.rs`; G11.5 adds its own files.
+  - Shared and small: `tps/mod.rs` (the `Tps` struct, `Frame`) and `renderer/tps/mod.rs`: change them
+    only to add a field or a call.
+  - Not done yet in G11.1, on purpose: the game's own variables, events and bindings (third person
+    still reads the first-person bindings and leaves `vida`, `municao`… at their starting values), the
+    cards' still renders (they are small drawings made of lines), collision with the blocks, sound.
 - G9 (2026-11-11): an opaque inside stroke the colour of what lies behind a shape (a dark ring on a dark
   frame) no longer shows a thin light line along its outer edge: the fill stops a pixel inside the
   stroke instead of on the same curve (rectangles, rounded rectangles, ellipses; `render/covered.rs`
@@ -78,7 +109,6 @@
   compression); `FindFirstObjectByType` under `UNITY_2023_1_OR_NEWER`. Compiled against 2022.3.39f1
   (TextMeshPro, legacy Text, and the 2023+ branch); NOT run in Unity 6 (not installed here), and
   `enableWordWrapping` may warn there (see the package README).
-
 - G10.1 (2026-11-11): chat with Claude. A speech-bubble button right after Play (`Icon::Chat`, drawn
   in code) toggles a floating Claude panel (bottom right of the canvas, left of the Design panel;
   resize by dragging its top-left corner): messages with small Markdown, a one-line trace of what
@@ -98,6 +128,23 @@
   `Event`s, which is what it will use.
 
 ## Decisions
+- G11.1 game kind (Adriel was away; the recommended option each time):
+  - Both games take the same `figcraft_game::Input` (filled by `game/input.rs` and the presenter), so
+    bindings, gamepad sticks and "the mouse is free" behave the same. The third-person simulation is a
+    separate type (`figcraft_game::tps::Tps`), held next to the first-person `Game` in `Play`
+    (`Play::tps`); Play picks one with `game::tps::sync` from the file's `kind` and routes the frame step,
+    the drawing, the help line and `inspect` through `game/tps.rs`. A third kind later is one enum entry
+    plus one more `Option` there.
+  - The renderer keeps one scene pipeline: a `Snapshot` carries `focus` (where the key light's shadow map
+    centres: the hero in third person, the origin in first person) and an optional hero. Third person
+    gets its own static buffer (built the first time it is drawn) and no first-person portal light.
+  - Camera yaw and pitch change every display frame (a mouse turn shows at once); the hero moves in fixed
+    steps, using the camera yaw at that step. The picture is interpolated between two steps.
+  - Jog is the default speed (5 m/s), a light stick walks slower, Shift runs (8.5), crouch (2.4) only
+    slows down for now (no lower capsule). Gravity 20, jump 7 (about 1.2 m).
+  - The new-file card is skipped in this crate's own tests (`cfg!(test)` in `kind_ui::after_run`): they
+    create files all the time. The card is shown by `FigApp::run`, so File ▸ New, the + tab and the Home
+    cards ask; the control channel (`engine.execute`) and `main.rs`'s first file never do.
 - G10.1 Claude chat:
   - The CLI runs with `--strict-mcp-config` (only the `graybox` server), `--tools Read` (reading the
     images of G10.2), `--allowedTools "mcp__graybox Read"`, `--permission-mode dontAsk`,
@@ -358,6 +405,27 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     pasted with the radius), `tests.rs` (junk sweep rows), `lib.rs` (`mod corner_style_tests`).
   - `ui-egui/src/panels/right/paints.rs` `appearance`: `game::corner_style_ui::section` after the
     radius row; Corner smoothing only for round corners. `ui-egui/src/game/mod.rs`: the module.
+- Claude chat (G10.1; `crates/ui-egui/src/game/claude/` and `apps/figcraft/src/chat_control.rs` are ours):
+  - `crates/ui-egui/src/game/mod.rs`: `pub mod claude;`.
+  - `crates/ui-egui/src/app.rs` `frame`: `game::claude::tick` (with the other game ticks) and
+    `game::claude::show` after `updates_ui::show` (the panel).
+  - `crates/ui-egui/src/app/commands.rs`: `"game.claude.toggle"` arm in the UI requests.
+  - `crates/engine/src/cmd/game.rs`: `game.claude.toggle` (asks the UI; no params).
+  - `crates/ui-egui/src/toolbar.rs`: the chat button after Play; `main_width` counts 6 cells and 4 gaps.
+  - `crates/ui-egui/src/icons.rs` / `icons/draw.rs`: `Icon::Chat`.
+  - `apps/figcraft/src/main.rs`: `mod chat_control;`, `claude::control::set_port` when started with
+    `--control`, and `chat_control::open_if_asked` in `App::logic`.
+- Game kind and third person (G11.1; `crates/ui-egui/src/game/{kind_ui,tps}.rs`, `renderer/tps/`,
+  `crates/game/src/tps/`, `crates/engine/src/cmd/game_kind.rs` are ours):
+  - `crates/doc/src/game.rs` (ours): `GameKind`, `GameSettings::kind`.
+  - `crates/engine/src/cmd.rs`: `pub mod game_kind;` and `list.extend(game_kind::specs())`;
+    `crates/engine/src/lib.rs`: `mod game_kind_tests;`.
+  - `crates/ui-egui/src/app/commands.rs` `run`: `game::kind_ui::after_run` (a new file asks its game);
+    `crates/ui-egui/src/app.rs` `frame`: `game::kind_ui::show` (the card), after the Claude panel.
+  - `crates/ui-egui/src/present/game.rs` `show`: `game::tps::sync` (which game runs), `game::tps::paint`
+    (draws it), and the help line for third person.
+  - `crates/ui-egui/src/game/mod.rs` (ours): `Play::tps`, hooks in `frame` and `inspect`, the Game picker
+    first in `prototype_section`.
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.
 
@@ -378,6 +446,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - Dev machine (Arch): the web target comes from `pacman -S rust-wasm` (no rustup).
 
 ## Next
+- G11 (third-person game; spec [`specs/2026-11-11-third-person-design.md`](specs/2026-11-11-third-person-design.md)).
+  Milestone G11 is in `PLAN.md`. Next: G11.2 (world) and G11.3 (hero and animation), side by side; the
+  files each one owns are listed in the G11.1 entry under Done.
 - Navigable menus phase 2: tab bars (LB/RB) switching the menu below; spatial focus for layers
   without auto layout. To check: Tab sent through the control channel did not open the starter
   Inventory in Play (the controller's View did).

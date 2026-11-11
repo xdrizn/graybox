@@ -677,3 +677,6 @@ mod corner_style_tests;
 mod game_audio_tests;
 #[cfg(test)]
 mod game_config_tests;
+// Graybox: which game Play runs.
+#[cfg(test)]
+mod game_kind_tests;

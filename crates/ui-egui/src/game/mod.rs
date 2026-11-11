@@ -32,6 +32,9 @@ pub mod screen_fit;
 pub mod screen_ui;
 pub mod share;
 pub(crate) mod style_fill;
+// Graybox: the third-person game (G11) and the picker of which game a file plays.
+pub(crate) mod kind_ui;
+pub(crate) mod tps;
 pub(crate) mod unity_ui;
 
 /// Platform hosts read these markers inside the browser's trusted input event, before egui's
@@ -72,6 +75,8 @@ pub struct Play {
     pub(crate) maps: std::collections::BTreeMap<figcraft_doc::NodeId, map::View>,
     /// Screens redrawn off the UI thread (see [`frames`]).
     pub(crate) frames: frames::Frames,
+    /// The third-person game, when that is the file's game (`game` stays the first-person one).
+    pub(crate) tps: Option<figcraft_game::tps::Tps>,
 }
 
 /// A game action from a prototype interaction.
@@ -100,6 +105,10 @@ impl Play {
         let dt = self.last.map_or(0.0, |last| now - last);
         if now.is_finite() {
             self.last = Some(now);
+        }
+        // Graybox: the third-person game runs instead of the first-person one.
+        if let Some(steps) = tps::advance(self, dt) {
+            return steps;
         }
         self.game.advance(dt)
     }
@@ -156,6 +165,9 @@ impl Play {
     }
 
     pub fn inspect(&self) -> serde_json::Value {
+        if let Some(report) = tps::inspect(self) {
+            return report;
+        }
         let p = &self.game.player;
         serde_json::json!({
             "position": p.position.to_array(), "yaw": p.yaw, "pitch": p.pitch,
@@ -173,6 +185,13 @@ impl Play {
 /// The file's game settings, at the end of the Prototype tab when nothing is selected (beside
 /// upstream's prototype settings). Each part folds away; all are closed at first.
 pub(crate) fn prototype_section(app: &mut crate::FigApp, ui: &mut egui::Ui) {
+    crate::widgets::separator(ui);
+    // The game Play runs under the screens, first of everything.
+    padded(ui, |ui| {
+        ui.add_space(8.0);
+        ui.spacing_mut().item_spacing = egui::vec2(8.0, 6.0);
+        kind_ui::picker(app, ui);
+    });
     crate::widgets::separator(ui);
     // The pseudo-localization switch, open: it's for any screen, not one part of the game.
     padded(ui, |ui| {

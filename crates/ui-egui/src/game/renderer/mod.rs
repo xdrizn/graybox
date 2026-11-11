@@ -4,11 +4,15 @@
 //! surface configuration changes), then [`paint`] for the Play viewport.
 mod gpu;
 mod mesh;
+// Graybox: the third-person scene (G11).
+mod tps;
 
 use egui_wgpu::{Callback, CallbackResources, CallbackTrait, ScreenDescriptor, wgpu};
 use figcraft_game::Game;
 use glam::{Mat4, Vec3};
 use mesh::Vertex;
+
+pub use tps::paint as paint_tps;
 
 /// Scene palette and lighting. Color triples are sRGB; intensities are linear.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -98,6 +102,32 @@ struct Snapshot {
     projectile_count: usize,
     debris: [(Vec3, Vec3); 72],
     debris_count: usize,
+    /// Where the key light looks (the middle of the shadow map): the origin, or the hero.
+    focus: Vec3,
+    /// Set for the third-person scene (the first-person one has no hero).
+    tps: Option<tps::Draw>,
+}
+
+impl Snapshot {
+    /// Nothing drawn yet but the camera.
+    fn blank(view: Mat4, eye: Vec3) -> Self {
+        Self {
+            view,
+            eye,
+            shot_age: 100.0,
+            reload_remaining: 0.0,
+            bob: 0.0,
+            dead: true,
+            enemies: [Enemy::default(); 8],
+            enemy_count: 0,
+            projectiles: [Vec3::ZERO; 32],
+            projectile_count: 0,
+            debris: [(Vec3::ZERO, Vec3::ZERO); 72],
+            debris_count: 0,
+            focus: Vec3::ZERO,
+            tps: None,
+        }
+    }
 }
 
 struct SceneCallback {
@@ -127,6 +157,8 @@ pub fn paint(ui: &egui::Ui, rect: egui::Rect, game: &Game, theme: &SceneTheme) {
         projectile_count: 0,
         debris: [(Vec3::ZERO, Vec3::ZERO); 72],
         debris_count: 0,
+        focus: Vec3::ZERO,
+        tps: None,
     };
     for (slot, enemy) in snapshot.enemies.iter_mut().zip(game.enemies.iter().filter(|enemy| enemy.health > 0 && enemy.respawn_remaining <= 0.0)) {
         *slot = Enemy { position: enemy.position, yaw: enemy.yaw, flashing: enemy.hit_remaining > 0.0 };
@@ -206,7 +238,8 @@ fn rgba(color: [f32; 3], alpha: f32) -> [f32; 4] {
 impl Uniform {
     fn new(snapshot: &Snapshot, theme: &SceneTheme, size: [u32; 2]) -> Self {
         let projection = Mat4::perspective_rh(75.0_f32.to_radians(), size[0] as f32 / size[1] as f32, 0.05, 200.0);
-        let light = Mat4::orthographic_rh(-35.0, 35.0, -40.0, 40.0, 0.1, 90.0) * Mat4::look_at_rh(theme.key_position, Vec3::ZERO, Vec3::Y);
+        let light = Mat4::orthographic_rh(-35.0, 35.0, -40.0, 40.0, 0.1, 90.0)
+            * Mat4::look_at_rh(theme.key_position + snapshot.focus, snapshot.focus, Vec3::Y);
         Self {
             view_projection: (projection * snapshot.view).to_cols_array_2d(),
             light_projection: light.to_cols_array_2d(),
@@ -227,6 +260,9 @@ impl Uniform {
 
 fn dynamic(vertices: &mut Vec<Vertex>, snapshot: &Snapshot, pistol: &[Vertex]) -> u32 {
     use figcraft_game::arena::Primitive;
+    if let Some(draw) = &snapshot.tps {
+        return tps::dynamic(vertices, draw);
+    }
     vertices.clear();
     for enemy in snapshot.enemies.iter().take(snapshot.enemy_count) {
         let parent = mesh::transform(enemy.position, Vec3::new(0.0, -enemy.yaw, 0.0));

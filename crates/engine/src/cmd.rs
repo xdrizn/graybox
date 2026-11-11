@@ -9,6 +9,8 @@ pub mod edit;
 pub mod facilitate;
 pub mod file;
 pub mod game;
+// Graybox: which game Play runs (`game.kind.set`).
+pub mod game_kind;
 pub mod game_share;
 pub mod image;
 pub mod layout;
@@ -99,6 +101,7 @@ fn registry() -> &'static Registry {
         list.extend(proto::specs());
         list.extend(proto_actions::specs());
         list.extend(game::specs());
+        list.extend(game_kind::specs());
         list.extend(game_share::specs());
         list.extend(audio::specs());
         list.extend(comment::specs());

@@ -164,7 +164,22 @@ Spec: [`specs/2026-11-10-claude-chat-design.md`](specs/2026-11-10-claude-chat-de
   installed Claude Code CLI (his own plan, no API key) and the `graybox` MCP tools.
 - [ ] G10.2 Icons from sketches: references, a brush sketch, and Claude turns it into a clean icon frame.
 
+### G11 — More games under the UI (owner's request, 2026-11-11)
+Spec: [`specs/2026-11-11-third-person-design.md`](specs/2026-11-11-third-person-design.md). Each file
+chooses the game Play runs (new-file card and the Prototype tab); the first new game is a third-person
+action game, original, made in code. One session per phase, each ends committed and checked in the app.
+- [x] G11.1 Game kind plumbing: `GameKind`, `game.kind.set`, the new-file choice, the Game dropdown, Play
+  dispatch, a placeholder third-person scene (flat ground, a capsule hero, an orbit camera).
+- [ ] G11.2 World: terrain, grass, props, lights, river, waterfall, sky, climbable tags, budgets test
+  (parallel with G11.3).
+- [ ] G11.3 Hero and animation: rig, meshes, clips and crossfades, test pose viewer (parallel with G11.2).
+- [ ] G11.4 Movement and camera: controller (walk to climb), orbit camera with collision, bindings,
+  interpolation. Needs G11.2 and G11.3.
+- [ ] G11.5 Combat and the bridge: weapons, bow, dummies and husks, damage, game variables and events,
+  third-person starter HUD. Needs G11.4.
+- [ ] G11.6 Polish and performance: browser at 60 fps, memory and size budgets, feel tuning, installed copy.
+
 ## Later
-Third-person preset, 2D platformer and top-down presets, safe-area guides and resolution presets,
+Third-person preset (now G11), 2D platformer and top-down presets, safe-area guides and resolution presets,
 export package for engines (assets + spec sheet, 9-slice), Godot scene export, Unity plugin,
 comparing a game screenshot with the design.

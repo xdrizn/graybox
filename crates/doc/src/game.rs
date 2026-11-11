@@ -152,6 +152,52 @@ impl Default for HotbarSettings {
     }
 }
 
+/// Which game Play runs under the file's screens.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GameKind {
+    /// The first-person arena (the default: files without a choice stay as they were).
+    #[default]
+    Fps,
+    /// The third-person action game.
+    ThirdPerson,
+}
+
+impl GameKind {
+    /// Every game, in the order the pickers list them.
+    pub const ALL: [GameKind; 2] = [GameKind::Fps, GameKind::ThirdPerson];
+
+    /// The name commands and files use.
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Fps => "fps",
+            Self::ThirdPerson => "thirdPerson",
+        }
+    }
+
+    /// The name the pickers show.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Fps => "First person",
+            Self::ThirdPerson => "Third person",
+        }
+    }
+
+    /// The kind a command parameter names (its id, case and spaces aside).
+    pub fn parse(text: &str) -> Option<Self> {
+        let flat: String = text.chars().filter(|c| c.is_ascii_alphanumeric()).map(|c| c.to_ascii_lowercase()).collect();
+        match flat.as_str() {
+            "fps" | "firstperson" => Some(Self::Fps),
+            "thirdperson" | "tps" => Some(Self::ThirdPerson),
+            _ => None,
+        }
+    }
+
+    fn is_fps(&self) -> bool {
+        *self == Self::Fps
+    }
+}
+
 /// Game values a "game bar" can follow (health, ammo in the magazine, reserve ammo).
 pub const BAR_VARIABLES: [&str; 3] = ["vida", "municao", "reserva"];
 pub const MAX_SCREEN_SETTINGS: usize = 4096;
@@ -190,6 +236,9 @@ pub struct GameSettings {
     pub unity_dir: String,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub unity_frames: BTreeSet<NodeId>,
+    /// The game Play runs (missing in older files: the first-person one).
+    #[serde(default, skip_serializing_if = "GameKind::is_fps")]
+    pub kind: GameKind,
 }
 
 #[derive(Deserialize)]
@@ -212,6 +261,7 @@ struct StoredGameSettings {
     anchored: BTreeSet<NodeId>,
     unity_dir: String,
     unity_frames: BTreeSet<NodeId>,
+    kind: GameKind,
 }
 
 impl Default for StoredGameSettings {
@@ -233,6 +283,7 @@ impl Default for StoredGameSettings {
             anchored: settings.anchored,
             unity_dir: settings.unity_dir,
             unity_frames: settings.unity_frames,
+            kind: settings.kind,
         }
     }
 }
@@ -257,6 +308,7 @@ impl TryFrom<StoredGameSettings> for GameSettings {
             anchored: stored.anchored,
             unity_dir: stored.unity_dir,
             unity_frames: stored.unity_frames,
+            kind: stored.kind,
         };
         settings.validate()?;
         Ok(settings)
@@ -296,6 +348,7 @@ impl Default for GameSettings {
             anchored: BTreeSet::new(),
             unity_dir: String::new(),
             unity_frames: BTreeSet::new(),
+            kind: GameKind::Fps,
         }
     }
 }

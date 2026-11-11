@@ -80,6 +80,8 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
     let running = behind == GameBackground::Running;
     app.services.game_capture_allowed(running && p.game.as_ref().is_some_and(|g| g.captured || p.overlays.is_empty()));
     if let (Some(play), Some(doc)) = (&mut p.game, &p.design) {
+        // Graybox: Play runs the game the file chose.
+        game::tps::sync(play, doc.game.kind);
         if !running {
             play.captured = false;
         } else if p.overlays.is_empty() && ctx.input(|i| i.pointer.primary_pressed()) {
@@ -135,7 +137,7 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
             );
             ui.painter().rect_filled(rect, 0, fill);
         } else if let Some(play) = &p.game {
-            game::renderer::paint(ui, rect, &play.game, &game::renderer::SceneTheme::default());
+            game::tps::paint(ui, rect, play, &game::renderer::SceneTheme::default());
         }
         super::player::player(&mut p, ui, rect, now, FULL);
         help(&p, ui, rect);
@@ -467,6 +469,8 @@ fn help(p: &Presenter, ui: &Ui, rect: Rect) {
         "Paused  ·  close the menu to resume  ·  F10 / Del: editor"
     } else if !play.captured {
         "Click to capture cursor  ·  F10 / Del: editor"
+    } else if play.tps.is_some() {
+        game::tps::HELP
     } else {
         "WASD: move  ·  mouse: look/shoot  ·  R: reload  ·  H: heal  ·  F10 / Del: editor"
     };
