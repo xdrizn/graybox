@@ -3,6 +3,30 @@
 **Current milestone:** G7 — Share (and G0.3, G2.3 leftovers)
 
 ## Done
+- G11.2 (2026-11-11): the third-person world. `crates/game/src/tps/` gets `terrain.rs` (an 80 x 80 cell
+  heightfield, 2 m cells, made from integer-hash noise and smoothstep only, so it is bit-identical on
+  wasm: a hill start in the south, a cliff drop, a river valley, plateaus with ruins, a waterfall at x=-44),
+  `props.rs` (prop kinds with their solids and climb tags), `layout.rs` (everything placed on it: trees,
+  rocks, ruined arches and pillars, the watchtower with a beacon, mountain and keep cards outside the
+  map) and the rewritten `world.rs`. `World::ground_height` reads the very triangles that are drawn;
+  `spawn`, `solids`, `climbables` (ladders, mantle blocks, a climb wall, for G11.4), `beacon`, `river`,
+  `in_water`, `grass_cover`, `walk_limit` and `checksum` are the boundary. The renderer
+  (`renderer/tps/`: `world`, `props`, `grass`, `sky`, `scene`, `gpu`, `shapes`, `tps.wgsl`) draws the
+  ground and one-off pieces in one buffer, props instanced (one draw per kind, shadow too), grass as
+  instanced tufts of 3 blades with the wind, the distance fade and the bend away from the hero done in the
+  vertex shader (`grass_vertex`), the river and waterfall as emissive strips with a moving glow
+  (`water_fragment`), and a thin eclipse ring with a halo in the sky; the beacon is the scene's one point
+  light. Measured by the tests: 88k triangles drawn, 32k into the shadow, 32 draw calls, 19.6 MB of GPU
+  memory on desktop and 7.0 MB with the 1024 shadow on web, 52 KB of world data in RAM.
+  Checked in the real app on a scratch Third person file: Play shows the valley, ring, tower, ruins and
+  trees; W walked over the ground at its height; the grass sways, bends away from the hero, fades with
+  distance; trees, rocks and the hero cast shadows; the first-person arena looks exactly as before. Not
+  checked: the waterfall and river up close, a controller, the browser beyond `cargo xtask wasm` (it
+  compiles; its size growth was not measured), a slow GPU.
+  The camera can still end up inside a tree or a pillar (G11.4 owns the camera).
+  Failing test that is G11.3's: `renderer::tps::hero::tests::the_hero_is_drawn_where_it_stands_with_finite_vertices`
+  assumes the ground is at y = 0 and says "feet on the ground: 8.78" now that the valley has hills. It
+  should compare with `World::ground_height`.
 - G11.1 (2026-11-11): which game a file plays. `GameSettings::kind` (`figcraft_doc::game::GameKind`: First
   person, the default, or Third person; older files read as first person and are saved byte for byte as
   before); the undoable command `game.kind.set {kind: fps|thirdPerson}` (`cmd/game_kind.rs`); the "Game"
@@ -131,6 +155,22 @@
   `Event`s, which is what it will use.
 
 ## Decisions
+- G11.2 world (Adriel was away; the recommended option each time):
+  - The ground is a heightfield with alternating triangle splits, and the walking height is looked up in
+    those same triangles, so what you see is what you stand on. Only integer hashing and smoothstep make
+    it, so the golden checksums in `world_tests.rs` hold on every machine and in the browser.
+  - A tuft is 3 blades in one instance (a third of the instances for the same look). Each chunk row of
+    8 m is its own draw, with the vertex-buffer slice moved instead of `first_instance` (WebGL2 has none).
+  - Third person has its own shadow map (2048 on desktop, 1024 on web); its texel size goes to the shader
+    in `Uniform.bloom.w` (0 means the first-person 2048), so the arena is untouched. Near and far planes
+    are 0.1 and 420 here (0.05 and 200 in the arena).
+  - `scene.wgsl`'s fragment body moved into `fn shade` (entry points cannot be called) so the water
+    fragment can light itself the same way; the arena's output is unchanged.
+  - The third-person theme dims the arena's (fog x0.55, key x0.55, hemisphere x0.6, ambient x0.7), turns
+    pixel textures off (clean look) and puts the one point light on the watchtower beacon.
+  - Mountain and keep cards sit outside the walkable map and are flagged like the first-person gun: no
+    fog and no scene lights, so they stay dark silhouettes. Orange is only emissive: the ring, the beacon,
+    the tower windows and the waterfall.
 - G11.1 game kind (Adriel was away; the recommended option each time):
   - Both games take the same `figcraft_game::Input` (filled by `game/input.rs` and the presenter), so
     bindings, gamepad sticks and "the mouse is free" behave the same. The third-person simulation is a
@@ -450,8 +490,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 
 ## Next
 - G11 (third-person game; spec [`specs/2026-11-11-third-person-design.md`](specs/2026-11-11-third-person-design.md)).
-  Milestone G11 is in `PLAN.md`. Next: G11.2 (world) and G11.3 (hero and animation), side by side; the
-  files each one owns are listed in the G11.1 entry under Done.
+  Milestone G11 is in `PLAN.md`. Next: G11.2 (world) is done; G11.3 (hero and animation) runs on its own; then G11.4 (movement, climbing
+  and camera collision), which needs both.
 - Navigable menus phase 2: tab bars (LB/RB) switching the menu below; spatial focus for layers
   without auto layout. To check: Tab sent through the control channel did not open the starter
   Inventory in Play (the controller's View did).

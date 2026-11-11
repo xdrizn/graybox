@@ -24,7 +24,7 @@ pub(super) struct Resources {
     static_buffer: wgpu::Buffer,
     static_ranges: [Range<u32>; 6],
     /// The third-person world, built the first time that game is drawn.
-    static_tps: Option<(wgpu::Buffer, [Range<u32>; 6])>,
+    tps: Option<super::tps::TpsGpu>,
     dynamic_buffer: wgpu::Buffer,
     dynamic_capacity: u64,
     dynamic_vertices: Vec<mesh::Vertex>,
@@ -344,7 +344,7 @@ impl Resources {
             composite_pipeline,
             static_buffer,
             static_ranges,
-            static_tps: None,
+            tps: None,
             dynamic_buffer,
             dynamic_capacity,
             dynamic_vertices: Vec::with_capacity(4096),
@@ -370,8 +370,12 @@ impl Resources {
             self.grays = theme.grays;
         }
         let third_person = snapshot.tps.is_some();
-        if third_person && self.static_tps.is_none() {
-            self.static_tps = Some(static_mesh(device, super::tps::world_objects()));
+        if let Some(draw) = &snapshot.tps {
+            let noise = &self.noise;
+            let tps = self
+                .tps
+                .get_or_insert_with(|| super::tps::TpsGpu::new(device, noise, super::tps::SceneData::build(&figcraft_game::tps::World::new())));
+            tps.update(queue, draw.pose.position, draw.time, snapshot.eye);
         }
         queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&Uniform::new(snapshot, theme, size)));
         let world_count = dynamic(&mut self.dynamic_vertices, snapshot, &self.pistol);
@@ -396,15 +400,12 @@ impl Resources {
         }
     }
 
-    /// The static geometry of the game being drawn: the arena, or the third-person world.
-    fn statics(&self, third_person: bool) -> (&wgpu::Buffer, &[Range<u32>; 6]) {
-        match (&self.static_tps, third_person) {
-            (Some((buffer, ranges)), true) => (buffer, ranges),
-            _ => (&self.static_buffer, &self.static_ranges),
-        }
-    }
-
     fn render_shadow(&self, encoder: &mut wgpu::CommandEncoder, world_count: u32, third_person: bool) {
+        // Graybox: the third-person world draws its own shadow map.
+        if let (true, Some(tps)) = (third_person, &self.tps) {
+            tps.render_shadow(encoder, &self.uniform_group, &self.dynamic_buffer, world_count);
+            return;
+        }
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Greybox directional shadow pass"),
             color_attachments: &[],
@@ -413,9 +414,8 @@ impl Resources {
         });
         pass.set_pipeline(&self.shadow_pipeline);
         pass.set_bind_group(0, &self.uniform_group, &[]);
-        let (buffer, ranges) = self.statics(third_person);
-        pass.set_vertex_buffer(0, buffer.slice(..));
-        for range in ranges {
+        pass.set_vertex_buffer(0, self.static_buffer.slice(..));
+        for range in &self.static_ranges {
             pass.draw(range.clone(), 0..1);
         }
         pass.set_vertex_buffer(0, self.dynamic_buffer.slice(..));
@@ -425,6 +425,12 @@ impl Resources {
     fn render_scene(&self, encoder: &mut wgpu::CommandEncoder, frame: &Frame, world_count: u32, theme: &SceneTheme, third_person: bool) {
         let [r, g, b] = linear(theme.background);
         let background = wgpu::Color { r: r as f64, g: g as f64, b: b as f64, a: 1.0 };
+        // Graybox: the third-person world draws its own picture (no gun to draw after it).
+        if let (true, Some(tps)) = (third_person, &self.tps) {
+            let targets = super::tps::Targets { color: &frame.color, emission: &frame.emission, depth: &frame.depth, background };
+            tps.render_scene(encoder, &targets, &self.uniform_group, &self.dynamic_buffer, world_count);
+            return;
+        }
         {
             let attachments = [
                 Some(color_attachment(&frame.color, wgpu::LoadOp::Clear(background))),
@@ -439,9 +445,8 @@ impl Resources {
             pass.set_pipeline(&self.scene_pipeline);
             pass.set_bind_group(0, &self.uniform_group, &[]);
             pass.set_bind_group(1, &self.scene_group, &[]);
-            let (buffer, ranges) = self.statics(third_person);
-            pass.set_vertex_buffer(0, buffer.slice(..));
-            for range in ranges {
+            pass.set_vertex_buffer(0, self.static_buffer.slice(..));
+            for range in &self.static_ranges {
                 pass.draw(range.clone(), 0..1);
             }
             pass.set_vertex_buffer(0, self.dynamic_buffer.slice(..));

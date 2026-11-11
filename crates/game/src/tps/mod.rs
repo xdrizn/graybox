@@ -12,6 +12,9 @@
 mod camera;
 mod controller;
 mod hero;
+mod layout;
+mod props;
+mod terrain;
 mod world;
 
 use crate::STEP_SECS;
@@ -21,10 +24,18 @@ use glam::Vec3;
 
 pub use camera::{OrbitCamera, PITCH_MAX, PITCH_MIN};
 pub use hero::{HEIGHT as HERO_HEIGHT, Hero, HeroPose, RADIUS as HERO_RADIUS};
+pub use layout::{ROCK_MAX, TREE_MAX};
+pub use props::{
+    ARCH_LEG_HEIGHT, ARCH_LEG_SIZE, ARCH_LEG_X, BLOCK_SIZE, BROKEN_PILLAR_HEIGHT, CRATE_SIZE, ClimbKind, Climbable, PILLAR_HEIGHT, PILLAR_SIZE, Prop,
+    PropKind, Solid,
+};
+pub use terrain::{CELL, CELLS, FALL_X, RIVER_END, RIVER_HALF_WIDTH, Terrain, WATER_DEPTH, ZONES, Zone};
 pub use world::{HALF_EXTENT, World};
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod world_tests;
 
 const DT: f32 = STEP_SECS as f32;
 

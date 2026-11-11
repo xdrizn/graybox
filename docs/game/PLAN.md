@@ -170,7 +170,7 @@ chooses the game Play runs (new-file card and the Prototype tab); the first new 
 action game, original, made in code. One session per phase, each ends committed and checked in the app.
 - [x] G11.1 Game kind plumbing: `GameKind`, `game.kind.set`, the new-file choice, the Game dropdown, Play
   dispatch, a placeholder third-person scene (flat ground, a capsule hero, an orbit camera).
-- [ ] G11.2 World: terrain, grass, props, lights, river, waterfall, sky, climbable tags, budgets test
+- [x] G11.2 World: terrain, grass, props, lights, river, waterfall, sky, climbable tags, budgets test
   (parallel with G11.3).
 - [ ] G11.3 Hero and animation: rig, meshes, clips and crossfades, test pose viewer (parallel with G11.2).
 - [ ] G11.4 Movement and camera: controller (walk to climb), orbit camera with collision, bindings,

@@ -19,7 +19,7 @@ fn forward() -> Input {
 fn the_hero_starts_still_on_the_ground_and_stays_there() {
     let mut tps = Tps::new();
     run(&mut tps, Input::default(), 1.0);
-    assert_eq!(tps.hero.position, Vec3::ZERO);
+    assert_eq!(tps.hero.position, tps.world().spawn());
     assert!(tps.hero.grounded);
     assert_eq!(tps.hero.speed(), 0.0);
 }
@@ -32,8 +32,9 @@ fn forward_walks_away_from_the_camera_and_speeds_up_instead_of_jumping_to_speed(
     let mut tps = Tps::new();
     run(&mut tps, forward(), 1.0);
     // Camera yaw 0 looks along -Z. A jog is 5 m/s; getting up to it costs a fraction of a metre.
-    assert!(tps.hero.position.x.abs() < 0.001);
-    assert!((-5.0..-4.3).contains(&tps.hero.position.z), "z = {}", tps.hero.position.z);
+    let moved = tps.hero.position - tps.world().spawn();
+    assert!(moved.x.abs() < 0.001);
+    assert!((-5.0..-4.3).contains(&moved.z), "moved z = {}", moved.z);
     assert!((tps.hero.speed() - 5.0).abs() < 0.01);
 }
 
@@ -52,7 +53,7 @@ fn moving_is_relative_to_where_the_camera_looks_in_every_direction() {
         let mut tps = Tps::new();
         tps.camera.yaw = yaw;
         run(&mut tps, Input { forward, strafe, ..Input::default() }, 0.5);
-        let at = tps.hero.position;
+        let at = tps.hero.position - tps.world().spawn();
         let length = (at.x * at.x + at.z * at.z).sqrt();
         assert!(length > 1.0, "moved {length}");
         assert!((at.x / length - want.0).abs() < 0.01 && (at.z / length - want.1).abs() < 0.01, "yaw {yaw}: went {at:?}, wanted {want:?}");
@@ -106,17 +107,18 @@ fn turning_round_takes_the_short_way() {
 #[test]
 fn a_jump_leaves_the_ground_peaks_about_a_metre_up_and_lands() {
     let mut tps = Tps::new();
+    let ground = tps.world().spawn().y;
     tps.input.jump = true;
     let mut peak = 0.0_f32;
     let mut airborne = false;
     for _ in 0..120 {
         tps.advance(STEP_SECS);
-        peak = peak.max(tps.hero.position.y);
+        peak = peak.max(tps.hero.position.y - ground);
         airborne |= !tps.hero.grounded;
     }
     assert!(airborne);
     assert!((1.0..1.5).contains(&peak), "peak {peak}");
-    assert!(tps.hero.grounded && tps.hero.position.y == 0.0);
+    assert!(tps.hero.grounded && tps.hero.position.y == ground);
 }
 
 #[test]
@@ -124,11 +126,12 @@ fn pressing_jump_in_the_air_does_not_jump_again() {
     let mut tps = Tps::new();
     tps.input.jump = true;
     tps.advance(STEP_SECS);
+    let ground = tps.world().spawn().y;
     let mut peak = 0.0_f32;
     for _ in 0..30 {
         tps.input.jump = true;
         tps.advance(STEP_SECS);
-        peak = peak.max(tps.hero.position.y);
+        peak = peak.max(tps.hero.position.y - ground);
     }
     run(&mut tps, Input::default(), 1.0);
     assert!(peak < 1.5, "{peak}");
@@ -139,10 +142,11 @@ fn a_press_shorter_than_a_frame_still_jumps() {
     let mut tps = Tps::new();
     tps.input.jump = true;
     // A very fast display frame: no step is due yet, the press waits for the next one.
+    let ground = tps.world().spawn().y;
     assert_eq!(tps.advance(0.001), 0);
-    assert_eq!(tps.hero.position.y, 0.0);
+    assert_eq!(tps.hero.position.y, ground);
     tps.advance(STEP_SECS);
-    assert!(tps.hero.position.y > 0.0);
+    assert!(tps.hero.position.y > ground);
 }
 
 #[test]
@@ -168,7 +172,7 @@ fn the_camera_turns_on_its_own_while_the_hero_stands_still() {
     let mut tps = Tps::new();
     tps.input.look = [1.0, 0.0];
     tps.advance(STEP_SECS);
-    assert_eq!(tps.hero.position, Vec3::ZERO);
+    assert_eq!(tps.hero.position, tps.world().spawn());
     assert_eq!(tps.hero.facing, 0.0);
     assert!((tps.camera.yaw - 1.0).abs() < 1e-5);
 }
@@ -196,7 +200,8 @@ fn the_hero_is_centred_and_the_camera_orbits_at_a_fixed_distance() {
 fn the_camera_stays_above_the_ground() {
     let mut tps = Tps::new();
     tps.camera.pitch = PITCH_MAX;
-    assert!(tps.frame().eye.y >= 0.3 - 1e-6);
+    let eye = tps.frame().eye;
+    assert!(eye.y >= tps.world().ground_height(eye.x, eye.z) + 0.3 - 1e-6);
 }
 
 #[test]
@@ -248,10 +253,11 @@ fn junk_input_changes_nothing_and_never_poisons_the_game() {
 #[test]
 fn the_hero_cannot_leave_the_map() {
     let mut tps = Tps::new();
-    tps.hero.position = Vec3::new(HALF_EXTENT - 0.1, 0.0, 0.0);
+    let limit = tps.world().walk_limit();
+    tps.hero.position = Vec3::new(limit - 0.1, 0.0, 0.0);
     tps.camera.yaw = FRAC_PI_2;
     run(&mut tps, Input { forward: 1.0, run: true, ..Input::default() }, 2.0);
-    assert_eq!(tps.hero.position.x, HALF_EXTENT);
+    assert_eq!(tps.hero.position.x, limit);
 }
 
 #[test]
@@ -260,22 +266,10 @@ fn paused_means_nothing_moves_and_nothing_is_kept() {
     tps.paused = true;
     tps.input = Input { forward: 1.0, look: [1.0, 1.0], jump: true, ..Input::default() };
     assert_eq!(tps.advance(1.0), 0);
-    assert_eq!(tps.hero.position, Vec3::ZERO);
+    assert_eq!(tps.hero.position, tps.world().spawn());
     assert_eq!(tps.camera, OrbitCamera::default());
     tps.paused = false;
     tps.input = Input::default();
     tps.advance(STEP_SECS);
-    assert_eq!(tps.hero.position.y, 0.0, "the jump pressed while paused was dropped");
-}
-
-#[test]
-fn the_world_draws_ground_and_scenery_away_from_the_start() {
-    let objects = World::new().objects();
-    assert!(objects.len() > 10);
-    // First is the ground, wider than the map; the rest are clear of where the hero starts.
-    assert!(objects[0].size.x >= HALF_EXTENT * 2.0);
-    for object in &objects[1..] {
-        assert!(object.position.is_finite() && object.size.is_finite());
-        assert!(object.position.x.hypot(object.position.z) > 5.0);
-    }
+    assert_eq!(tps.hero.position.y, tps.world().spawn().y, "the jump pressed while paused was dropped");
 }

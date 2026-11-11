@@ -73,12 +73,13 @@ mod tests {
         let mut play = Play::new();
         sync(&mut play, GameKind::ThirdPerson);
         play.frame(0.0);
+        let start = play.tps.as_ref().unwrap().hero.position;
         play.game.input.forward = 1.0;
         // Frames of 1/60 s (a frame runs at most 5 steps).
         let steps: u32 = (1..=30).map(|i| play.frame(f64::from(i) / 60.0)).sum();
         assert_eq!(steps, 30);
         let tps = play.tps.as_ref().unwrap();
-        assert!(tps.hero.position.z < -1.0, "walked forward: {:?}", tps.hero.position);
+        assert!(tps.hero.position.z < start.z - 1.0, "walked forward from {start:?}: {:?}", tps.hero.position);
         assert_eq!(play.game.ticks(), 0, "the first-person simulation did not run");
         assert!((tps.time() - 0.5).abs() < STEP_SECS);
         // Paused (a screen asked for it): it stands still.

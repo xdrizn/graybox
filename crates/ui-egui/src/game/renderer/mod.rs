@@ -237,7 +237,9 @@ fn rgba(color: [f32; 3], alpha: f32) -> [f32; 4] {
 
 impl Uniform {
     fn new(snapshot: &Snapshot, theme: &SceneTheme, size: [u32; 2]) -> Self {
-        let projection = Mat4::perspective_rh(75.0_f32.to_radians(), size[0] as f32 / size[1] as f32, 0.05, 200.0);
+        // Graybox: the third-person valley is seen much farther (mountains in the fog) and has its own shadow-map size.
+        let (near, far, shadow_texel) = if snapshot.tps.is_some() { (0.1, 420.0, 1.0 / tps::SHADOW_SIZE as f32) } else { (0.05, 200.0, 0.0) };
+        let projection = Mat4::perspective_rh(75.0_f32.to_radians(), size[0] as f32 / size[1] as f32, near, far);
         let light = Mat4::orthographic_rh(-35.0, 35.0, -40.0, 40.0, 0.1, 90.0)
             * Mat4::look_at_rh(theme.key_position + snapshot.focus, snapshot.focus, Vec3::Y);
         Self {
@@ -253,7 +255,7 @@ impl Uniform {
             hemi_ground: rgba(theme.hemi_ground, 1.0),
             portal: theme.portal_position.extend(theme.portal_intensity).to_array(),
             settings: [if theme.pixel_textures { 1.0 } else { 0.0 }, theme.ambient, theme.portal_range, theme.portal_decay],
-            bloom: [theme.bloom_intensity, theme.bloom_threshold, theme.bloom_smoothing, 0.0],
+            bloom: [theme.bloom_intensity, theme.bloom_threshold, theme.bloom_smoothing, shadow_texel],
         }
     }
 }

@@ -48,9 +48,11 @@ fn visibility(shadow: vec4<f32>, normal: vec3<f32>, light: vec3<f32>) -> f32 {
     // Always sample (uniform control flow is required by WebGL2 derivatives).
     let bias = max(0.0004, 0.0012 * (1.0 - dot(normal, light)));
     var sum = 0.0;
+    let texel = select(1.0 / 2048.0, scene.bloom.w, scene.bloom.w > 0.0);
     for (var y = -1; y <= 1; y += 1) {
         for (var x = -1; x <= 1; x += 1) {
-            sum += textureSampleCompare(shadow_map, shadow_sampler, uv + vec2(f32(x), f32(y)) / 2048.0, ndc.z - bias);
+            // Graybox: the third-person scene sets the shadow map's texel size (1/1024 in the browser).
+            sum += textureSampleCompare(shadow_map, shadow_sampler, uv + vec2(f32(x), f32(y)) * texel, ndc.z - bias);
         }
     }
     let inside = all(uv >= vec2(0.0)) && all(uv <= vec2(1.0)) && ndc.z >= 0.0 && ndc.z <= 1.0;
@@ -61,6 +63,10 @@ struct Lit {
     @location(1) emission: vec4<f32>,
 };
 @fragment fn scene_fragment(input: Output) -> Lit {
+    return shade(input);
+}
+// Graybox: the body of scene_fragment as a function, so the third-person water can call it.
+fn shade(input: Output) -> Lit {
     let normal = normalize(input.normal);
     let weights = abs(normal);
     var uv = input.world.xy * 0.5;
