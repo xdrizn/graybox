@@ -19,6 +19,9 @@ one), so letters are a little wider or narrower than in Graybox. Change the font
 it stays on the next import. With TextMeshPro, import its essentials once per project
 (Window → TextMeshPro → Import TMP Essential Resources), or texts have no font.
 
+**Pixel art:** turn on "Pixel art (no smoothing)" in the window (or set `GrayboxLiveLink.PixelArt`)
+and import again: sprites get Point filtering and no compression, so they stay sharp.
+
 Objects keep a `GrayboxNode`, so an update changes them in place and components you add stay.
 Layers deleted in Graybox are deleted in the scene; a layer that stops painting loses its Image.
 
@@ -37,6 +40,12 @@ translucent layer) imports with the layers, anchors, sprite borders, text and co
 made larger. A second export updates the scene in place. Both text paths (TextMeshPro and UI Text) are
 checked. Watch was checked headless (the window opens, a rewritten `layout.json` is imported).
 Not checked by hand: clicking the window's buttons.
+
+Unity 6 (6000.x): prepared, not run. The Canvas lookup uses `FindFirstObjectByType` there, and
+`GRAYBOX_TMP` is also set for uGUI 2.0 (where TextMeshPro lives); the C# compiles in 2022.3 with
+both text paths and with the Unity 2023+ branch. Text wrapping still uses TextMeshPro's
+`enableWordWrapping`, which newer TextMeshPro marks obsolete (a warning, or a compile error if a
+Unity 6 version made it one: then switch to `textWrappingMode`). Needs one run in Unity 6.3.
 
 The `.meta` files are committed on purpose: scenes refer to `GrayboxNode` by its script's GUID.
 

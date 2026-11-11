@@ -67,7 +67,15 @@ namespace Indirect.Graybox.Editor
     {
         const string FolderPref = "Indirect.Graybox.LiveLink.Folder";
         const string WatchPref = "Indirect.Graybox.LiveLink.Watch";
+        const string PixelPref = "Indirect.Graybox.LiveLink.PixelArt";
         const string AssetRoot = "Assets/Graybox";
+
+        /// Pixel art: sprites imported with Point filtering and no compression, so they stay sharp.
+        public static bool PixelArt
+        {
+            get => EditorPrefs.GetBool(PixelPref, false);
+            set => EditorPrefs.SetBool(PixelPref, value);
+        }
 
         string folder = "";
         bool watch;
@@ -120,6 +128,8 @@ namespace Indirect.Graybox.Editor
                 EditorPrefs.SetBool(WatchPref, watch);
                 Rewatch();
             }
+            var px = EditorGUILayout.Toggle(new GUIContent("Pixel art (no smoothing)", "Point filtering and no compression for the imported sprites. Press Import now to apply it."), PixelArt);
+            if (px != PixelArt) PixelArt = px;
             EditorGUILayout.Space();
             using (new EditorGUI.DisabledScope(!Directory.Exists(folder)))
             {
@@ -285,7 +295,11 @@ namespace Indirect.Graybox.Editor
 
         static Canvas FindOrMakeCanvas(Layout layout)
         {
+#if UNITY_2023_1_OR_NEWER
+            var c = UnityEngine.Object.FindFirstObjectByType<Canvas>();
+#else
             var c = UnityEngine.Object.FindObjectOfType<Canvas>();
+#endif
             if (c != null) return c;
             var go = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             Undo.RegisterCreatedObjectUndo(go, "Graybox canvas");
@@ -314,6 +328,7 @@ namespace Indirect.Graybox.Editor
                 copied.Add((n, dst));
             }
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            bool pixel = PixelArt;
             foreach (var (n, dst) in copied)
             {
                 if (AssetImporter.GetAtPath(dst) is TextureImporter ti)
@@ -323,6 +338,8 @@ namespace Indirect.Graybox.Editor
                     ti.mipmapEnabled = false;
                     ti.alphaIsTransparency = true;
                     ti.npotScale = TextureImporterNPOTScale.None;
+                    ti.filterMode = pixel ? FilterMode.Point : FilterMode.Bilinear;
+                    ti.textureCompression = pixel ? TextureImporterCompression.Uncompressed : TextureImporterCompression.Compressed;
                     // One design unit is one canvas unit at the canvas' 100 pixels per unit.
                     ti.spritePixelsPerUnit = 100f * Mathf.Max(0.01f, layout.scale);
                     var b = n.border;

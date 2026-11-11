@@ -68,6 +68,11 @@
   line); a layer that lost its fill kept its old Image; the package had no `.meta` files (a
   `GrayboxNode` in a scene is referenced by its script GUID, so those are committed). Not tried:
   the window's buttons by hand (the editor opens the window and its Watch runs, headless).
+- G9 Live Link prepared for the Unity 6 (6000.3) project of a collaborator, and for pixel art: a
+  "Pixel art (no smoothing)" switch in the window (`GrayboxLiveLink.PixelArt`: Point filter, no
+  compression); `FindFirstObjectByType` under `UNITY_2023_1_OR_NEWER`. Compiled against 2022.3.39f1
+  (TextMeshPro, legacy Text, and the 2023+ branch); NOT run in Unity 6 (not installed here), and
+  `enableWordWrapping` may warn there (see the package README).
 
 ## Decisions
 - Play redraws its whole screen when a variant changes on hover. Costly unchanged layers (layer blur,
