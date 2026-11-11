@@ -14,6 +14,15 @@ only. **Everything is original**: our own hero, world and names. No character, e
 place or art from Zelda or any other game (`CLAUDE.md`, assets rule; Claude's rules forbid
 recreating a specific game too).
 
+**Look update (owner, 2026-11-11):** not the FPS look. Third person is **clean**:
+- solid flat-shaded colours, with no pixel-noise textures, grain or shimmer;
+- smooth sky and fog gradients;
+- soft filtered shadows;
+- anti-aliased edges;
+- bloom only on emissives.
+
+It all lives in one theme struct. If he likes it, the FPS takes it later.
+
 ## Principles
 - **Same architecture as the FPS**: pure, deterministic simulation in `crates/game` (fixed step,
   no egui/wgpu), drawn by `crates/ui-egui/src/game/renderer` (wgpu paint callback, WebGL2 on web).
