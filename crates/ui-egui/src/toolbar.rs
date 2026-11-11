@@ -148,8 +148,8 @@ fn main_width(groups: &[Group], board: bool) -> f32 {
     let tools: f32 = groups.iter().map(|g| TOOL_CELL + if g.has_flyout() { FLYOUT_GAP + FLYOUT_W } else { 0.0 }).sum();
     // The end, and the gaps that aren't a group's own: after Actions and after the divider (and
     // between a board's two buttons, which the end counts as one item).
-    // Graybox: the mode switcher, then Play (no Game settings button).
-    let (end, gaps) = if board { (2.0 * TOOL_CELL, 3.0) } else { (5.0 * TOOL_CELL, 3.0) };
+    // Graybox: the mode switcher, then Play and the Claude chat button (no Game settings button).
+    let (end, gaps) = if board { (2.0 * TOOL_CELL, 3.0) } else { (6.0 * TOOL_CELL, 4.0) };
     PAD * 2.0 + tools + (groups.len() as f32 + gaps) * GAP + TOOL_CELL + DIVIDER + end
 }
 
@@ -193,6 +193,12 @@ fn main_toolbar(app: &mut FigApp, ui: &mut Ui, canvas: Rect, t: &Tokens, board: 
         let response = tool_cell(ui, t, play, "game_play", Icon::Play, true, tr("Play game  F9"));
         if response.clicked() {
             app.run("game.play", json!({}));
+        }
+        // Graybox: the Claude chat button, right after Play.
+        let chat = Rect::from_center_size(pos2(x + TOOL_CELL * 1.5 + GAP, cy), vec2(TOOL_CELL, TOOL_CELL));
+        let open = crate::game::claude::is_open();
+        if tool_cell(ui, t, chat, "claude_chat", Icon::Chat, open, "Chat with Claude").clicked() {
+            app.run("game.claude.toggle", json!({}));
         }
     }
     ui.set_clip_rect(outer_clip);

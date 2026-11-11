@@ -243,6 +243,7 @@ impl FigApp {
         crate::game::fonts::load_shared(self);
         crate::game::font_watch::tick(self, &ctx);
         crate::game::unity_ui::tick(self);
+        crate::game::claude::tick(self, &ctx);
         if let Some(error) = crate::game::audio::take_error(&ctx) {
             self.toast(error);
         }
@@ -431,6 +432,8 @@ impl FigApp {
         self.end_pen_outside_design();
         dialogs::show(self, &ctx);
         updates_ui::show(self, &ctx);
+        // Graybox: the Claude chat panel.
+        crate::game::claude::show(self, &ctx);
         // A scrub that changed speed (the pointer moved up or down) says so at the bottom.
         if let Some(notice) = ctx.data_mut(|d| d.remove_temp::<&'static str>(widgets::scrub_notice_id())) {
             self.toast(i18n::tr(notice));

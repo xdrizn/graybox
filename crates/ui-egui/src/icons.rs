@@ -115,6 +115,8 @@ icons! {
     Styles,
     Menu,
     Play,
+    /// Graybox: the Claude chat button.
+    Chat,
     Home,
     Bell,
     Panels,

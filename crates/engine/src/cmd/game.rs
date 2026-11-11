@@ -65,6 +65,11 @@ pub fn specs() -> Vec<CommandSpec> {
             s.request_ui("game.settings", json!({}));
             ok()
         }),
+        spec!("game.claude.toggle", "Chat with Claude", "{}", false, |s, _| {
+            s.doc()?;
+            s.request_ui("game.claude.toggle", json!({}));
+            ok()
+        }),
         spec!(
             "game.anchors.auto",
             "Anchor by position",

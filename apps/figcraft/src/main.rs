@@ -23,6 +23,8 @@ compile_error!("Windows GNU builds must set windows_slim_errors to keep UI Autom
 #[cfg(target_os = "macos")]
 mod apple_events;
 mod args;
+// Graybox: the control channel the Claude chat opens at run time.
+mod chat_control;
 mod control_server;
 mod gamepad;
 mod graphics;
@@ -81,6 +83,8 @@ impl eframe::App for App {
         }
         let title = with_app(|fig| {
             control_server::drain_queue(&self.queue, &mut fig.control_queue);
+            // Graybox: the Claude chat asks for a control channel when none is open.
+            chat_control::open_if_asked(&self.queue, &self.ctx_slot, fig.session.events.clone());
             // Phase-safe background work: control queues, autosave/recovery deadlines, live polling.
             // It runs on logic-only callbacks too, so it never reads UI input.
             figcraft_ui_egui::windows::guard(fig, ctx, |fig| fig.background_tick(ctx));
@@ -255,6 +259,7 @@ fn main() -> eframe::Result {
     let queue: Arc<Mutex<Vec<ControlRequest>>> = Arc::new(Mutex::new(Vec::new()));
     if let Some(p) = port {
         control_server::start(p, graphics::port_wait(), queue.clone(), ctx_slot.clone(), fig.session.events.clone());
+        figcraft_ui_egui::game::claude::control::set_port(p);
     }
     let icon = services::window_icon();
     // The app id is the Wayland app_id and the X11 window class on Linux: the desktop entry's name

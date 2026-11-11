@@ -634,6 +634,12 @@ fn draw(p: &P, icon: Icon) {
             }
         }
         Play => p.fill(&[(4.5, 2.5), (13.5, 8.0), (4.5, 13.5)]),
+        // Graybox: a speech bubble with two lines of text (the Claude chat button).
+        Chat => {
+            p.poly(&[(2.5, 2.5), (13.5, 2.5), (13.5, 10.5), (7.5, 10.5), (4.5, 13.5), (4.5, 10.5), (2.5, 10.5)], true);
+            p.line(5.0, 5.5, 11.0, 5.5);
+            p.line(5.0, 7.5, 9.0, 7.5);
+        }
         Home => {
             // Unhinted so the roof's peak stays centred; the floor stops at the door.
             p.path(&[(6.5, 13.5), (3.5, 13.5), (3.5, 7.0), (8.0, 2.8), (12.5, 7.0), (12.5, 13.5), (9.5, 13.5)], false);

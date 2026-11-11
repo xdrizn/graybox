@@ -158,6 +158,12 @@ Death are only *examples* in the starter kit, never required.
 - [x] Unity export (layout.json + sprites per screen, again on save) and the Graybox Live Link
   package (run in Unity 2022.3.39 with a test screen: the Canvas matches Graybox's render).
 
+### G10 — Claude inside Graybox (owner's request, 2026-11-10)
+Spec: [`specs/2026-11-10-claude-chat-design.md`](specs/2026-11-10-claude-chat-design.md).
+- [x] G10.1 Chat: a button beside Play opens a Claude panel; Claude edits the open file through the
+  installed Claude Code CLI (his own plan, no API key) and the `graybox` MCP tools.
+- [ ] G10.2 Icons from sketches: references, a brush sketch, and Claude turns it into a clean icon frame.
+
 ## Later
 Third-person preset, 2D platformer and top-down presets, safe-area guides and resolution presets,
 export package for engines (assets + spec sheet, 9-slice), Godot scene export, Unity plugin,

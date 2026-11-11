@@ -79,7 +79,46 @@
   (TextMeshPro, legacy Text, and the 2023+ branch); NOT run in Unity 6 (not installed here), and
   `enableWordWrapping` may warn there (see the package README).
 
+- G10.1 (2026-11-11): chat with Claude. A speech-bubble button right after Play (`Icon::Chat`, drawn
+  in code) toggles a floating Claude panel (bottom right of the canvas, left of the Design panel;
+  resize by dragging its top-left corner): messages with small Markdown, a one-line trace of what
+  Claude does, Send (Enter; Shift+Enter is a new line), Stop, New chat, per-file conversation kept in
+  memory. Code in `crates/ui-egui/src/game/claude/` (`events` stream-json parser, `runner` spawns
+  `claude -p … --output-format stream-json`, `discover` finds `claude` and `figcraft-cli`, `state`,
+  `panel`, `markdown`, `guide` = the Graybox system prompt, `control` = the port). Command id
+  `game.claude.toggle`. The browser build shows the button and says the chat needs the desktop app.
+  Checked in the real app on a scratch file with a **stand-in `claude.exe`** that speaks stream-json
+  and drives the real `figcraft-cli mcp --attach`: "create a 400×300 frame named Menu with a centred
+  title" made the frame and title (the agent avatar showed), "make the title orange" (a second
+  message, `--resume`) changed that same title to #FF8800, Stop ended the process tree and said
+  "Stopped.", and the real `claude` printed the sign-in message in the panel. **Not run with the
+  real Claude**: the CLI's login on this PC has expired (`claude -p` answers "OAuth access token has
+  expired"); Adriel has to type `claude` once in a terminal and sign in, then try the chat.
+  Part 2 (G10.2 icons) is not built; the runner takes extra image paths (`Turn::images`) and returns
+  `Event`s, which is what it will use.
+
 ## Decisions
+- G10.1 Claude chat:
+  - The CLI runs with `--strict-mcp-config` (only the `graybox` server), `--tools Read` (reading the
+    images of G10.2), `--allowedTools "mcp__graybox Read"`, `--permission-mode dontAsk`,
+    `--setting-sources project` (his user settings, plugins, hooks and skills stay out of it),
+    `--disable-slash-commands`, in a scratch folder `%TEMP%\graybox-claude`. The prompt goes through
+    stdin. `ANTHROPIC_API_KEY` is removed from its environment so it always uses his plan.
+  - Only the native `claude.exe` is used (PATH, then `~/.local/bin`, `~/.claude/local`): a `.cmd`
+    wrapper (npm install) cannot take the guide as an argument on Windows.
+  - The control channel: with `--control` it is the one already open; otherwise `apps/figcraft`
+    opens one on a free 127.0.0.1 port when the first message is sent (`chat_control.rs`). From then
+    on that port stays open for the run (anything on this PC can drive the app through it, as with
+    `--control`).
+  - Chat state is a thread-local in the `claude` module (not in `FigApp`), so upstream state is
+    untouched. Edits go to whichever file is active when Claude calls the tools; if he switches tabs
+    mid-turn they land in the other file.
+  - Stop kills the `claude` process and what it started (`taskkill /T` on Windows) and shows
+    "Stopped." at once.
+  - Errors are plain: not installed, `figcraft-cli` missing, not signed in (anything that looks like
+    a login/401 problem), otherwise the last lines the CLI said.
+  - The install now ships `figcraft-cli.exe` beside `graybox.exe` (`graybox-update-stable` skill);
+    his installed copy in `C:\Users\Adriel\Apps\Graybox` does not have it until the next update.
 - Play redraws its whole screen when a variant changes on hover. Costly unchanged layers (layer blur,
   big image fills) are kept between renders instead (owner's "essa aqui" screen: ~450 to ~120 ms per
   hover, identical pixels). Going further would mean redrawing only the changed area.

@@ -12,12 +12,14 @@ and his own `Atualizar Graybox.ps1`, which does the same by hand). Do the steps 
    here and ask him in Portuguese to close it. **Never kill it.**
 2. Commit/stash nothing for him. Check `git status` is what he expects; build what is on disk.
 3. Build (minutes; run in background):
-   `cargo build --release -p figcraft`. If it fails, stop: the installed version stays untouched.
+   `cargo build --release -p figcraft -p figcraft-cli` (the Claude chat needs `figcraft-cli.exe`
+   beside `graybox.exe`). If it fails, stop: the installed version stays untouched.
 4. Install:
 ```powershell
 $here="C:\Users\Adriel\Apps\Graybox"; $repo="C:\Users\Adriel\Documents\graybox"
 if (Test-Path "$here\graybox.exe") { Copy-Item "$here\graybox.exe" "$here\graybox-anterior.exe" -Force }
 Copy-Item "$repo\target\release\figcraft.exe" "$here\graybox.exe" -Force
+Copy-Item "$repo\target\release\figcraft-cli.exe" "$here\figcraft-cli.exe" -Force   # the Claude chat drives Graybox through it
 $commit = git -C $repo log -1 --format="%h %s (%cd)" --date=short
 Set-Content "$here\versao.txt" $commit -Encoding utf8
 ```
@@ -33,6 +35,7 @@ Stop-Process -Id $app.Id          # your own process only
    Send **no** edits, clicks or saves. If `dirty` is true, undo is not empty, or the timestamp moved,
    report it as a bug (opening a file must not touch it) and tell him `graybox-anterior.exe` is the way back.
 6. Tell him (Portuguese): the new `versao.txt` line, that he can reopen Graybox, and how to go back
-   (rename `graybox-anterior.exe`).
+   (rename `graybox-anterior.exe`). The Claude chat button needs Claude Code signed in once (`claude`
+   in a terminal) and `figcraft-cli.exe` in the same folder as `graybox.exe`.
 
 Do not commit anything for this task; it changes nothing in the repo.
