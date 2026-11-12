@@ -199,9 +199,6 @@ Notion-like documents inside the project file, a Documents tab, versions closed 
 - [ ] G15.1 Signers, email code, drawn or typed signature, audit trail signed by the server,
   certificate page, Verify. Needs G13.4 and G14.1.
 
-## Later
-Third-person preset (now G11), 2D platformer and top-down presets, safe-area guides and resolution presets,
-export package for engines (assets + spec sheet, 9-slice), Godot scene export, Unity plugin,
 ### G16 — Pixel art (owner's request, 2026-11-12)
 Spec: [`specs/2026-11-12-pixel-art-design.md`](specs/2026-11-12-pixel-art-design.md) (decisions D1–D10).
 Pixel layers edited in place in a Pixel mode, Aseprite-style standard tools, smart resize with pixel
@@ -216,4 +213,7 @@ Pixel layers edited in place in a Pixel mode, Aseprite-style standard tools, sma
 - [ ] G16.5 Export and import: exporter trait, PNG, sheet and JSON, Unity with Live Link, PNG and sheet import.
 - [ ] G16.6 Polish: pixel fonts, shade, Claude MCP tools, performance, guide, installed copy.
 
+## Later
+Third-person preset (now G11), 2D platformer and top-down presets, safe-area guides and resolution presets,
+export package for engines (assets + spec sheet, 9-slice), Godot scene export, Unity plugin,
 comparing a game screenshot with the design.
