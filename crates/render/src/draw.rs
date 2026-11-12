@@ -130,6 +130,11 @@ fn pixels_when_magnified(prep: Prepared, device_scale: f64) -> Prepared {
     Prepared::Pattern { pixmap, mode, quality, opacity, transform }
 }
 
+// Graybox: `pixel::fill` draws a pixel layer's other paints as usual through this (G16).
+pub(crate) fn fill_paints(pix: &mut Pixmap, path: &tiny_skia::Path, paints: &[Paint], n: &Node, xf: Affine, rule: FillRule, ctx: &Ctx) {
+    fill_with(pix, path, paints, n.width, n.height, xf, rule, ctx, None);
+}
+
 fn fill_with(pix: &mut Pixmap, path: &tiny_skia::Path, paints: &[Paint], w: f64, h: f64, xf: Affine, rule: FillRule, ctx: &Ctx, mask: Option<&Mask>) {
     let scale = xf.determinant().abs().sqrt();
     for p in paints {
@@ -1012,7 +1017,8 @@ fn draw_content(ctx: &Ctx, pix: &mut Pixmap, n: &Node, xf: Affine, depth: usize,
                         crate::covered::fill_under_stroke(n, xf.determinant().abs().sqrt()).and_then(|p| ts_path(&p)).or_else(|| ts_path(path))
                 {
                     // Graybox: under an opaque inside stroke the fill stops inside the stroke's solid part.
-                    fill_with(pix, &tp, &n.fills, w, h, xf, *rule, ctx, None);
+                    // Graybox: a pixel layer's image fill is its sprite, drawn sharp (G16).
+                    crate::pixel::fill(ctx, pix, &tp, n, xf, *rule);
                 }
             }
             if let Some(f) = over_fills {

@@ -119,6 +119,12 @@ icons! {
     Chat,
     /// Graybox: the Documents tab (a page with lines of text).
     Document,
+    /// Graybox: Pixel mode (a square of checkered pixels).
+    PixelArt,
+    /// Graybox: pixel-perfect lines (a one-pixel stair).
+    PixelPerfect,
+    /// Graybox: tile mode (four tiles).
+    Tiles,
     Home,
     Bell,
     Panels,

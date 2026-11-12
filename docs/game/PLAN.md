@@ -206,7 +206,7 @@ Notion-like documents inside the project file, a Documents tab, versions closed 
 Spec: [`specs/2026-11-12-pixel-art-design.md`](specs/2026-11-12-pixel-art-design.md) (decisions D1–D10).
 Pixel layers edited in place in a Pixel mode, Aseprite-style standard tools, smart resize with pixel
 9-slice, pixel buttons that grow with their text, basic animation, Unity-first export.
-- [ ] G16.1 Core and drawing: `crates/pixel`, pixel layer, sharp render, Pixel mode, pencil to ellipse,
+- [x] G16.1 Core and drawing: `crates/pixel`, pixel layer, sharp render, Pixel mode, pencil to ellipse,
   brush, mirror with an axis, grid, undo.
 - [ ] G16.2 Selection, transform and colour: marquee, lasso, wand, move, outline, replace colour,
   palette tied to styles and variables, Selection colours, sprite layers.

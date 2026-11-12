@@ -640,6 +640,25 @@ fn draw(p: &P, icon: Icon) {
             p.line(5.0, 5.5, 11.0, 5.5);
             p.line(5.0, 7.5, 9.0, 7.5);
         }
+        // Graybox: a frame with two checkered pixels (Pixel mode).
+        PixelArt => {
+            p.rect(2.5, 2.5, 13.5, 13.5, 1.0);
+            p.fill_rect(5.0, 5.0, 8.0, 8.0, 0.0);
+            p.fill_rect(8.0, 8.0, 11.0, 11.0, 0.0);
+        }
+        // Graybox: a one-pixel stair (pixel-perfect lines).
+        PixelPerfect => {
+            for i in 0..4 {
+                let k = i as f32 * 3.0;
+                p.fill_rect(2.0 + k, 11.0 - k, 5.0 + k, 14.0 - k, 0.0);
+            }
+        }
+        // Graybox: four tiles (tile mode).
+        Tiles => {
+            for (x, y) in [(2.5, 2.5), (8.5, 2.5), (2.5, 8.5), (8.5, 8.5)] {
+                p.rect(x, y, x + 5.0, y + 5.0, 0.5);
+            }
+        }
         // Graybox: a page with lines of text (the Documents tab).
         Document => {
             p.poly(&[(3.5, 2.5), (9.5, 2.5), (12.5, 5.5), (12.5, 13.5), (3.5, 13.5)], true);

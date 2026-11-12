@@ -430,6 +430,9 @@ fn every_command_survives_junk_params() {
         // Plugin directories: ids, versions, servers and confirmations as junk.
         json!({"id": "../../x", "version": {"x": 1}, "server": "ws://\u{0}/?key=", "confirm": "yes", "path": [5], "plugin": [1], "query": 7, "sha256": 3}),
         json!({"id": "org.example.x", "version": "1.0.0", "server": "wss://[::1", "confirm": true, "plugin": "nope"}),
+        // Graybox: pixel art (pixel.*) params as junk; `pixel_tests` sends junk to a real sprite too.
+        json!({"id": 2, "points": [[1e308, "x"]], "color": [1], "size": -5, "shape": 7, "mirror": {"x": "NaN"}, "layer": -1, "frame": 1e308, "kind": [], "from": [1], "to": null}),
+        json!({"width": 1e308, "height": -1, "scale": 0.4, "background": 5, "tolerance": 1e308, "pixels": "yes", "on": []}),
         // Graybox: nested pages (page.nest, page.unnest, page.collapse, page.add parent, page.delete subpages) as junk.
         json!({"id": 1, "parent": "x", "index": -1, "subpages": [], "collapsed": {"x": 1}}),
         json!({"id": 1, "parent": 1, "index": 1e308, "subpages": "yes", "collapsed": null}),

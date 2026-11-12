@@ -686,3 +686,6 @@ mod docs_cmd_tests;
 // Graybox: nested pages (G9).
 #[cfg(test)]
 mod page_tree_tests;
+// Graybox: pixel art (G16).
+#[cfg(test)]
+mod pixel_tests;

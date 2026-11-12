@@ -24,13 +24,13 @@ const FLYOUT_GAP: f32 = 2.0;
 // The pill's grid: every state of it (the tools, the vector and shape builder ones) is laid out on
 // one 32 pt cell, PAD in from its ends and GAP between its top-level items, the divider included.
 /// A toolbar button's size: the cell everything in the pill is placed on.
-const TOOL_CELL: f32 = 32.0;
+pub(crate) const TOOL_CELL: f32 = 32.0;
 /// The pill's left and right padding.
-const PAD: f32 = 8.0;
+pub(crate) const PAD: f32 = 8.0;
 /// Between the pill's top-level items — the divider included.
-const GAP: f32 = 8.0;
+pub(crate) const GAP: f32 = 8.0;
 /// The divider's width.
-const DIVIDER: f32 = 1.0;
+pub(crate) const DIVIDER: f32 = 1.0;
 /// The mode switcher's marks: smaller than the tools' (13–14 pt).
 const MODE_GLYPH: f32 = 14.0;
 
@@ -121,6 +121,10 @@ pub fn show(app: &mut FigApp, ui: &mut Ui) {
         view_only_toolbar(app, ui, why);
         return;
     }
+    // Graybox: Pixel mode shows its own tools (G16).
+    if crate::game::pixel::toolbar(app, ui) {
+        return;
+    }
     // Vector edit mode swaps the tools for the edit tools.
     if let Some(tool) = app.session.ds().ok().and_then(|d| d.vector_edit.as_ref()).map(|v| v.tool) {
         edit_toolbar(app, ui, tool);
@@ -148,8 +152,8 @@ fn main_width(groups: &[Group], board: bool) -> f32 {
     let tools: f32 = groups.iter().map(|g| TOOL_CELL + if g.has_flyout() { FLYOUT_GAP + FLYOUT_W } else { 0.0 }).sum();
     // The end, and the gaps that aren't a group's own: after Actions and after the divider (and
     // between a board's two buttons, which the end counts as one item).
-    // Graybox: the mode switcher, then Play and the Claude chat button (no Game settings button).
-    let (end, gaps) = if board { (2.0 * TOOL_CELL, 3.0) } else { (6.0 * TOOL_CELL, 4.0) };
+    // Graybox: the mode switcher (with Pixel), then Play and the Claude chat button (no Game settings button).
+    let (end, gaps) = if board { (2.0 * TOOL_CELL, 3.0) } else { (7.0 * TOOL_CELL, 4.0) };
     PAD * 2.0 + tools + (groups.len() as f32 + gaps) * GAP + TOOL_CELL + DIVIDER + end
 }
 
@@ -180,7 +184,7 @@ fn main_toolbar(app: &mut FigApp, ui: &mut Ui, canvas: Rect, t: &Tokens, board: 
         }
     } else {
         mode_switcher(app, ui, x, cy, t);
-        let x = x + 4.0 * TOOL_CELL + GAP;
+        let x = x + 5.0 * TOOL_CELL + GAP;
         let play = Rect::from_center_size(pos2(x + TOOL_CELL / 2.0, cy), vec2(TOOL_CELL, TOOL_CELL));
         let playable = app.session.doc().is_ok_and(|d| d.nodes().any(|n| matches!(n.kind, figcraft_doc::NodeKind::Frame)));
         if playable {
@@ -296,16 +300,24 @@ fn actions_button(app: &mut FigApp, ui: &mut Ui, x: f32, cy: f32, t: &Tokens) ->
     x + TOOL_CELL + GAP
 }
 
-/// The mode switcher from `x`: Draw · Design · Prototype · Inspect (code).
+/// The mode switcher from `x`: Draw · Pixel · Design · Prototype · Inspect (code).
 fn mode_switcher(app: &mut FigApp, ui: &mut Ui, x: f32, cy: f32, t: &Tokens) {
-    let modes = [(Icon::Pencil, tr("Draw")), (Icon::Frame, tr("Design")), (Icon::Prototype, tr("Prototype")), (Icon::Code, tr("Inspect"))];
+    // Graybox: Pixel mode (G16) after Draw.
+    let modes = [
+        (Icon::Pencil, tr("Draw")),
+        (Icon::PixelArt, "Pixel"),
+        (Icon::Frame, tr("Design")),
+        (Icon::Prototype, tr("Prototype")),
+        (Icon::Code, tr("Inspect")),
+    ];
     let active = match app.ui.right_tab {
+        crate::RightTab::Design if crate::game::pixel::active(app) => 1,
         crate::RightTab::Design if app.session.tool.tool == ToolId::Pencil => 0,
-        crate::RightTab::Design => 1,
-        crate::RightTab::Prototype => 2,
-        crate::RightTab::Inspect => 3,
+        crate::RightTab::Design => 2,
+        crate::RightTab::Prototype => 3,
+        crate::RightTab::Inspect => 4,
     };
-    let seg = Rect::from_min_size(pos2(x, cy - TOOL_CELL / 2.0), vec2(4.0 * TOOL_CELL, TOOL_CELL));
+    let seg = Rect::from_min_size(pos2(x, cy - TOOL_CELL / 2.0), vec2(5.0 * TOOL_CELL, TOOL_CELL));
     ui.painter().rect_filled(seg, CornerRadius::same(5), t.field);
     for (i, (icon, tip)) in modes.iter().enumerate() {
         let r = Rect::from_min_size(pos2(seg.min.x + i as f32 * TOOL_CELL, seg.min.y), vec2(TOOL_CELL, TOOL_CELL));
@@ -331,6 +343,13 @@ fn mode_switcher(app: &mut FigApp, ui: &mut Ui, x: f32, cy: f32, t: &Tokens) {
 
 /// Mode `i` of the switcher chosen.
 fn pick_mode(app: &mut FigApp, i: usize) {
+    // Graybox: Pixel mode is 1; every other mode leaves it.
+    if i == 1 {
+        crate::game::pixel::enter_from_switcher(app);
+        return;
+    }
+    crate::game::pixel::leave(app);
+    let i = if i > 1 { i - 1 } else { i };
     match i {
         0 => {
             app.ui.right_tab = crate::RightTab::Design;
@@ -508,7 +527,7 @@ pub(crate) fn pill_rect(canvas: Rect, width: f32) -> Rect {
 
 /// The floating pill (shadow, panel, border) `width` wide at the bottom centre of the canvas: the
 /// toolbar region keyboard navigation moves through.
-fn pill(ui: &Ui, nav: &mut Nav, canvas: Rect, width: f32, t: &Tokens) -> Rect {
+pub(crate) fn pill(ui: &Ui, nav: &mut Nav, canvas: Rect, width: f32, t: &Tokens) -> Rect {
     let rect = pill_rect(canvas, width);
     // The pill takes the press and the drag over it: its buttons sense clicks only, and egui gives
     // a drag the canvas under them would sense to the canvas, so the pen placed an anchor there.
@@ -544,15 +563,15 @@ pub(crate) fn tool_cell(ui: &mut Ui, t: &Tokens, r: Rect, id: impl egui::AsIdSal
 }
 
 /// A vertical separator just after `x`: DIVIDER wide, as tall as the pill's content.
-fn divider(ui: &Ui, t: &Tokens, x: f32, cy: f32) {
+pub(crate) fn divider(ui: &Ui, t: &Tokens, x: f32, cy: f32) {
     let half = TOOL_CELL / 2.0;
     ui.painter().line_segment([pos2(x + DIVIDER / 2.0, cy - half), pos2(x + DIVIDER / 2.0, cy + half)], Stroke::new(DIVIDER, t.border));
 }
 
-const DONE_W: f32 = 56.0;
+pub(crate) const DONE_W: f32 = 56.0;
 
 /// A divider at `x` and the accent Done button after it; true when clicked.
-fn done_button(ui: &mut Ui, t: &Tokens, x: f32, cy: f32, tip: &str) -> bool {
+pub(crate) fn done_button(ui: &mut Ui, t: &Tokens, x: f32, cy: f32, tip: &str) -> bool {
     divider(ui, t, x, cy);
     let done = Rect::from_min_size(pos2(x + DIVIDER + GAP, cy - 14.0), vec2(DONE_W, 28.0));
     let resp = ui.interact(done, ui.scope_id().with("tool_done"), Sense::click()).tip(tip);

@@ -16,6 +16,8 @@ const TABLE: &[(&str, u8)] = &[
     ("plugin", 2),
     // Greybox: the game simulation (docs/game/STATUS.md › Upstream hooks).
     ("game", 2),
+    // Graybox: pixel art sprites and their drawing operations (G16).
+    ("pixel", 2),
     ("render", 3),
     ("format", 3),
     ("svg", 4),

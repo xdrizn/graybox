@@ -34,6 +34,8 @@ figcraft-collab-net = { path = "crates/collab-net" }
 figcraft-plugin = { path = "crates/plugin" }
 # Greybox game layer (docs/game/STATUS.md › Upstream hooks).
 figcraft-game = { path = "crates/game" }
+# Graybox pixel art (G16): sprites and drawing operations.
+figcraft-pixel = { path = "crates/pixel" }
 
 # Keep coupled craft-libs crates on one rev. craft-update has no sibling-crate
 # dependencies and is pinned separately for the suite updater rollout.

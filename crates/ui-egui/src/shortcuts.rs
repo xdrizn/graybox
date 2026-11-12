@@ -162,6 +162,8 @@ pub(crate) fn handle_input(
     if events.is_empty() {
         return;
     }
+    // Graybox: Pixel mode's tool keys go to it first (G16).
+    let events: Vec<Event> = events.into_iter().filter(|e| !crate::game::pixel::key(app, e)).collect();
     // An image-only clipboard brings no paste event with text: the desktop shell sends an image
     // paste event instead, and in the browser it's the key press that pastes.
     let paste_event = events.iter().any(|e| matches!(e, Event::Paste(_)));

@@ -39,6 +39,8 @@ pub(crate) mod tps;
 pub(crate) mod unity_ui;
 // Graybox: the tree list shared by the Docs tab and the Pages list, and the Pages list itself (G9).
 pub(crate) mod page_list;
+// Graybox: Pixel mode, editing a pixel layer's sprite on the canvas (G16).
+pub(crate) mod pixel;
 pub(crate) mod tree_list;
 
 /// Platform hosts read these markers inside the browser's trusted input event, before egui's

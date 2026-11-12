@@ -319,7 +319,12 @@ pub fn show(app: &mut FigApp, ui: &mut Ui, worker: &mut Worker) {
         }
     }
     crate::dev_mode::draw(app, &painter);
-    crate::handles::draw(app, &painter);
+    // Graybox: Pixel mode draws the sprite being edited instead of the selection's handles (G16).
+    if crate::game::pixel::active(app) {
+        crate::game::pixel::draw(app, &painter);
+    } else {
+        crate::handles::draw(app, &painter);
+    }
     // Graybox: the selected layer's 9-slice cuts.
     crate::game::nine_slice_ui::draw(app, &painter);
     crate::game::pseudo_view::banner(&painter, app.canvas.rect);

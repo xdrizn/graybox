@@ -217,6 +217,8 @@ impl FigApp {
                 }
                 // Graybox: the Claude chat panel opens or closes.
                 "game.claude.toggle" => crate::game::claude::toggle(),
+                // Graybox: Pixel mode on or off (G16).
+                "pixel.mode" => crate::game::pixel::ui_request(self, &r.data),
                 "game.settings" => {
                     // Game settings live in the Prototype tab, shown when nothing is selected.
                     self.run("select.none", json!({}));

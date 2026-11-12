@@ -305,7 +305,44 @@
   Part 2 (G10.2 icons) is not built; the runner takes extra image paths (`Turn::images`) and returns
   `Event`s, which is what it will use.
 
+- G16.1 (2026-11-12): pixel art core and drawing. Plan: pure crate first (canvas, raster, brush and
+  fill, sprite model, storage in plugin data), then the engine commands, the sharp render hook, and
+  last the Pixel mode editor on the canvas. Built:
+  - `crates/pixel` (L2, pure): `Canvas` (RGBA, max 1024 a side), raster lines/rects/ellipses
+    (Bresenham, Zingl), pixel-perfect strokes, square/round brushes 1–64, mirror axes on half
+    pixels, tile wrap, bucket fill (contiguous or global, tolerance), the `Sprite` model (layers,
+    frames, tags, palette) and its store: sprite JSON under `graybox.pixel`, one PNG cel per
+    `graybox.pixel.cel.<layer>.<frame>`. The layer's image fill is the flattened frame 0, so exports,
+    Figma files and older Graybox builds still show the art.
+  - Commands `pixel.create`, `pixel.stroke`, `pixel.shape`, `pixel.fill`, `pixel.clear`, `pixel.pick`,
+    `pixel.get`, `pixel.set`, `pixel.mode` (`crates/engine/src/cmd/pixel.rs`, tests in
+    `pixel_tests.rs`, all in the junk sweep). Each stroke is one undo step.
+  - Render: a pixel layer is drawn with nearest-neighbour sampling (`crates/render/src/pixel.rs`),
+    sharp at any zoom, in the canvas, exports and Play.
+  - Pixel mode (`crates/ui-egui/src/game/pixel/`): "Pixel" in the mode switcher, double-click a pixel
+    layer, or Edit pixels in the new Pixel art section of the Design panel. A tool pill replaces the
+    toolbar: Pencil B, Eraser E, Bucket G, Eyedropper I (Alt holds it), Line L, Rectangle U, Ellipse
+    Shift+U; two colours (right button draws the second, X swaps), brush size [ ] and shape, Pixel
+    perfect, Filled, Contiguous, Mirror X/Y (pink axis handles to drag), Tile, Grid (shows from 6
+    screen px per art pixel), Done/Esc/Enter. Shift-click draws a line from the last point. Over the
+    sprite: checkerboard for transparency, live preview of the stroke, brush outline with its mirror
+    images. With no pixel layer selected, Pixel mode makes a new sprite by dragging (or a click / the
+    Create button uses the size in the pill). A stroke released off the canvas still lands.
+  - Checked in the real app on an Untitled document: sharp at 100 % and 293 %, grid and checker,
+    Pixel art section, the pill, a mouse stroke with one "Draw pixels" undo step, handles hidden.
+
 ## Decisions
+- G16 pixel art, details the spec left open (chosen as a pixel artist would expect):
+  - New sprites are 32×32 at scale 4 (one art pixel = 4 page units); default colours a near-black
+    `#1a1c2c` and an off-white `#f4f4f4` (original, no third-party palette). Pixel perfect is on.
+  - Pixel mode sits between Draw and Design in the mode switcher. Esc and Enter leave it, like Done.
+  - The pixel grid shows only from 6 screen pixels per art pixel, so it never hides small art.
+  - Shift-click with the pencil draws a straight line from where the last stroke ended.
+  - Mirror axes sit on whole or half pixels (an even-width sprite mirrors around its middle line).
+  - Smart resize (G16.3) default: the middle row and column repeat, so corners and borders stay;
+    "edges" and "tile" are the other choices.
+  - The Design panel title of a pixel layer still reads "Rectangle" (upstream); the Pixel art
+    section under Position says what it is.
 - G11.4 movement (recommended option each time):
   - No physics engine: one cylinder against the world's axis-aligned boxes (two passes) plus the
     heightfield; a few hundred boxes per step is cheap at 60 Hz and the same on wasm.
@@ -682,6 +719,27 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   - `crates/ui-egui/src/game/mod.rs`: `pub(crate) mod page_list;` and `tree_list;`.
     `game/docs/tree.rs` now draws through `tree_list` (same look and behaviour).
   - `crates/ui-egui/locales/en.toml` and `pt-BR.toml`: a "Graybox: nested pages" block of strings.
+- G16 pixel art (the code is ours: `crates/pixel`, `crates/engine/src/cmd/pixel.rs`,
+  `engine/src/pixel_tests.rs`, `crates/render/src/pixel.rs`, `crates/ui-egui/src/game/pixel/`):
+  - `Cargo.toml`: `figcraft-pixel` path entry; `xtask/src/layers.rs`: `("pixel", 2)`; engine,
+    render and ui-egui `Cargo.toml`: depend on it.
+  - `crates/engine/src/cmd.rs`: `pub mod pixel;` and `list.extend(pixel::specs())`;
+    `engine/src/lib.rs`: `mod pixel_tests;`; `engine/src/tests.rs`: two junk rows in the sweep.
+  - `crates/render/src/lib.rs`: `pub mod pixel;`; `render/src/draw.rs` `draw_content`: fills go through
+    `pixel::fill`, which draws other paints through the new `fill_paints` helper.
+  - `crates/ui-egui/src/lib.rs`: field `FigApp::pixel`; `app.rs`: its default; `game/mod.rs`:
+    `pub(crate) mod pixel;`.
+  - `crates/ui-egui/src/canvas.rs`: in Pixel mode `game::pixel::draw` instead of `handles::draw`;
+    `canvas/input.rs`: `game::pixel::input` after panning, `game::pixel::off_canvas` when the pointer
+    is off the canvas; `canvas/overlays.rs`: no selection box in Pixel mode.
+  - `crates/ui-egui/src/shortcuts.rs`: key events go through `game::pixel::key` first.
+  - `crates/ui-egui/src/app/commands.rs`: the `pixel.mode` UI request.
+  - `crates/ui-egui/src/toolbar.rs`: `show` gives the bar to `game::pixel::toolbar` in Pixel mode;
+    the mode switcher has a fifth mode "Pixel" (widths and Play position follow); `pill`, `divider`,
+    `tool_cell`, `done_button`, `pretty_shortcut` and the size constants became `pub(crate)`.
+  - `crates/ui-egui/src/panels/right.rs`: `game::pixel::section` above Layout.
+  - `crates/ui-egui/src/icons.rs` and `icons/draw.rs`: `PixelArt`, `PixelPerfect`, `Tiles` (drawn in code).
+
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.
 

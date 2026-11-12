@@ -22,8 +22,10 @@ pub mod images;
 mod layer_budget;
 pub mod lod;
 mod nine_slice;
+// Graybox: pixel layers drawn sharp (G16).
 pub mod paint;
 pub mod pattern;
+pub mod pixel;
 pub mod retained;
 pub mod shadow;
 

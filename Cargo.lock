@@ -2022,6 +2022,7 @@ dependencies = [
  "figcraft-layout",
  "figcraft-pathops",
  "figcraft-pdf",
+ "figcraft-pixel",
  "figcraft-plugin",
  "figcraft-render",
  "figcraft-svg",
@@ -2123,6 +2124,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "figcraft-pixel"
+version = "0.15.0"
+dependencies = [
+ "base64 0.22.1",
+ "png",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "figcraft-plugin"
 version = "0.15.0"
 dependencies = [
@@ -2145,6 +2156,7 @@ dependencies = [
  "figcraft-format",
  "figcraft-geom",
  "figcraft-pathops",
+ "figcraft-pixel",
  "figcraft-text",
  "image",
  "log",
@@ -2234,6 +2246,7 @@ dependencies = [
  "figcraft-geom",
  "figcraft-layout",
  "figcraft-pathops",
+ "figcraft-pixel",
  "figcraft-render",
  "figcraft-text",
  "glam",

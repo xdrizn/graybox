@@ -19,6 +19,8 @@ figcraft-render = { workspace = true }
 figcraft-pathops = { workspace = true }
 figcraft-engine = { workspace = true }
 figcraft-format = { workspace = true }
+# Graybox: pixel art (G16).
+figcraft-pixel = { workspace = true }
 # Greybox game layer (docs/game/STATUS.md › Upstream hooks).
 figcraft-game = { workspace = true }
 egui = { workspace = true, features = ["default_fonts", "monochrome_emoji_fonts"] }

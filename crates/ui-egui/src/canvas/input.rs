@@ -241,6 +241,8 @@ pub(super) fn input(app: &mut FigApp, ui: &mut Ui, resp: &egui::Response) -> boo
         }
         // So is a handle drag.
         crate::handles::end_released_drag(app, &ctx);
+        // Graybox: and a Pixel mode stroke goes on, or ends, off the canvas (G16).
+        crate::game::pixel::off_canvas(app, ui, resp, hover_pos);
         return true;
     };
     // A press on the canvas gives the keyboard back to it (arrows nudge again).
@@ -274,6 +276,11 @@ pub(super) fn input(app: &mut FigApp, ui: &mut Ui, resp: &egui::Response) -> boo
     let middle_down = ctx.input(pan_button_down);
     if (middle_down || (app.canvas.space_pan && ctx.input(|i| i.pointer.primary_down()))) && resp.hovered() || app.canvas.middle_pan.is_some() {
         pan_view(app, &ctx, pos, &mods, middle_down);
+        return true;
+    }
+    // Graybox: Pixel mode takes the pointer while it is on, and a double-click on a pixel layer
+    // turns it on (G16).
+    if crate::game::pixel::input(app, ui, resp, pos) {
         return true;
     }
     // A handle drag whose button went up ends first, wherever on the canvas the pointer is: over a
