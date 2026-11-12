@@ -344,7 +344,8 @@ fn new_pill(app: &mut FigApp, ui: &mut Ui) {
     let galley = ui.painter().layout_no_wrap(hint.to_string(), crate::theme::regular(12.0), t.text_secondary);
     let fields_w = 3.0 * 52.0 + 2.0 * 14.0 + 18.0;
     let create_w = 64.0;
-    let width = PAD * 2.0 + galley.size().x + GAP + create_w + GAP + DIVIDER + GAP + fields_w + GAP + DIVIDER + GAP + DONE_W;
+    let button_w = 96.0;
+    let width = PAD * 2.0 + galley.size().x + GAP + create_w + GAP + button_w + GAP + DIVIDER + GAP + fields_w + GAP + DIVIDER + GAP + DONE_W;
     let rect = pill(ui, &mut app.ui.nav, app.canvas.rect, width, &t);
     let cy = rect.center().y;
     let mut x = rect.min.x + PAD;
@@ -360,6 +361,17 @@ fn new_pill(app: &mut FigApp, ui: &mut Ui) {
         create_in_view(app);
     }
     x += create_w + GAP;
+    // A ready-made pixel button (G16.3): three states, 9-sliced art, a label it grows with.
+    let kit = Rect::from_min_size(pos2(x, cy - 14.0), vec2(button_w, 28.0));
+    let resp = ui
+        .interact(kit, ui.scope_id().with("pixel_new_button"), Sense::click())
+        .on_hover_text("A pixel button component: Default, Hover and Pressed, growing with its label");
+    ui.painter().rect_filled(kit, CornerRadius::same(6), if resp.hovered() { t.hover } else { t.field });
+    ui.painter().text(kit.center(), Align2::CENTER_CENTER, "Pixel button", crate::theme::semibold(11.5), t.text);
+    if resp.clicked() {
+        button_in_view(app);
+    }
+    x += button_w + GAP;
     divider(ui, &t, x, cy);
     x += DIVIDER + GAP;
     let labels = ["W", "H", "×"];
@@ -379,6 +391,18 @@ fn new_pill(app: &mut FigApp, ui: &mut Ui) {
     }
     x += 18.0 + GAP;
     if done_button(ui, &t, x, cy, &format!("Done  {}", pretty_shortcut("Esc"))) {
+        leave(app);
+    }
+}
+
+/// The Pixel button starter in the middle of the view, at the New sprite scale; Pixel mode ends
+/// with the new component set selected.
+pub(super) fn button_in_view(app: &mut FigApp) {
+    let s = app.pixel.new_size[2].clamp(1, 16);
+    let c = app.canvas.rect.center();
+    let mid = app.to_page(Pos2::new(c.x, c.y));
+    let side = f64::from(12 * s);
+    if app.run("pixel.button", json!({"x": (mid.x - side).round(), "y": (mid.y - side * 2.0).round(), "scale": s})).is_some() {
         leave(app);
     }
 }

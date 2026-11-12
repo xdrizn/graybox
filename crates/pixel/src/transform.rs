@@ -129,6 +129,24 @@ pub fn replace_color(cel: &mut Canvas, mask: Option<&Mask>, from: Rgba, to: Rgba
     changed
 }
 
+/// Every pixel of `cel` that is exactly one of the `from` colours of `pairs` becomes its `to`, all at
+/// once (a swap of red and blue swaps them). How many changed.
+pub fn swap_colors(cel: &mut Canvas, pairs: &[(Rgba, Rgba)]) -> usize {
+    let mut changed = 0;
+    for y in 0..i64::from(cel.height()) {
+        for x in 0..i64::from(cel.width()) {
+            let Some(c) = cel.get(x, y) else { continue };
+            if let Some((_, to)) = pairs.iter().find(|(from, _)| *from == c)
+                && *to != c
+            {
+                cel.set(x, y, *to);
+                changed += 1;
+            }
+        }
+    }
+    changed
+}
+
 /// Puts back every pixel of `cel` outside `mask` as it was in `before` (drawing stays inside the
 /// selection). How many pixels differ from `before` afterwards.
 pub fn clip_to(cel: &mut Canvas, before: &Canvas, mask: &Mask) -> usize {
@@ -292,5 +310,18 @@ mod tests {
         let covered = paste(&mut d, &piece, 2, 0).unwrap();
         assert_eq!(rows(&d), ["bbrb", "bbrb"]);
         assert_eq!(covered.count(), 4);
+    }
+}
+
+#[cfg(test)]
+mod swap_tests {
+    use super::*;
+
+    #[test]
+    fn a_palette_swap_changes_every_colour_at_once() {
+        let (r, b, g) = ([255, 0, 0, 255], [0, 0, 255, 255], [0, 255, 0, 255]);
+        let mut c = Canvas::from_pixels(4, 1, vec![r, b, g, CLEAR]).unwrap();
+        assert_eq!(swap_colors(&mut c, &[(r, b), (b, r)]), 2);
+        assert_eq!(c.pixels(), [b, r, g, CLEAR]);
     }
 }

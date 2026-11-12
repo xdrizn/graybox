@@ -10,6 +10,7 @@ use figcraft_color::{ImageScaleMode, Paint, PaintKind};
 use figcraft_doc::{Document, NodeId};
 use figcraft_pixel::paint::{BrushShape, Ink, Symmetry};
 use figcraft_pixel::raster::{self, Pt};
+use figcraft_pixel::resize::{Resize, SliceFill};
 use figcraft_pixel::{Brush, Canvas, Rgba, Sprite, canvas, store};
 use serde_json::{Value, json};
 
@@ -18,6 +19,7 @@ use crate::automation::params::{boolean, color_of, get, num, opt_id, req_id};
 use crate::{Result, Session, bad, spec};
 
 mod edit;
+pub(crate) mod kit;
 
 /// The most pointer positions one stroke takes.
 const MAX_STROKE_POINTS: usize = 100_000;
@@ -75,7 +77,13 @@ pub fn specs() -> Vec<CommandSpec> {
             false,
             read
         ),
-        spec!("pixel.set", "Sprite settings", "{id, scale? (1–64: the layer takes width × scale)} → {scale}", true, settings),
+        spec!(
+            "pixel.set",
+            "Sprite settings",
+            "{id, scale? (1–64: the layer takes width × scale), resize? (middle|edges|tile: how the art regrows when the layer is resized without 9-slice), sliceFill? (tile|stretch: the 9-slice edges and middle), slicePadding? (a frame with auto layout takes the 9-slice cuts as its padding)} → {scale, resize, sliceFill, slicePadding}",
+            true,
+            settings
+        ),
         spec!(
             "pixel.mode",
             "Pixel mode",
@@ -85,12 +93,17 @@ pub fn specs() -> Vec<CommandSpec> {
         ),
     ];
     list.extend(edit::specs());
+    list.extend(kit::specs());
     list
 }
 
 /// The pixel layer `id` names and its sprite.
 fn sprite_of(cmd: &str, doc: &Document, id: NodeId) -> Result<Sprite> {
     let n = doc.get(id)?;
+    // An instance shows its main component's pixels (G16.3): those are the ones to edit.
+    if matches!(n.kind, figcraft_doc::NodeKind::Instance { .. }) {
+        return Err(bad(cmd, format!("\"{}\" is an instance: draw on its main component", n.name)));
+    }
     if !store::is_pixel(&n.plugin_data) {
         return Err(bad(cmd, format!("\"{}\" is not a pixel layer", n.name)));
     }
@@ -414,6 +427,8 @@ fn read(s: &mut Session, p: &Value) -> Result<Value> {
     let cmd = "pixel.get";
     let id = req_id(cmd, p, "id")?;
     let doc = s.doc()?;
+    // An instance shows its main's pixels: those are read.
+    let id = doc.node(id).and_then(|n| figcraft_render::pixel::source(doc, n)).map_or(id, |n| n.id);
     let sprite = sprite_of(cmd, doc, id)?;
     let mut out = serde_json::to_value(&sprite).map_err(|e| bad(cmd, e.to_string()))?;
     if boolean(p, "pixels").unwrap_or(false) {
@@ -458,9 +473,39 @@ fn settings(s: &mut Session, p: &Value) -> Result<Value> {
         // The layer keeps how many art pixels it shows (a resized layer stays resized).
         let (aw, ah) = ((n.width / f64::from(old)).round().max(1.0), (n.height / f64::from(old)).round().max(1.0));
         store::save(&mut doc.get_mut(id)?.plugin_data, &sprite);
+        kit::rescale(doc, id, &sprite, old)?;
         super::arrange::resize_cmd(s, &json!({"ids": [id.0], "width": aw * f64::from(scale), "height": ah * f64::from(scale)}))?;
     }
-    Ok(json!({"scale": sprite.scale}))
+    let text = |key: &str| get(p, key).filter(|v| !v.is_null()).map(|v| v.as_str().unwrap_or_default().to_string());
+    if let Some(v) = text("resize") {
+        sprite.resize = Resize::parse(&v).ok_or_else(|| bad(cmd, "`resize` must be middle, edges or tile"))?;
+    }
+    if let Some(v) = text("sliceFill") {
+        sprite.slice_fill = SliceFill::parse(&v).ok_or_else(|| bad(cmd, "`sliceFill` must be tile or stretch"))?;
+    }
+    let repad = match get(p, "slicePadding").filter(|v| !v.is_null()) {
+        None => false,
+        Some(v) => {
+            sprite.slice_padding = v.as_bool().ok_or_else(|| bad(cmd, "`slicePadding` must be true or false"))?;
+            sprite.slice_padding
+        }
+    };
+    let doc = s.doc_mut()?;
+    store::save(&mut doc.get_mut(id)?.plugin_data, &sprite);
+    if repad {
+        kit::repad(doc, id, &sprite)?;
+    }
+    Ok(json!({
+        "scale": sprite.scale,
+        "resize": label(&sprite.resize),
+        "sliceFill": label(&sprite.slice_fill),
+        "slicePadding": sprite.slice_padding,
+    }))
+}
+
+/// A setting as its JSON name.
+fn label<T: serde::Serialize>(v: &T) -> Value {
+    serde_json::to_value(v).unwrap_or(Value::Null)
 }
 
 fn mode(s: &mut Session, p: &Value) -> Result<Value> {

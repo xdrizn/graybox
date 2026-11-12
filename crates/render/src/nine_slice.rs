@@ -15,6 +15,10 @@ const MAX_SIDE: f64 = 4096.0;
 /// Draw `n` (at `xf`, its own transform included) 9-sliced, if it is and its size differs from its
 /// base. False when it isn't: the caller draws it as usual.
 pub(crate) fn draw(ctx: &Ctx, pix: &mut Pixmap, n: &Node, xf: Affine, depth: usize) -> bool {
+    // A pixel layer regrows its own art by whole pixels (`crate::pixel`); its layers stay put.
+    if crate::pixel::source(ctx.doc, n).is_some() {
+        return false;
+    }
     let Some((slice, source)) = effective(ctx.doc, n.id) else { return false };
     let (bw, bh) = slice.base;
     if (n.width - bw).abs() < 1e-6 && (n.height - bh).abs() < 1e-6 {

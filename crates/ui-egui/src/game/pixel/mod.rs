@@ -224,7 +224,7 @@ impl Default for Editor {
         Self {
             mode: Mode::Off,
             tool: Tool::Pencil,
-            colors: [[0x1a, 0x1c, 0x2c, 255], [0xf4, 0xf4, 0xf4, 255]],
+            colors: [[0x1b, 0x1d, 0x29, 255], [0xf3, 0xf1, 0xea, 255]],
             brush: Brush::default(),
             pixel_perfect: true,
             mirror: [false, false],
@@ -266,7 +266,16 @@ pub(crate) fn is_pixel_layer(app: &FigApp, id: NodeId) -> bool {
 
 /// Pixel mode on for layer `id`: selected, in Design, the mirror axes in its middle.
 pub(crate) fn enter(app: &mut FigApp, id: NodeId) {
-    let Some(sprite) = app.session.doc().ok().and_then(|d| d.node(id)).and_then(|n| store::load(&n.plugin_data)) else { return };
+    let Some(sprite) = app
+        .session
+        .doc()
+        .ok()
+        .and_then(|d| d.node(id))
+        .filter(|n| !matches!(n.kind, figcraft_doc::NodeKind::Instance { .. }))
+        .and_then(|n| store::load(&n.plugin_data))
+    else {
+        return;
+    };
     let same = app.pixel.mode == Mode::Edit(id);
     app.pixel.mode = Mode::Edit(id);
     app.pixel.gesture = None;

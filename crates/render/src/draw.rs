@@ -704,8 +704,9 @@ pub(crate) fn draw_layer(ctx: &Ctx, pix: &mut Pixmap, n: &Node, parent_xf: Affin
         draw_outline(&Ctx { outline_mode: true, ..*ctx }, pix, n, xf, depth);
         return;
     }
-    // Graybox: a 9-sliced layer drawn at another size than its base stretches only its middles.
-    if crate::nine_slice::draw(ctx, pix, n, xf, depth) {
+    // Graybox: a 9-sliced layer drawn at another size than its base stretches only its middles;
+    // Pixel text draws sharp on the art-pixel grid (G16.3).
+    if crate::pixel::layer(ctx, pix, n, xf, depth) {
         return;
     }
     if ctx.lod && dev.width().max(dev.height()) < lod::TINY_PX && lod::splattable_within(ctx.doc, n, 0, Some(ctx.bounds)).0 {

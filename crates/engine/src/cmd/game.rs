@@ -870,6 +870,8 @@ fn image_to_background(s: &mut Session, p: &Value) -> Result<Value> {
     let [id] = ids[..] else { return Err(bad(cmd, "Select one image layer")) };
     let doc = s.doc_mut()?;
     let frame = background_frame(doc, id).ok_or_else(|| bad(cmd, "Select an image layer inside a frame"))?;
+    // A pixel layer takes its sprite along (G16.3).
+    super::pixel::kit::to_background(doc, id, frame)?;
     let images: Vec<Paint> = doc
         .get(id)?
         .fills
@@ -944,6 +946,13 @@ fn nine_slice_set(s: &mut Session, p: &Value) -> Result<Value> {
     let mut sliced = Vec::new();
     for id in ids {
         let n = doc.get(id)?;
+        // A pixel layer (G16.3) slices in whole art pixels, auto layout or not.
+        if figcraft_pixel::store::is_pixel(&n.plugin_data) && !matches!(n.kind, NodeKind::Instance { .. }) {
+            if super::pixel::kit::slice(doc, id, enabled, insets)? {
+                sliced.push(id);
+            }
+            continue;
+        }
         if n.is_page() || matches!(n.kind, NodeKind::Text(_) | NodeKind::Section { .. }) || n.kind.bounds_follow_children() {
             return Err(bad(cmd, format!("\"{}\" can't be 9-sliced: pick an image, a shape, a frame or a component", n.name)));
         }

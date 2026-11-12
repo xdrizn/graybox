@@ -8,6 +8,8 @@ use serde_json::{Value, json};
 use crate::Session;
 use crate::cmd::file::{file_bytes, load_bytes};
 
+mod kit;
+
 fn ex(s: &mut Session, command: &str, params: Value) -> Value {
     s.execute(command, &params).unwrap()
 }

@@ -54,7 +54,7 @@ mod tests {
 
     #[test]
     fn gimp_palettes_and_hex_lists_round_trip() {
-        let colors = [[26, 28, 44, 255], [244, 244, 244, 255], [255, 0, 77, 255]];
+        let colors = [[27, 29, 41, 255], [243, 241, 234, 255], [200, 52, 71, 255]];
         assert_eq!(parse(&to_gpl("Mine", &colors)), colors);
         assert_eq!(parse(&to_hex_list(&colors)), colors);
     }

@@ -62,7 +62,7 @@ fn a_drag_with_the_pencil_draws_one_undo_step() {
     press(&mut u, b, PointerButton::Primary, false);
     u.frame(vec![]);
     for x in 1..=6 {
-        assert_eq!(pixel(&mut u, id, x, 1).as_deref(), Some("#1a1c2c"), "pixel {x}");
+        assert_eq!(pixel(&mut u, id, x, 1).as_deref(), Some("#1b1d29"), "pixel {x}");
     }
     assert_eq!(pixel(&mut u, id, 7, 1), None);
     assert_eq!(undo_labels(&u).len(), before + 1, "one stroke, one undo step");
@@ -76,7 +76,7 @@ fn the_right_button_draws_the_secondary_colour_and_the_bucket_fills() {
     press(&mut u, p, PointerButton::Secondary, true);
     press(&mut u, p, PointerButton::Secondary, false);
     u.frame(vec![]);
-    assert_eq!(pixel(&mut u, id, 3, 3).as_deref(), Some("#f4f4f4"));
+    assert_eq!(pixel(&mut u, id, 3, 3).as_deref(), Some("#f3f1ea"));
     key(&mut u, Key::G, false);
     assert_eq!(u.app.pixel.tool, Tool::Bucket);
     let q = at(&u, 10.0, 10.0);
@@ -84,8 +84,8 @@ fn the_right_button_draws_the_secondary_colour_and_the_bucket_fills() {
     press(&mut u, q, PointerButton::Primary, true);
     press(&mut u, q, PointerButton::Primary, false);
     u.frame(vec![]);
-    assert_eq!(pixel(&mut u, id, 0, 0).as_deref(), Some("#1a1c2c"));
-    assert_eq!(pixel(&mut u, id, 3, 3).as_deref(), Some("#f4f4f4"), "the other colour is a wall");
+    assert_eq!(pixel(&mut u, id, 0, 0).as_deref(), Some("#1b1d29"));
+    assert_eq!(pixel(&mut u, id, 3, 3).as_deref(), Some("#f3f1ea"), "the other colour is a wall");
 }
 
 #[test]
@@ -184,7 +184,7 @@ fn a_stroke_released_off_the_canvas_still_draws() {
     u.frame(vec![]);
     assert!(u.app.pixel.gesture.is_none(), "the stroke ended");
     for x in 2..=5 {
-        assert_eq!(pixel(&mut u, id, x, 4).as_deref(), Some("#1a1c2c"), "pixel {x}");
+        assert_eq!(pixel(&mut u, id, x, 4).as_deref(), Some("#1b1d29"), "pixel {x}");
     }
     assert_eq!(undo_labels(&u).len(), before + 1);
 }
@@ -205,7 +205,7 @@ fn a_press_that_closes_the_colour_picker_does_not_draw() {
     press(&mut u, p, PointerButton::Primary, true);
     press(&mut u, p, PointerButton::Primary, false);
     u.frame(vec![]);
-    assert_eq!(pixel(&mut u, id, 4, 4).as_deref(), Some("#1a1c2c"));
+    assert_eq!(pixel(&mut u, id, 4, 4).as_deref(), Some("#1b1d29"));
 }
 
 #[test]
@@ -337,4 +337,23 @@ fn an_image_paste_after_copying_pixels_pastes_them_into_the_sprite_not_onto_the_
     assert_eq!(u.app.session.doc().unwrap().nodes().count(), layers, "no new image layer");
     assert_eq!(undo_labels(&u).len(), before + 1, "one paste into the sprite");
     assert!(selected(&mut u, id).is_some(), "the pasted pixels are selected");
+}
+
+#[test]
+fn the_pixel_button_in_the_new_pill_makes_the_component_set_and_leaves_pixel_mode() {
+    let mut u = Ui::new(Session::new());
+    for _ in 0..3 {
+        u.frame(vec![]);
+    }
+    super::enter_from_switcher(&mut u.app);
+    u.frame(vec![]);
+    assert_eq!(u.app.pixel.mode, Mode::New);
+    super::pill::button_in_view(&mut u.app);
+    u.frame(vec![]);
+    assert_eq!(u.app.pixel.mode, Mode::Off);
+    let doc = u.app.session.doc().unwrap();
+    let sel = u.app.session.selection();
+    let [set] = sel[..] else { panic!("the set is selected: {sel:?}") };
+    assert_eq!(doc.node(set).unwrap().name, "Pixel button");
+    assert_eq!(doc.node(set).unwrap().children.len(), 3);
 }

@@ -359,11 +359,40 @@
     picker beside the panel and Replace swaps that colour everywhere in those sprites (one undo).
   - Checked in the real app on an Untitled document: marquee and wand selection with marching ants,
     a Move tool drag, the sprite layers and palette in the panel, Pixel colors replacing a colour.
+- G16.3 (2026-11-12): pixel art for game UI. Plan: the pure smart resize first (worked examples),
+  then the renderer, then the commands (9-slice in art pixels, Pixel text, Pixel button, palette
+  swap), then the panel. Built:
+  - `crates/pixel/src/resize.rs`: `fit` regrows a frame to any art size by whole pixels: without
+    9-slice the middle row and column repeat (Middle, default), the last ones repeat outward
+    (Edges) or the sprite repeats (Tile); with 9-slice the corners stay and the edges and middle
+    repeat or stretch by whole pixels. Sprites keep `resize`, `sliceFill`, `slicePadding`.
+    `transform::swap_colors` swaps several colours at once.
+  - Renderer: a pixel layer at another size than its sprite is regrown, never scaled; an instance
+    of a pixel component draws its main's pixels (`pixel::source`), so editing the main updates
+    every instance. Pixel text (`graybox.pixelText` = art scale): a text layer drawn at one pixel
+    per art pixel on its parent's art grid, each pixel ink or not, then scaled up sharp; its
+    effects come out pixel-sharp too, its opacity applies to the result.
+  - Commands: `game.nineSlice.set` on a pixel layer snaps the cuts to whole art pixels (a new
+    slice cuts a quarter of the shorter side), works with auto layout, and gives the cuts as the
+    frame's padding; `pixel.set` takes `resize`, `sliceFill`, `slicePadding` and keeps the cuts in
+    art pixels when the scale changes; `game.image.toBackground` moves a sprite onto its frame;
+    `pixel.text`; `pixel.button` (a component set State=Default/Hover/Pressed: frame with auto
+    layout, 9-sliced original art, its cuts the padding, a Pixel text label, hugging);
+    `pixel.paletteVariant` (a new variant, Palette=<value>, with colours swapped in every pixel
+    layer in it). Both starters are one undo step. Pixel commands refuse an instance.
+  - Panel: Pixel art shows "When resized: Middle / Edges / Tile", or with 9-slice "Repeat /
+    Stretch" and "Cuts as padding"; the 9-slice section reads a pixel layer's cuts in art pixels;
+    a Pixel text section for text layers (on/off, its pixel scale); a "Pixel button" button in the
+    New sprite pill; "As variant" beside Replace in the Pixel colors picker when a component is
+    selected.
+  - Checked in the real app: Pixel button from the pill (three sharp states, a longer label grows
+    the button), a sprite resized with Middle, 9-slice and Tile, the Pixel text section, and a
+    palette swap made into a variant from the Pixel colors picker.
 
 ## Decisions
 - G16 pixel art, details the spec left open (chosen as a pixel artist would expect):
   - New sprites are 32×32 at scale 4 (one art pixel = 4 page units); default colours a near-black
-    `#1a1c2c` and an off-white `#f4f4f4` (original, no third-party palette). Pixel perfect is on.
+    `#1b1d29` and an off-white `#f3f1ea` (G16.3; original, no third-party palette). Pixel perfect is on.
   - Pixel mode sits between Draw and Design in the mode switcher. Esc and Enter leave it, like Done.
   - The pixel grid shows only from 6 screen pixels per art pixel, so it never hides small art.
   - Shift-click with the pencil draws a straight line from where the last stroke ended.
@@ -380,6 +409,26 @@
     makes a new image layer.
   - G16.2: Outline draws outside the art in the first colour by default; Pixel colors lists at most
     32 colours, most used first.
+  - G16.3: the default colours are now an original near-black `#1b1d29` and warm off-white
+    `#f3f1ea` (the old pair matched a well-known palette's ends).
+  - G16.3: a pixel layer's 9-slice is the same `graybox.nineSlice` key as any layer's, in page
+    units that are whole art pixels; its base is the sprite's own size. Alt+drag scaling by whole
+    multiples is left out: the Scale field does it, and Alt+drag already resizes from the centre.
+  - G16.3: the Pixel button's label is 12 art pixels (8 broke up in a smooth font) until pixel
+    fonts (G16.6); the set doesn't clip, so a state that grows with its label stays in view. A
+    palette-swap variant is named by its new colour (`Palette=#c4833a`); rename it in the panel.
+  - G16.3: the tileset preview is the Tile resize (a pixel layer made larger shows its sprite
+    repeated); drawing in tile mode already wraps (G16.1).
+  - G16.3: Pixel text ignores the text's blend mode, and a layer whose size isn't a whole number
+    of art pixels has its art stretched by that fraction (keep pixel layers at multiples of the
+    scale; the Pixel button's label line height is whole art pixels for that reason).
+  - G16.3 review, left for the G16.6 performance pass: Pixel text is drawn again each frame (no
+    cache yet), and its ink can sit up to one art pixel outside the text's own bounds (a redraw
+    of that sliver needs an upstream bounds hook).
+  - G16.3: new cuts keep any padding beyond the old ones (the Pressed button's lower label);
+    turning "Cuts as padding" on sets the padding to the cuts. An instance of a pixel component
+    shows (and `pixel.get` reads) its main's pixels; it isn't drawn on, recoloured or sliced as
+    pixel art itself.
 - G11.4 movement (recommended option each time):
   - No physics engine: one cylinder against the world's axis-aligned boxes (two passes) plus the
     heightfield; a few hundred boxes per step is cheap at 60 Hz and the same on wasm.
@@ -780,6 +829,10 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     `shortcuts.rs`: `game::pixel::paste_events` after the key filter (an image paste while a sprite
     is edited pastes its copied pixels); `icons.rs` / `icons/draw.rs`: `Marquee`, `MagicWand`,
     `Outline`, `ReplaceColor`, and the pixel icons moved into `draw_pixel_art` (one arm in `draw`).
+  - G16.3: `render/src/draw.rs` `draw_layer`: the 9-slice hook now calls `pixel::layer` (Pixel
+    text, then `nine_slice::draw`); `render/src/nine_slice.rs` (ours) leaves pixel layers to
+    `pixel`; `engine/src/cmd/game.rs` (ours): `game.nineSlice.set` and `game.image.toBackground`
+    call `cmd::pixel::kit` for pixel layers.
 
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.

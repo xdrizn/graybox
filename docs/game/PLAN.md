@@ -210,7 +210,7 @@ Pixel layers edited in place in a Pixel mode, Aseprite-style standard tools, sma
   brush, mirror with an axis, grid, undo.
 - [x] G16.2 Selection, transform and colour: marquee, lasso, wand, move, outline, replace colour,
   palette tied to styles and variables, Selection colours, sprite layers.
-- [ ] G16.3 Smart resize, pixel 9-slice, insets as padding, Pixel text, Pixel button starter, tile mode,
+- [x] G16.3 Smart resize, pixel 9-slice, insets as padding, Pixel text, Pixel button starter, tile mode,
   components and palette-swap variants.
 - [ ] G16.4 Animation: timeline, durations, onion skin, tags, playback in Prototype and Play.
 - [ ] G16.5 Export and import: exporter trait, PNG, sheet and JSON, Unity with Live Link, PNG and sheet import.

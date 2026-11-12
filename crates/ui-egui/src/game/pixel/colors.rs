@@ -30,7 +30,8 @@ fn pixel_layers(doc: &Document, sel: &[NodeId]) -> Vec<NodeId> {
             continue;
         }
         let Some(n) = doc.node(id) else { continue };
-        if store::is_pixel(&n.plugin_data) {
+        // An instance shows its main's pixels; its own copy isn't drawn, so it is left out.
+        if store::is_pixel(&n.plugin_data) && !matches!(n.kind, figcraft_doc::NodeKind::Instance { .. }) {
             out.push(id);
         }
         todo.extend(n.children.iter().rev().copied());
@@ -117,7 +118,12 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Arc<Document>, sel: &
     if let (Some(e), Some(swatch)) = (editing, open_at) {
         // The picker floats beside the panel, level with the swatch (it is wider than the panel).
         let anchor = egui::pos2(ui.max_rect().left() - 8.0, swatch.top());
-        editing = popover(app, ui, &layers, e, anchor, row, &t);
+        // One component selected: the swap can also become a new variant of it.
+        let component = match sel {
+            [one] if doc.node(*one).is_some_and(|n| matches!(n.kind, figcraft_doc::NodeKind::Component { .. })) => Some(*one),
+            _ => None,
+        };
+        editing = popover(app, ui, (&layers, component), e, anchor, row, &t);
     } else {
         editing = None;
     }
@@ -132,15 +138,25 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Arc<Document>, sel: &
     true
 }
 
-/// The picker for the colour being changed: Replace swaps it in the art, Cancel (or a click
-/// elsewhere) closes it. The colour still being edited, or None when it closed.
-fn popover(app: &mut FigApp, ui: &Ui, layers: &[NodeId], mut e: Editing, anchor: egui::Pos2, row: egui::Rect, t: &Tokens) -> Option<Editing> {
+/// The picker for the colour being changed: Replace swaps it in the art, As variant (a component
+/// selected) makes a new variant of it with the colour swapped, Cancel (or a click elsewhere)
+/// closes it. The colour still being edited, or None when it closed.
+fn popover(
+    app: &mut FigApp,
+    ui: &Ui,
+    (layers, component): (&[NodeId], Option<NodeId>),
+    mut e: Editing,
+    anchor: egui::Pos2,
+    row: egui::Rect,
+    t: &Tokens,
+) -> Option<Editing> {
     let mut done = false;
     let mut cancel = false;
+    let mut as_variant = false;
     let area = egui::Area::new(Id::unique("graybox_pixel_color_popover")).order(egui::Order::Foreground).pivot(Align2::RIGHT_TOP).fixed_pos(anchor);
     let shown = area.show(ui.ctx(), |ui| {
         egui::Frame::popup(ui.style()).fill(t.panel).show(ui, |ui| {
-            ui.set_width(220.0);
+            ui.set_width(component.map_or(220.0, |_| 260.0));
             ui.label(format!("Replace {} in the art", canvas::to_hex(e.from)));
             let mut c = Color32::from_rgba_unmultiplied(e.to[0], e.to[1], e.to[2], e.to[3]);
             if egui::color_picker::color_picker_color32(ui, &mut c, egui::color_picker::Alpha::OnlyBlend) {
@@ -151,6 +167,12 @@ fn popover(app: &mut FigApp, ui: &Ui, layers: &[NodeId], mut e: Editing, anchor:
                 ui.painter().rect_filled(r, CornerRadius::same(5), if resp.hovered() { t.accent.gamma_multiply(0.85) } else { t.accent });
                 ui.painter().text(r.center(), Align2::CENTER_CENTER, "Replace", crate::theme::semibold(11.5), Color32::WHITE);
                 done = resp.clicked();
+                if component.is_some() {
+                    let (r3, resp3) = ui.allocate_exact_size(vec2(82.0, 24.0), Sense::click());
+                    ui.painter().rect_filled(r3, CornerRadius::same(5), if resp3.hovered() { t.hover } else { t.field });
+                    ui.painter().text(r3.center(), Align2::CENTER_CENTER, "As variant", crate::theme::regular(11.5), t.text);
+                    as_variant = resp3.on_hover_text("A new variant of this component with the colour swapped").clicked();
+                }
                 let (r2, resp2) = ui.allocate_exact_size(vec2(64.0, 24.0), Sense::click());
                 ui.painter().rect_filled(r2, CornerRadius::same(5), if resp2.hovered() { t.hover } else { t.field });
                 ui.painter().text(r2.center(), Align2::CENTER_CENTER, "Cancel", crate::theme::regular(11.5), t.text);
@@ -163,6 +185,13 @@ fn popover(app: &mut FigApp, ui: &Ui, layers: &[NodeId], mut e: Editing, anchor:
     let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
     if done {
         replace(app, layers, e.from, e.to);
+        return None;
+    }
+    if let (true, Some(id)) = (as_variant, component) {
+        if e.from != e.to {
+            let (from, to) = (canvas::to_hex(e.from), canvas::to_hex(e.to));
+            app.run("pixel.paletteVariant", json!({"id": id.0, "value": to.clone(), "swap": [[from, to]]}));
+        }
         return None;
     }
     (!cancel && !outside && !escape).then_some(e)

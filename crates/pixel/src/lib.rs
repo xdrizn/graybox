@@ -13,6 +13,7 @@ pub mod canvas;
 pub mod paint;
 pub mod palette;
 pub mod raster;
+pub mod resize;
 pub mod select;
 pub mod sprite;
 pub mod store;

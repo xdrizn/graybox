@@ -14,8 +14,18 @@ use crate::widgets::{self, Lead};
 /// Whether 9-slice can be set on `id` (as `game.nineSlice.set` takes it).
 fn sliceable(doc: &Document, id: NodeId) -> bool {
     doc.node(id).is_some_and(|n| {
+        // A pixel layer slices in art pixels, auto layout or not (G16.3).
+        if art_scale(doc, id).is_some() {
+            return true;
+        }
         !n.is_page() && !matches!(n.kind, NodeKind::Text(_) | NodeKind::Section { .. }) && !n.kind.bounds_follow_children() && n.layout.is_none()
     })
+}
+
+/// Page units per art pixel when `id` is a pixel layer (not an instance: its main is sliced).
+fn art_scale(doc: &Document, id: NodeId) -> Option<f64> {
+    let n = doc.node(id).filter(|n| !matches!(n.kind, NodeKind::Instance { .. }))?;
+    figcraft_pixel::store::load(&n.plugin_data).map(|s| f64::from(s.scale.max(1)))
 }
 
 /// The Design panel section for one selected layer that can be 9-sliced. Returns whether it drew.
@@ -33,7 +43,9 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[Node
     }
     let Some(s) = slice else { return true };
     let col = widgets::col_width(ui.available_width());
-    let [t, r, b, l] = s.insets;
+    // A pixel layer's cuts read in art pixels.
+    let unit = art_scale(doc, *id).unwrap_or(1.0);
+    let [t, r, b, l] = s.insets.map(|v| v / unit);
     let set = |app: &mut FigApp, insets: [f64; 4]| {
         app.run("game.nineSlice.set", json!({"ids": [id], "insets": insets}));
     };
@@ -44,7 +56,7 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[Node
                 if let Some(widgets::FieldEdit::Set(nv) | widgets::FieldEdit::Scrub(nv, true)) = edit {
                     let mut insets = s.insets;
                     if let Some(slot) = insets.get_mut(k) {
-                        *slot = nv.max(0.0);
+                        *slot = nv.max(0.0) * unit;
                     }
                     set(app, insets);
                 }
@@ -52,7 +64,12 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[Node
         });
     }
     let (bw, bh) = s.base;
-    widgets::note(ui, &format!("Drawn at {bw:.0} × {bh:.0}: drag the cuts on the canvas"), crate::theme::Tokens::get(ui.ctx()).text_secondary);
+    let note = if art_scale(doc, *id).is_some() {
+        "In art pixels: the edges and middle repeat or stretch by whole pixels".to_string()
+    } else {
+        format!("Drawn at {bw:.0} × {bh:.0}: drag the cuts on the canvas")
+    };
+    widgets::note(ui, &note, crate::theme::Tokens::get(ui.ctx()).text_secondary);
     true
 }
 

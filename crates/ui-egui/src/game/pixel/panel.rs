@@ -17,8 +17,21 @@ use crate::widgets::{self, Lead};
 
 /// Draws the section when exactly one pixel layer is selected. Returns whether it drew.
 pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[NodeId]) -> bool {
+    if text_section(app, ui, doc, sel) {
+        return true;
+    }
     let [id] = sel else { return false };
-    let Some(sprite) = doc.node(*id).and_then(|n| store::load(&n.plugin_data)) else { return false };
+    let Some(n) = doc.node(*id) else { return false };
+    // An instance shows its main component's pixels: they are drawn and set there.
+    if matches!(n.kind, figcraft_doc::NodeKind::Instance { .. }) {
+        if figcraft_render::pixel::source(doc, n).is_some_and(|m| m.id != *id) {
+            widgets::section_header(ui, "Pixel art", &[], false);
+            widgets::note(ui, "From its main component: edit the main to change its pixels", Tokens::get(ui.ctx()).text_secondary);
+            return true;
+        }
+        return false;
+    }
+    let Some(sprite) = store::load(&n.plugin_data) else { return false };
     let editing = app.pixel.mode == Mode::Edit(*id);
     let buttons: &[(Icon, &str)] = if super::active(app) { &[] } else { &[(Icon::PixelArt, "Edit pixels (double-click)")] };
     if widgets::section_header(ui, "Pixel art", buttons, false).is_some() {
@@ -36,11 +49,80 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[Node
     let frames = sprite.frames.len();
     let more = if frames > 1 { format!(", {frames} frames") } else { String::new() };
     widgets::note(ui, &format!("{} × {} art pixels{more}", sprite.width, sprite.height), t.text_secondary);
+    resize_rows(app, ui, doc, *id, &sprite, &t);
     if editing {
         layers(app, ui, *id, &sprite, &t);
         palette(app, ui, doc, *id, &sprite, &t);
     }
     true
+}
+
+/// The Pixel text section when only text layers are selected (G16.3): on, the text draws with no
+/// anti-aliasing, its glyphs on the art-pixel grid at the scale shown.
+fn text_section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[NodeId]) -> bool {
+    use figcraft_render::pixel::{TEXT_KEY, text_scale};
+    let texts: Vec<&figcraft_doc::Node> = sel.iter().filter_map(|i| doc.node(*i)).collect();
+    if texts.is_empty() || texts.len() != sel.len() || !texts.iter().all(|n| matches!(n.kind, figcraft_doc::NodeKind::Text(_))) {
+        return false;
+    }
+    let ids: Vec<u64> = sel.iter().map(|i| i.0).collect();
+    let scale = texts.iter().find_map(|n| text_scale(n));
+    let on = texts.iter().all(|n| n.plugin_data.contains_key(TEXT_KEY));
+    let buttons: &[(Icon, &str)] =
+        if on { &[(Icon::Minus, "Draw as smooth text")] } else { &[(Icon::Plus, "Pixel text: sharp glyphs on the art-pixel grid")] };
+    if widgets::section_header(ui, "Pixel text", buttons, !on).is_some() {
+        app.run("pixel.text", json!({"ids": ids, "on": !on}));
+    }
+    if let (true, Some(k)) = (on, scale) {
+        let col = widgets::col_width(ui.available_width());
+        crate::right::row(ui, 32.0, |ui| {
+            let edit = widgets::number_field(
+                ui,
+                Id::unique(("graybox_pixel_text_scale", sel.first().map_or(0, |i| i.0))),
+                Lead::Text("Pixel"),
+                Some(k),
+                "×",
+                col,
+                1.0,
+            );
+            if let Some(widgets::FieldEdit::Set(v) | widgets::FieldEdit::Scrub(v, true)) = edit {
+                app.run("pixel.text", json!({"ids": ids, "on": true, "scale": v.round().clamp(1.0, 64.0)}));
+            }
+        });
+    }
+    true
+}
+
+/// How the art regrows when the layer is resized (G16.3): without 9-slice the middle repeats, the
+/// edges repeat outward or the sprite tiles; with 9-slice its edges and middle tile or stretch, and
+/// on a frame with auto layout its cuts can be the padding.
+fn resize_rows(app: &mut FigApp, ui: &mut Ui, doc: &Document, id: NodeId, sprite: &Sprite, t: &Tokens) {
+    use figcraft_pixel::resize::{Resize, SliceFill};
+    let Some(n) = doc.node(id) else { return };
+    if figcraft_doc::nine_slice::NineSlice::of(n).is_some() {
+        widgets::note(ui, "9-slice edges and middle", t.text_secondary);
+        let at = usize::from(sprite.slice_fill == SliceFill::Stretch);
+        padded(ui, |ui| {
+            if let Some(i) = widgets::segmented_text(ui, &["Repeat", "Stretch"], at) {
+                app.run("pixel.set", json!({"id": id.0, "sliceFill": (["tile", "stretch"].get(i).copied().unwrap_or("tile"))}));
+            }
+            if n.layout.is_some() && widgets::checkbox(ui, sprite.slice_padding, "Cuts as padding") {
+                app.run("pixel.set", json!({"id": id.0, "slicePadding": !sprite.slice_padding}));
+            }
+        });
+        return;
+    }
+    widgets::note(ui, "When resized", t.text_secondary);
+    let at = match sprite.resize {
+        Resize::Middle => 0,
+        Resize::Edges => 1,
+        Resize::Tile => 2,
+    };
+    padded(ui, |ui| {
+        if let Some(i) = widgets::segmented_text(ui, &["Middle", "Edges", "Tile"], at) {
+            app.run("pixel.set", json!({"id": id.0, "resize": (["middle", "edges", "tile"].get(i).copied().unwrap_or("middle"))}));
+        }
+    });
 }
 
 /// A small text button; true when clicked.

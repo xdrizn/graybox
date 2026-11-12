@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::canvas::{Canvas, parse_hex};
+use crate::resize::{Resize, SliceFill};
 
 /// The most layers a sprite has.
 pub const MAX_LAYERS: usize = 64;
@@ -93,6 +94,15 @@ pub struct Sprite {
     /// The id the next layer or frame gets.
     #[serde(default)]
     pub next_id: u32,
+    /// How the art grows or shrinks without 9-slice when the layer is resized (G16.3).
+    #[serde(default)]
+    pub resize: Resize,
+    /// How its 9-slice edges and middle fill their space.
+    #[serde(default)]
+    pub slice_fill: SliceFill,
+    /// Whether a frame with auto layout takes the 9-slice cuts as its padding.
+    #[serde(default = "yes")]
+    pub slice_padding: bool,
 }
 
 impl Sprite {
@@ -109,6 +119,9 @@ impl Sprite {
             tags: Vec::new(),
             palette: Vec::new(),
             next_id: 3,
+            resize: Resize::default(),
+            slice_fill: SliceFill::default(),
+            slice_padding: true,
         })
     }
 
