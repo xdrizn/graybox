@@ -133,6 +133,8 @@ icons! {
     Outline,
     /// Graybox: replace a colour (two swatches and an arrow).
     ReplaceColor,
+    /// Graybox: shade mode (three bars rising like a colour ramp).
+    Shade,
     Home,
     Bell,
     Panels,

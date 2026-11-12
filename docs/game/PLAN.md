@@ -218,7 +218,7 @@ Pixel layers edited in place in a Pixel mode, Aseprite-style standard tools, sma
   components and palette-swap variants.
 - [x] G16.4 Animation: timeline, durations, onion skin, tags, playback in Prototype and Play.
 - [x] G16.5 Export and import: exporter trait, PNG, sheet and JSON, Unity with Live Link, PNG and sheet import.
-- [ ] G16.6 Polish: pixel fonts, shade, Claude MCP tools, performance, guide, installed copy.
+- [x] G16.6 Polish: pixel fonts, shade, Claude MCP tools, performance, guide, installed copy.
 
 ## Later
 Third-person preset (now G11), 2D platformer and top-down presets, safe-area guides and resolution presets,

@@ -20,8 +20,10 @@ use crate::{Result, Session, bad, spec};
 
 mod anim;
 mod edit;
+pub mod font;
 pub(crate) mod io;
 pub(crate) mod kit;
+mod paint;
 
 /// The most pointer positions one stroke takes.
 const MAX_STROKE_POINTS: usize = 100_000;
@@ -40,7 +42,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "pixel.stroke",
             "Draw pixels",
-            "{id, points: [[x, y], …] (art pixels, joined by lines), color? (default black), size? (1–64), shape? (square|circle), pixelPerfect? (one-pixel lines without L corners), mirror? {x?, y?} (axes in art pixels, .5 = through a pixel's middle), tile? (wrap round the edges), erase?, layer? (layer id; default the top one), frame? (index, default 0)} → {changed}",
+            "{id, points: [[x, y], …] (art pixels, joined by lines), color? (default black), size? (1–64), shape? (square|circle), pixelPerfect? (one-pixel lines without L corners), mirror? {x?, y?} (axes in art pixels, .5 = through a pixel's middle), tile? (wrap round the edges), erase?, shade? (steps along the sprite palette instead of painting: 1 the next colour, -1 the one before; without a palette, the art's colours dark to light), layer? (layer id; default the top one), frame? (index, default 0)} → {changed}",
             true,
             stroke
         ),
@@ -98,6 +100,8 @@ pub fn specs() -> Vec<CommandSpec> {
     list.extend(anim::specs());
     list.extend(io::specs());
     list.extend(kit::specs());
+    list.extend(font::specs());
+    list.extend(paint::specs());
     list
 }
 
@@ -234,7 +238,14 @@ fn edit_cel(s: &mut Session, id: NodeId, sprite: &Sprite, (layer, frame): (u32, 
     }
     if changed > 0 {
         store::put_cel(&mut doc.get_mut(id)?.plugin_data, layer, frame, &cel);
-        show(doc, id, sprite);
+        // The image fill shows the frame at rest: drawing on another frame leaves it as it is
+        // (a glyph sheet's font still follows its first frame).
+        let index = sprite.frames.iter().position(|f| f.id == frame);
+        if index == Some(figcraft_pixel::anim::frame_at(sprite, 0.0).0) {
+            show(doc, id, sprite);
+        } else if index == Some(0) {
+            font::changed(doc, id);
+        }
     }
     Ok(changed)
 }
@@ -265,6 +276,8 @@ pub fn show(doc: &mut Document, id: NodeId, sprite: &Sprite) {
     {
         doc.images.remove(&old);
     }
+    // A glyph sheet's font follows its drawing.
+    font::changed(doc, id);
 }
 
 fn create(s: &mut Session, p: &Value) -> Result<Value> {
@@ -331,9 +344,27 @@ fn stroke(s: &mut Session, p: &Value) -> Result<Value> {
         _ => return Err(bad(cmd, "`points` must be [[x, y], …] with at least one point")),
     };
     let ink = ink_of(cmd, p)?;
+    // Shade (G16.6): steps along the sprite palette instead of painting the colour.
+    let step = match get(p, "shade") {
+        None | Some(Value::Null) => 0,
+        Some(v) => v
+            .as_f64()
+            .filter(|f| f.is_finite() && f.abs() <= 16.0)
+            .ok_or_else(|| bad(cmd, "`shade` must be a whole number of palette steps from -16 to 16 (1: the next colour, -1: the one before)"))?
+            .round() as i32,
+    };
+    if step != 0 && ink.erase {
+        return Err(bad(cmd, "`shade` and `erase` don't go together: shade steps colours, erase clears them"));
+    }
     let perfect = boolean(p, "pixelPerfect").unwrap_or(false);
     let path = figcraft_pixel::paint::freehand(&points, perfect);
-    let changed = edit_cel(s, id, &sprite, cel, |c| figcraft_pixel::paint::paint(c, &path, &ink))?;
+    let changed = edit_cel(s, id, &sprite, cel, |c| {
+        if step == 0 {
+            return figcraft_pixel::paint::paint(c, &path, &ink);
+        }
+        let ramp = figcraft_pixel::paint::shade_ramp(&sprite.palette, c);
+        figcraft_pixel::paint::shade(c, &path, &ink, &ramp, step)
+    })?;
     Ok(json!({"changed": changed}))
 }
 

@@ -25,4 +25,17 @@ should resize; centre things with the layout tools, not by guessing offsets.
 - If a request is ambiguous in a way that changes the design, pick the most reasonable reading, do \
 it, and say which one you chose.
 - Do not reproduce a third-party logo, icon or product artwork; draw original work.
+
+Pixel art (run_command; list_commands with filter \"pixel\" shows them all):
+- A pixel layer is a sprite: width × height art pixels, each drawn `scale` page units big. Make one \
+with pixel.create {width, height, scale, x, y, name?} (it returns its id).
+- Draw a whole sprite in one step with pixel.paint {id, rows: [\"..kk..\", \".kffk.\", …], palette: \
+{\"k\": \"#1b1b2a\", \"f\": \"#e8b830\"}}: one character a pixel, top row first; `.` and space leave a \
+pixel empty. Draw like a pixel artist: a dark one-pixel outline, a base colour with one shade and one \
+highlight, no stray pixels, few colours. Read pixels back with pixel.get {id, pixels: true}.
+- Edits: pixel.stroke (lines, `shade` to step along the sprite palette), pixel.shape, pixel.fill, \
+pixel.replaceColor, pixel.outline; frames and animation: pixel.frame.add, pixel.tag.add; 9-slice: game.nineSlice.set.
+- Pixel fonts: pixel.font.sheet makes a glyph sheet (draw one character per cell); text layers use \
+it with pixel.text {ids, font}. pixel.text {ids} alone makes any text sharp on the art-pixel grid.
+- Export: pixel.export {id, format: png|frames|sheet|gif|unity} hands the files back.
 ";

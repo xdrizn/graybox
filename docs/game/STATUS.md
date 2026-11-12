@@ -464,6 +464,44 @@
     browser downloads) and "Import pixel art" (frame size, Import… makes the layer beside it).
   - Checked in the real app: the panel, a GIF and a Unity sheet of the bouncing ball written to a
     folder, a row sheet imported back as a 4-frame layer, a screen with it sent to Unity.
+- G16.6 (2026-11-12): polish. Plan: pixel fonts (a pure glyph-sheet → TrueType writer in
+  `crates/pixel/src/font.rs`, a text-crate hook so a redrawn font replaces its earlier version, the
+  `pixel.font.*` commands, a Font menu in Pixel text), then shade mode (`paint::shade` along the
+  sprite palette, `pixel.stroke {shade}`, a pill toggle), then `pixel.paint` and the Claude guide,
+  then a measured performance pass, then the guide `docs/game/pixel-art.md`.
+  Built:
+  - Pixel fonts: any pixel layer can be a glyph sheet (`pixel.font.set {id, name?, chars?,
+    cellWidth?, cellHeight?, baseline?, spacing?, off?}`), or `pixel.font.sheet` makes a new one
+    (6 × 8 cells, printable ASCII, a faint cell grid and baseline row drawn under half opacity so
+    they aren't glyphs). Its first frame becomes a TrueType font (each glyph its painted pixels as
+    squares, proportional: painted columns + spacing; an empty cell is half a cell wide) loaded
+    under the font's name, so text lays out, wraps and hugs in it like any font. Drawing on the
+    sheet reloads the font and re-measures the text that uses it; the app also reloads fonts
+    whose sheet changed every frame (open, undo). `pixel.text {font}` sets text layers in it at
+    one glyph pixel per art pixel. In Pixel mode a glyph sheet shows each cell's character and
+    baseline. Panel: a Pixel font section (name, cell W/H, baseline, gap, characters, "n of m
+    drawn"), and a Font menu in Pixel text. The new-sprite pill has a "Pixel font" button.
+  - Shade mode (stretch goal of G16.2): a pencil option; the main button moves each pixel it
+    covers one colour on along the sprite's palette, the other button one back (once per stroke,
+    stopping at the ends, empty pixels and colours not on the ramp untouched). Without a palette
+    the ramp is the cel's colours dark to light. `pixel.stroke {shade: ±n}`.
+  - `pixel.paint {id, rows, palette, x?, y?, clear?}`: a sprite drawn from rows of characters in
+    one undo step (a typo changes nothing), how Claude draws. The in-app Claude guide now explains
+    pixel layers, `pixel.paint`, fonts and export; MCP reaches every `pixel.*` command through
+    `run_command`, so no new MCP tool (no upstream hook in `crates/mcp`).
+  - Performance (ignored timing test `pixel_tests::perf`, 256 × 256, 8 layers, 24 frames, noisy
+    art, debug-optimised build): animation clock and sprite parsing 0.01 ms per layer per frame,
+    render cache key 0.3–0.5 ms, a frame composed on a cache miss 6–11 ms, font refresh ~0 ms, a
+    stroke 19 ms on the frame at rest (was 27–32) and 11–20 ms on another frame: drawing on a frame
+    that isn't the one at rest no longer remakes the layer's image fill. No caches added for the
+    clock or Pixel text (measured cheap; Pixel text draws at art size, scale² fewer pixels).
+  - Checked in the real app: a glyph sheet with P, l, a, y drawn, a text "Play" set in it (sharp,
+    hugging 120 × 48), the font loading again after the file was reopened, the cell labels, and a
+    shade stroke each way on a 5-colour ramp.
+  - Guide: [`pixel-art.md`](pixel-art.md) (pt-BR summary first). Review fixes: one sheet per font
+    name (a copied sheet no longer reloads the font every frame; the panel says it is a copy),
+    names avoid installed families, `shade` with `erase` is refused, the palette-less ramp keeps
+    the most used colours, the glyph guide shows on the first frame only.
 
 ## Decisions
 - G16 pixel art, details the spec left open (chosen as a pixel artist would expect):
@@ -525,6 +563,13 @@
   - G16.5 review, left: the export param parsers repeat the anim ones (small); an animated pixel
     layer resized without 9-slice exports frames at art size, so Unity stretches them (resize the
     art instead, or use 9-slice).
+  - G16.6: a pixel font's em is the cell height rounded up to a power of two (8 for 6 × 8 cells),
+    because text layout puts advances on a 1/1024-em grid: other ems give glyph pixels a fraction
+    off and hugging text rounds up a pixel. Text in a pixel font is `em × scale` points. Glyph
+    pixels are those at least half opaque (the sheet's guide tints aren't). The font is read from
+    the sheet's first frame. Font names stay unique in a file ("Pixel Font 2"). Shade's ramp is
+    the sprite palette in its own order (as Aseprite's shading ink uses a palette range), main
+    button forward. A bitmap font export for Unity was left out (time).
 - G11.4 movement (recommended option each time):
   - No physics engine: one cylinder against the world's axis-aligned boxes (two passes) plus the
     heightfield; a few hundred boxes per step is cheap at 60 Hz and the same on wasm.
@@ -937,6 +982,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     frames to the clock (Prototype and Play redraw when a frame is due).
   - G16.5: `engine/src/tests.rs`: `pixel.export` in the junk-sweep skip list (it writes files);
     `crates/pixel/Cargo.toml` (ours) uses the workspace `image` for GIFs.
+  - G16.6: `crates/text/src/fontdb.rs`: `replace_font_bytes` and `FontDb::replace_bytes` (a font
+    made in the app takes its family's slot instead of joining it), re-exported in
+    `crates/text/src/lib.rs`; `icons.rs` / `icons/draw.rs`: `Shade` (in `draw_pixel_art`).
 
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.

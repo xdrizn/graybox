@@ -23,6 +23,7 @@ enum Opt {
     Shape,
     Size,
     Perfect,
+    Shade,
     Filled,
     Contiguous,
     MirrorX,
@@ -45,7 +46,7 @@ impl Opt {
 fn options(tool: Tool) -> Vec<Opt> {
     let mut v = Vec::new();
     match tool {
-        Tool::Pencil => v.extend([Opt::Shape, Opt::Size, Opt::Perfect]),
+        Tool::Pencil => v.extend([Opt::Shape, Opt::Size, Opt::Perfect, Opt::Shade]),
         Tool::Eraser | Tool::Line | Tool::Replace => v.extend([Opt::Shape, Opt::Size]),
         Tool::Rect | Tool::Ellipse => v.extend([Opt::Shape, Opt::Size, Opt::Filled]),
         Tool::Bucket | Tool::Wand => v.push(Opt::Contiguous),
@@ -240,6 +241,9 @@ fn option(app: &mut FigApp, ui: &mut Ui, o: Opt, r: Rect, t: &Tokens) {
         _ => {
             let (icon, on, tip) = match o {
                 Opt::Perfect => (Icon::PixelPerfect, e.pixel_perfect, "Pixel-perfect lines (no L corners)"),
+                Opt::Shade => {
+                    (Icon::Shade, e.shade, "Shade: each pixel steps to the next colour of the sprite palette (right button: the one before)")
+                }
                 Opt::Filled => (Icon::Fill, e.filled, "Filled shape"),
                 Opt::Contiguous => (Icon::LinkOn, e.contiguous, "Only what touches (off: every pixel of that colour)"),
                 Opt::MirrorX => (Icon::FlipH, e.mirror[0], "Mirror left and right (drag the pink handle to move the axis)"),
@@ -250,6 +254,7 @@ fn option(app: &mut FigApp, ui: &mut Ui, o: Opt, r: Rect, t: &Tokens) {
             if tool_cell(ui, t, r, ("pixel_opt", tip), icon, on, tip).clicked() {
                 match o {
                     Opt::Perfect => e.pixel_perfect = !e.pixel_perfect,
+                    Opt::Shade => e.shade = !e.shade,
                     Opt::Filled => e.filled = !e.filled,
                     Opt::Contiguous => e.contiguous = !e.contiguous,
                     Opt::MirrorX => e.mirror[0] = !e.mirror[0],
@@ -347,7 +352,9 @@ fn new_pill(app: &mut FigApp, ui: &mut Ui) {
     let fields_w = 3.0 * 52.0 + 2.0 * 14.0 + 18.0;
     let create_w = 64.0;
     let button_w = 96.0;
-    let width = PAD * 2.0 + galley.size().x + GAP + create_w + GAP + button_w + GAP + DIVIDER + GAP + fields_w + GAP + DIVIDER + GAP + DONE_W;
+    let font_w = 84.0;
+    let width =
+        PAD * 2.0 + galley.size().x + GAP + create_w + GAP + button_w + GAP + font_w + GAP + DIVIDER + GAP + fields_w + GAP + DIVIDER + GAP + DONE_W;
     let rect = pill(ui, &mut app.ui.nav, app.canvas.rect, width, &t);
     let cy = rect.center().y;
     let mut x = rect.min.x + PAD;
@@ -374,6 +381,17 @@ fn new_pill(app: &mut FigApp, ui: &mut Ui) {
         button_in_view(app);
     }
     x += button_w + GAP;
+    // A glyph sheet for a pixel font (G16.6), drawn here and used by text layers.
+    let sheet = Rect::from_min_size(pos2(x, cy - 14.0), vec2(font_w, 28.0));
+    let resp = ui
+        .interact(sheet, ui.scope_id().with("pixel_new_font"), Sense::click())
+        .on_hover_text("A pixel font: a grid of cells to draw one character in each, used by text layers");
+    ui.painter().rect_filled(sheet, CornerRadius::same(6), if resp.hovered() { t.hover } else { t.field });
+    ui.painter().text(sheet.center(), Align2::CENTER_CENTER, "Pixel font", crate::theme::semibold(11.5), t.text);
+    if resp.clicked() {
+        font_in_view(app);
+    }
+    x += font_w + GAP;
     divider(ui, &t, x, cy);
     x += DIVIDER + GAP;
     let labels = ["W", "H", "×"];
@@ -406,6 +424,19 @@ pub(super) fn button_in_view(app: &mut FigApp) {
     let side = f64::from(12 * s);
     if app.run("pixel.button", json!({"x": (mid.x - side).round(), "y": (mid.y - side * 2.0).round(), "scale": s})).is_some() {
         leave(app);
+    }
+}
+
+/// A new pixel font's glyph sheet in the middle of the view, at the New sprite scale, edited at once.
+fn font_in_view(app: &mut FigApp) {
+    let s = app.pixel.new_size[2].clamp(1, 16);
+    let c = app.canvas.rect.center();
+    let mid = app.to_page(Pos2::new(c.x, c.y));
+    // The default sheet: 16 cells of 6 by 8 across, 6 rows.
+    let (w, h) = (f64::from(96 * s), f64::from(48 * s));
+    let made = app.run("pixel.font.sheet", json!({"x": (mid.x - w / 2.0).round(), "y": (mid.y - h / 2.0).round(), "scale": s}));
+    if let Some(id) = made.as_ref().and_then(|r| figcraft_engine::params::id(r, "id")) {
+        super::enter(app, id);
     }
 }
 

@@ -180,6 +180,45 @@ pub fn paint(cel: &mut Canvas, path: &[Pt], ink: &Ink) -> usize {
     changed
 }
 
+/// Shade (G16.6): each pixel `path` covers whose colour is on `ramp` moves `step` places along it
+/// (stopping at its ends); other colours and transparent pixels stay. A pixel moves once per
+/// stroke however often the path crosses it.
+pub fn shade(cel: &mut Canvas, path: &[Pt], ink: &Ink, ramp: &[Rgba], step: i32) -> usize {
+    let Some(last) = ramp.len().checked_sub(1) else { return 0 };
+    let mut changed = 0;
+    for (x, y) in covered(path, ink, cel.width(), cel.height()) {
+        let Some(old) = cel.get(x, y).filter(|p| p[3] > 0) else { continue };
+        let Some(i) = ramp.iter().position(|c| *c == old) else { continue };
+        let j = (i as i64).saturating_add(i64::from(step)).clamp(0, last as i64) as usize;
+        if let Some(&new) = ramp.get(j)
+            && new != old
+        {
+            cel.set(x, y, new);
+            changed += 1;
+        }
+    }
+    changed
+}
+
+/// The colours shading steps through: the sprite's own `palette` in its order, or without one the
+/// colours of `art` from dark to light.
+pub fn shade_ramp(palette: &[String], art: &Canvas) -> Vec<Rgba> {
+    let own: Vec<Rgba> = palette.iter().filter_map(|h| crate::canvas::parse_hex(h)).collect();
+    if !own.is_empty() {
+        return own;
+    }
+    // The art's colours (the 256 most used when it has more), by how many pixels have each.
+    let mut counts: std::collections::HashMap<Rgba, usize> = std::collections::HashMap::new();
+    for p in art.to_bytes().chunks_exact(4).filter(|p| p[3] > 0) {
+        *counts.entry([p[0], p[1], p[2], p[3]]).or_default() += 1;
+    }
+    let mut used: Vec<(Rgba, usize)> = counts.into_iter().collect();
+    used.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    let mut used: Vec<Rgba> = used.into_iter().take(256).map(|(c, _)| c).collect();
+    used.sort_by_key(|p| 299 * u32::from(p[0]) + 587 * u32::from(p[1]) + 114 * u32::from(p[2]));
+    used
+}
+
 /// Whether two pixels count as the same colour within `tolerance` (0: exactly; every transparent
 /// pixel is the same).
 pub fn similar(a: Rgba, b: Rgba, tolerance: u8) -> bool {
@@ -369,5 +408,42 @@ mod tests {
         assert_eq!(paint(&mut c, &freehand(&[(0, 0), (3, 0)], false), &ink), 2);
         assert_eq!(picture(&c), [".##."]);
         assert_eq!(c.get(1, 0), Some(INK));
+    }
+}
+
+#[cfg(test)]
+mod shade_tests {
+    use super::*;
+
+    const DARK: Rgba = [30, 20, 60, 255];
+    const MID: Rgba = [90, 60, 140, 255];
+    const LIGHT: Rgba = [200, 170, 240, 255];
+    const OTHER: Rgba = [10, 200, 10, 255];
+
+    #[test]
+    fn shading_moves_each_covered_pixel_one_step_along_the_ramp_once_per_stroke() {
+        let mut c = Canvas::new(4, 1).unwrap();
+        for (x, p) in [DARK, MID, LIGHT, OTHER].into_iter().enumerate() {
+            c.set(x as i64, 0, p);
+        }
+        // The path crosses pixel 0 twice: it still moves one step.
+        let path = [(0, 0), (1, 0), (2, 0), (3, 0), (0, 0)];
+        let ramp = [DARK, MID, LIGHT];
+        assert_eq!(shade(&mut c, &path, &Ink::default(), &ramp, 1), 2, "light stays at the end; other colours stay");
+        assert_eq!([c.get(0, 0), c.get(1, 0), c.get(2, 0), c.get(3, 0)], [Some(MID), Some(LIGHT), Some(LIGHT), Some(OTHER)]);
+        assert_eq!(shade(&mut c, &path, &Ink::default(), &ramp, -1), 3);
+        assert_eq!([c.get(0, 0), c.get(1, 0), c.get(2, 0)], [Some(DARK), Some(MID), Some(MID)]);
+        let mut empty = Canvas::new(2, 1).unwrap();
+        assert_eq!(shade(&mut empty, &path, &Ink::default(), &ramp, 1), 0, "transparent pixels stay transparent");
+    }
+
+    #[test]
+    fn without_a_palette_the_ramp_is_the_art_colours_from_dark_to_light() {
+        let mut c = Canvas::new(3, 1).unwrap();
+        for (x, p) in [LIGHT, DARK, MID].into_iter().enumerate() {
+            c.set(x as i64, 0, p);
+        }
+        assert_eq!(shade_ramp(&[], &c), vec![DARK, MID, LIGHT]);
+        assert_eq!(shade_ramp(&["#5a3c8c".into(), "zz".into(), "#1e143c".into()], &c), vec![MID, DARK], "the palette's own order");
     }
 }

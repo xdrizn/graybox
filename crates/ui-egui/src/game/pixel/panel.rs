@@ -53,6 +53,7 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[Node
         plays_row(app, ui, *id, &sprite);
     }
     resize_rows(app, ui, doc, *id, &sprite, &t);
+    super::font::section(app, ui, doc, *id, &sprite, &t);
     super::export::section(app, ui, doc, *id, &sprite, &t);
     if editing {
         layers(app, ui, *id, &sprite, &t);
@@ -115,6 +116,11 @@ fn text_section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[NodeId]) -
             }
         });
     }
+    let family = texts.first().and_then(|n| match &n.kind {
+        figcraft_doc::NodeKind::Text(td) => Some(td.style.font_family.as_str()),
+        _ => None,
+    });
+    super::font::text_row(app, ui, doc, &ids, family, scale);
     true
 }
 

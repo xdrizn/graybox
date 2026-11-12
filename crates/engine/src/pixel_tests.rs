@@ -9,8 +9,10 @@ use crate::Session;
 use crate::cmd::file::{file_bytes, load_bytes};
 
 mod anim;
+mod font;
 mod io;
 mod kit;
+mod perf;
 
 fn ex(s: &mut Session, command: &str, params: Value) -> Value {
     s.execute(command, &params).unwrap()
@@ -184,6 +186,9 @@ fn every_pixel_command_survives_junk_on_a_sprite() {
         json!({"format": 5, "scale": 1e308, "tag": [1], "layers": "x", "trim": "yes", "padding": -1, "extrude": 1e308, "pow2": 3, "layout": "spiral", "columns": 0, "pivot": [1e308, "x"], "ppu": -1, "name": [1], "path": 5, "data": 7, "frameWidth": 1e308, "frameHeight": -1}),
         json!({"format": "gif", "scale": 16, "layers": [4294967296u64, -1], "trim": true, "padding": 64, "extrude": 16, "pow2": true, "layout": "grid", "columns": 1e308, "pivot": [1e308, -1e308], "ppu": 1000, "data": "iVBORw0KGgo=", "frameWidth": 1, "frameHeight": 1, "duration": 1e308}),
         json!({"format": "unity", "scale": 1, "tag": "", "layers": [1], "layout": "row", "columns": 3, "pivot": [0, 1], "data": "", "path": ""}),
+        json!({"rows": [1, "x"], "palette": {"": "#fff", "ab": 3}, "clear": "x", "cellWidth": 1e308, "cellHeight": -1, "chars": [1], "baseline": "x", "spacing": 1e308, "columns": -5, "off": 3, "font": [1], "shade": "x"}),
+        json!({"rows": ["\u{1F600}x.", ""], "palette": {"\u{1F600}": "#ff0000", "x": "#00000000"}, "x": -1e308, "y": 1e308, "clear": true, "cellWidth": 128, "cellHeight": 128, "chars": "", "columns": 256, "font": "", "name": "", "shade": true}),
+        json!({"rows": [], "palette": [], "cellWidth": 1, "cellHeight": 1, "baseline": 0, "spacing": 0, "name": "j", "chars": "\u{0}\u{FFFF}", "scale": 64, "font": "j"}),
     ];
     for spec in crate::cmd::all_commands().iter().filter(|c| c.id.starts_with("pixel.")) {
         for j in &junk {

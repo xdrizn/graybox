@@ -141,6 +141,10 @@ fn draw_edit(app: &mut FigApp, painter: &egui::Painter, id: figcraft_doc::NodeId
     if app.pixel.grid && zoom >= GRID_FROM {
         grid(app, painter, xf, w, h, zoom);
     }
+    // Only the first frame makes the font: the guide shows there.
+    if d.frame == 0 {
+        glyph_guide(app, painter, id, xf, (w, h), &t);
+    }
     let outline = Stroke::new(1.0, t.accent);
     painter.add(Shape::closed_line(q.to_vec(), outline));
     brush_preview(app, painter, xf, &d, zoom);
@@ -191,7 +195,8 @@ fn preview_key(app: &FigApp, base: u64, shift: bool) -> u64 {
         Gesture::Move { from, to } => (2u8, from, to).hash(&mut h),
         _ => return base,
     }
-    (e.tool, e.colors, e.brush.size, e.brush.shape == figcraft_pixel::BrushShape::Circle, e.pixel_perfect, e.mirror, e.axis, e.tile).hash(&mut h);
+    (e.tool, e.colors, e.brush.size, e.brush.shape == figcraft_pixel::BrushShape::Circle, e.pixel_perfect, e.shade, e.mirror, e.axis, e.tile)
+        .hash(&mut h);
     h.finish()
 }
 
@@ -201,7 +206,14 @@ fn preview_cel(app: &FigApp, d: &super::Decoded, shift: bool) -> Canvas {
     match &app.pixel.gesture {
         Some(Gesture::Stroke { points, secondary, erase }) => {
             let perfect = app.pixel.pixel_perfect && app.pixel.brush.size == 1;
-            paint(&mut c, &freehand(points, perfect), &ink(&app.pixel, *secondary, *erase));
+            let (path, ink) = (freehand(points, perfect), ink(&app.pixel, *secondary, *erase));
+            match super::shade_step(&app.pixel, *secondary, *erase) {
+                0 => paint(&mut c, &path, &ink),
+                step => {
+                    let ramp = figcraft_pixel::paint::shade_ramp(&d.sprite.palette, &c);
+                    figcraft_pixel::paint::shade(&mut c, &path, &ink, &ramp, step)
+                }
+            };
         }
         Some(Gesture::Shape { from, to, secondary }) => {
             let kind = match app.pixel.tool {
@@ -225,6 +237,45 @@ fn preview_cel(app: &FigApp, d: &super::Decoded, shift: bool) -> Canvas {
         transform::clip_to(&mut c, &d.cel, mask);
     }
     c
+}
+
+/// On a glyph sheet (G16.6): each cell's character in its corner and its baseline, so the artist
+/// sees which letter goes where. Hidden while cells are too small on screen to read.
+fn glyph_guide(app: &FigApp, painter: &egui::Painter, id: figcraft_doc::NodeId, xf: Affine, (w, h): (f64, f64), t: &Tokens) {
+    use figcraft_pixel::font::{self, Font};
+    let Ok(doc) = app.session.doc() else { return };
+    let Some(f) = doc.node(id).and_then(|n| n.plugin_data.get(font::KEY)).and_then(|s| Font::load(s)) else { return };
+    let (cw, ch) = (f64::from(f.cell_width), f64::from(f.cell_height));
+    let cols = (w / cw).floor().max(0.0) as u32;
+    let cell_px = art_to_screen(app, xf, 0.0, 0.0).distance(art_to_screen(app, xf, 0.0, ch));
+    if cols == 0 || cell_px < 20.0 {
+        return;
+    }
+    let size = (cell_px * 0.22).clamp(8.0, 13.0);
+    let clip = painter.clip_rect();
+    let base = Stroke::new(1.0, t.accent.gamma_multiply(0.45));
+    // A small dark chip under each label, so it reads on the checkerboard and on the art.
+    let chip = Color32::from_black_alpha(130);
+    let ink = Color32::from_white_alpha(210);
+    for (i, c) in f.chars.chars().enumerate().take(font::MAX_CHARS) {
+        let i = i as u32;
+        let (x0, y0) = (f64::from(i % cols) * cw, f64::from(i / cols) * ch);
+        if y0 + ch > h {
+            break;
+        }
+        let (a, b) = (art_to_screen(app, xf, x0, y0), art_to_screen(app, xf, x0 + cw, y0 + ch));
+        if !Rect::from_two_pos(a, b).intersects(clip) {
+            continue;
+        }
+        let by = y0 + f64::from(f.baseline);
+        painter.line_segment([art_to_screen(app, xf, x0, by), art_to_screen(app, xf, x0 + cw, by)], base);
+        if !c.is_whitespace() && !c.is_control() {
+            let galley = painter.layout_no_wrap(c.to_string(), egui::FontId::proportional(size), ink);
+            let at = a + egui::vec2(1.0, 1.0);
+            painter.rect_filled(Rect::from_min_size(at, galley.size() + egui::vec2(4.0, 0.0)), egui::CornerRadius::same(2), chip);
+            painter.galley(at + egui::vec2(2.0, 0.0), galley, ink);
+        }
+    }
 }
 
 /// The pixel grid: a faint line between every art pixel (only lines on screen are drawn).
@@ -255,6 +306,8 @@ fn brush_preview(app: &FigApp, painter: &egui::Painter, xf: Affine, d: &super::D
     let alt = painter.ctx().input(|i| i.modifiers.alt);
     let tool = if alt { Tool::Eyedropper } else { app.pixel.tool };
     let single = matches!(tool, Tool::Bucket | Tool::Eyedropper);
+    // Shade paints no colour of its own: the brush shows as outlines only.
+    let shading = !alt && super::shade_step(&app.pixel, false, false) != 0;
     let mut i = ink(&app.pixel, false, tool == Tool::Eraser);
     if single {
         i.brush = figcraft_pixel::Brush::default();
@@ -262,7 +315,7 @@ fn brush_preview(app: &FigApp, painter: &egui::Painter, xf: Affine, d: &super::D
     }
     let cells = covered(&[at], &i, d.sprite.width, d.sprite.height);
     let fill: Rgba = i.color;
-    let tint = if tool == Tool::Eraser || single {
+    let tint = if tool == Tool::Eraser || single || shading {
         Color32::TRANSPARENT
     } else {
         Color32::from_rgba_unmultiplied(fill[0], fill[1], fill[2], (u16::from(fill[3]) * 3 / 4) as u8)
@@ -279,7 +332,7 @@ fn brush_preview(app: &FigApp, painter: &egui::Painter, xf: Affine, d: &super::D
         if tint != Color32::TRANSPARENT {
             painter.add(Shape::convex_polygon(r.to_vec(), tint, Stroke::NONE));
         }
-        if single || zoom >= 4.0 && cells.len() <= 4 {
+        if single || shading || zoom >= 4.0 && cells.len() <= 4 {
             painter.add(Shape::closed_line(r.to_vec(), shadow));
             painter.add(Shape::closed_line(r.iter().map(|p| *p + egui::vec2(0.5, 0.5)).collect(), edge));
         }

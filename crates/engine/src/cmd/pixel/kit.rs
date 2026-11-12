@@ -19,7 +19,7 @@ pub(super) fn specs() -> Vec<CommandSpec> {
         spec!(
             "pixel.text",
             "Pixel text",
-            "{ids? (text layers; default the selection), on? (default true), scale? (art scale 1–64; default the scale of the pixel art it sits in or beside, else 4)}  draws the text with no anti-aliasing, its glyphs on the art-pixel grid → {ids}",
+            "{ids? (text layers; default the selection), on? (default true), scale? (art scale 1–64; default the scale of the pixel art it sits in or beside, else 4), font? (a pixel font of the file by name: one glyph pixel becomes one art pixel)}  draws the text with no anti-aliasing, its glyphs on the art-pixel grid → {ids}",
             true,
             text
         ),
@@ -174,14 +174,31 @@ fn text(s: &mut Session, p: &Value) -> Result<Value> {
             return Err(bad(cmd, format!("\"{}\" isn't a text layer", n.name)));
         }
     }
-    for id in &ids {
-        let scale = given.or_else(|| around(doc, *id)).unwrap_or(4);
+    let font = match get(p, "font").filter(|v| !v.is_null()) {
+        None => None,
+        Some(Value::String(name)) => Some(name.clone()),
+        Some(_) => return Err(bad(cmd, "`font` must be the name of a pixel font")),
+    };
+    let scales: Vec<u32> = ids.iter().map(|id| given.or_else(|| around(doc, *id)).unwrap_or(4)).collect();
+    // Each layer's font settings at its scale, all checked before anything changes.
+    let mut set = Vec::new();
+    for (id, &scale) in ids.iter().zip(&scales) {
+        if let Some(name) = &font {
+            let props =
+                super::font::text_props(doc, name, scale).ok_or_else(|| bad(cmd, format!("there's no pixel font \"{name}\" in this file")))?;
+            set.push((*id, props));
+        }
+    }
+    for (id, scale) in ids.iter().zip(scales) {
         let n = doc.get_mut(*id)?;
         if on {
             n.plugin_data.insert(TEXT_KEY.into(), scale.to_string());
         } else {
             n.plugin_data.remove(TEXT_KEY);
         }
+    }
+    for (id, props) in set {
+        s.execute("node.set", &json!({"ids": [id.0], "props": props}))?;
     }
     Ok(json!({"ids": ids.iter().map(|i| i.0).collect::<Vec<_>>()}))
 }

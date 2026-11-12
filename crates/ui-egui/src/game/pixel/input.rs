@@ -268,6 +268,10 @@ fn commit_stroke(app: &mut FigApp, id: figcraft_doc::NodeId, d: &super::Decoded,
     if let Some(o) = p.as_object_mut() {
         o.insert("points".into(), json!(points.iter().map(|(x, y)| [*x, *y]).collect::<Vec<_>>()));
         o.insert("pixelPerfect".into(), json!(app.pixel.pixel_perfect && app.pixel.brush.size == 1));
+        let step = super::shade_step(&app.pixel, secondary, erase);
+        if step != 0 {
+            o.insert("shade".into(), json!(step));
+        }
     }
     app.pixel.last = points.last().copied();
     app.run("pixel.stroke", p);

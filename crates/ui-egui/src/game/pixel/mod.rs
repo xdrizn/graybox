@@ -17,6 +17,7 @@ use crate::icons::Icon;
 pub(crate) mod colors;
 mod draw;
 mod export;
+mod font;
 mod input;
 mod panel;
 mod pill;
@@ -181,6 +182,8 @@ pub struct Editor {
     pub(crate) colors: [Rgba; 2],
     pub(crate) brush: Brush,
     pub(crate) pixel_perfect: bool,
+    /// Shade mode (G16.6): the pencil steps colours along the sprite palette instead of painting.
+    pub(crate) shade: bool,
     /// Mirror left/right, up/down.
     pub(crate) mirror: [bool; 2],
     /// The mirror axes, doubled (half pixels); set to the middle when a sprite is entered.
@@ -242,6 +245,7 @@ impl Default for Editor {
             colors: [[0x1b, 0x1d, 0x29, 255], [0xf3, 0xf1, 0xea, 255]],
             brush: Brush::default(),
             pixel_perfect: true,
+            shade: false,
             mirror: [false, false],
             axis: [0, 0],
             tile: false,
@@ -483,4 +487,14 @@ pub(crate) fn step_brush(e: &mut Editor, up: bool) {
 pub(crate) fn toggle_shape(e: &mut Editor) {
     let shape = if e.brush.shape == BrushShape::Square { BrushShape::Circle } else { BrushShape::Square };
     e.brush = Brush::new(e.brush.size, shape);
+}
+
+/// The palette steps a stroke shades by (G16.6): the pencil in shade mode moves one colour on
+/// with the main button and one back with the other; 0 paints as usual.
+pub(crate) fn shade_step(e: &Editor, secondary: bool, erase: bool) -> i32 {
+    match (e.shade && e.tool == Tool::Pencil && !erase, secondary) {
+        (false, _) => 0,
+        (true, false) => 1,
+        (true, true) => -1,
+    }
 }

@@ -413,3 +413,26 @@ fn play_runs_the_frames_of_the_current_tag_and_any_click_in_the_timeline_stops_i
     super::timeline::toggle_play(&mut u.app);
     assert!(u.app.pixel.playing.is_none());
 }
+
+#[test]
+fn shade_mode_steps_along_the_palette_with_either_button() {
+    let (mut u, id) = editing();
+    u.app.session.execute("pixel.palette.set", &json!({"id": id, "colors": ["#1e143c", "#5a3c8c", "#c8aaf0"]})).unwrap();
+    let rows = vec!["mmmm"; 2];
+    u.app.session.execute("pixel.paint", &json!({"id": id, "palette": {"m": "#5a3c8c"}, "rows": rows})).unwrap();
+    u.app.pixel.shade = true;
+    drag(&mut u, (0.0, 0.0), (3.0, 0.0));
+    let p = at(&u, 0.0, 1.0);
+    u.frame(vec![Event::PointerMoved(p)]);
+    press(&mut u, p, PointerButton::Secondary, true);
+    press(&mut u, p, PointerButton::Secondary, false);
+    u.frame(vec![]);
+    assert_eq!(pixel(&mut u, id, 3, 0).as_deref(), Some("#c8aaf0"), "the main button: the next colour");
+    assert_eq!(pixel(&mut u, id, 0, 1).as_deref(), Some("#1e143c"), "the other button: the one before");
+    assert_eq!(pixel(&mut u, id, 1, 1).as_deref(), Some("#5a3c8c"));
+    assert_eq!(pixel(&mut u, id, 5, 5), None, "shading never paints empty pixels");
+    // Shade is the pencil's: the eraser still erases.
+    key(&mut u, Key::E, false);
+    drag(&mut u, (1.0, 1.0), (1.0, 1.0));
+    assert_eq!(pixel(&mut u, id, 1, 1), None);
+}

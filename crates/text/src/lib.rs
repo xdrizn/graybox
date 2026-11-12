@@ -20,6 +20,8 @@ pub use fontdb::{
     family_style_weights, family_styles, find_face, has_family, installed_fonts_known, load_font_bytes, load_local_font, local_only, no_coords,
     opt_out_of_system_fonts, rescan_system_fonts, scan_system_fonts, scan_system_fonts_on_demand, system_fonts_scanned, take_wanted_local_fonts,
 };
+// Graybox: pixel fonts drawn in the app replace their earlier version (G16.6).
+pub use fontdb::replace_font_bytes;
 pub use layout::{Decoration, Glyph, Line, TextLayout, layout};
 pub use onpath::OnPath;
 
