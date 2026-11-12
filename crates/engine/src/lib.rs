@@ -355,6 +355,8 @@ mod frame_label_tests;
 #[cfg(test)]
 mod frame_tests;
 #[cfg(test)]
+mod frame_work_tests; // Graybox: working inside a frame (G9)
+#[cfg(test)]
 mod frames_behaviour_tests;
 #[cfg(test)]
 mod fx_behaviour_tests;

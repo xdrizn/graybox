@@ -78,8 +78,11 @@ impl Session {
         // layers in it is like the canvas (a press starts a marquee inside it) unless the frame is
         // selected; an empty frame (or a widget, or a board object such as a sticky) is picked and
         // dragged.
+        // Graybox: a plain frame that is the one layer selected marquees too (working inside it:
+        // `frame_work`); the "unless selected" above holds for the rest (components, instances,
+        // several selected layers).
         let board_background = |leaf: NodeId| {
-            !sel.contains(&leaf)
+            (!sel.contains(&leaf) || super::frame_work::only_artboard_selected(&doc, page, &sel))
                 && doc.node(leaf).is_some_and(|n| {
                     n.parent == Some(page) && n.kind.is_frame_like() && !n.children.is_empty() && !crate::widgets::is_widget(n) && !n.is_board_atom()
                 })
@@ -116,6 +119,8 @@ impl Session {
                 if label.is_none()
                     && !ev.shift
                     && !ev.cmd
+                    // Graybox: not on a selected frame with layers: its background marquees.
+                    && !super::frame_work::only_artboard_selected(&doc, page, &sel)
                     && behind_sel(target)
                     && selection_box(&doc, &sel).is_some_and(|q| in_quad(&q, ev.p())) =>
             {

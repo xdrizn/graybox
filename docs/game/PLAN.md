@@ -153,6 +153,10 @@ Death are only *examples* in the starter kit, never required.
 - [x] The Pen shows no selection box while drawing; a click's wobble (8 px) makes no curve.
 - [x] Join selection welds the meeting ends of several layers (an arrow of three lines).
 - [x] Cmd/Ctrl-drag from a frame's background selects the layers inside it.
+- [x] Working inside a frame needs no Ctrl: with a top-level frame selected (or a layer in it, or the view
+  zoomed onto it) a click selects the layer under the pointer, a drag on its empty background draws a
+  marquee (never moves the frame), the frame shows no hover outline over its background, and the frame
+  moves by its name label.
 - [x] An upright line shows its length as H.
 - [x] No Game settings button beside Play; game sections in the Prototype tab use the panel's headers.
 - [ ] Line resized with Shift "behaves strangely": not reproduced (dragging an end with Shift is fine).

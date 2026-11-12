@@ -242,6 +242,8 @@ impl Session {
                 }
                 widget_hover = leaf.map(|l| crate::widgets::hovered_at(&doc, l, ev.p())).unwrap_or_default();
                 hover = label_at(&doc, page, &self.tool.labels, ev.p()).or_else(|| leaf.map(|leaf| select_target(&doc, leaf, &sel, ev.cmd)));
+                // Graybox: a frame worked in shows no hover over its background (G9).
+                hover = self.quiet_frame_hover(&doc, page, &sel, hover, leaf, ev.p());
                 // Alt over a selected layer: a drag from here duplicates it.
                 if ev.alt && !self.tool.dev_mode && tool == ToolId::Move && hover.is_some_and(|h| sel.contains(&h) && !locked_in(&doc, h)) {
                     cursor = Cursor::Copy;

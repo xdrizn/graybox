@@ -291,7 +291,10 @@ impl Session {
             return Ok(());
         }
         let mut sel = if additive { self.selection() } else { Vec::new() };
-        if !sel.contains(&board) {
+        if additive && before.contains(&board) {
+            // Graybox: Shift-click on the background of a selected frame takes it out (G9).
+            sel.retain(|s| *s != board);
+        } else if !sel.contains(&board) {
             sel.push(board);
         }
         self.set_selection(sel);

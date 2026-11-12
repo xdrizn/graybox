@@ -22,6 +22,7 @@ use crate::{Result, Session, textedit};
 mod click;
 mod drag;
 mod draw;
+mod frame_work; // Graybox: working inside a frame (G9)
 mod handles;
 mod keys;
 mod pen;

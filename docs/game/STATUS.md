@@ -3,6 +3,17 @@
 **Current milestone:** G7 — Share (and G0.3, G2.3 leftovers)
 
 ## Done
+- G9 working inside a frame (2026-11-12, owner's report): with a top-level **frame** (not a component,
+  instance, widget, board object or empty frame) that has layers in it **selected**, a press on its empty
+  background draws a marquee of the layers inside (no Ctrl; it used to drag the frame), a press on a layer in
+  it selects that layer directly (already so), and the frame moves by its **name label** (and an empty frame
+  by its body). The frame's hover outline is hidden over its background while it is worked in: selected, a
+  layer in it selected, or the view zoomed onto it (the frame covers 70 % of the viewport along an axis; an
+  unselected frame still marquees and a click selects it, as before). The resize handles on its edges and
+  corners work as before. Several selected layers are still dragged together from a gap; Shift-click on the
+  background of a selected frame takes it out. Logic:
+  `crates/engine/src/canvas/tools/frame_work.rs` (ours); tests `frame_work_tests.rs`; checked in the real
+  app at 100 % and zoomed on a scratch frame (marquee, click, label drag, Shift).
 - G9 nested pages (2026-11-12): the **Pages list is the same tree as the Docs tab**, and pages can sit
   inside other pages. Every page keeps its own canvas; nesting only organises the list. Data in
   `crates/doc/src/page_tree.rs` (ours): `Document::page_tree` = each nested page's parent + the collapsed
@@ -763,6 +774,10 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   by position (9-slice thirds) until set by hand (`GameSettings::anchored`); `game.anchors.auto`.
 - `crates/ui-egui/src/panels/right.rs` `position_fields`: `game::anchor_ui` (Figma-like constraints
   with a clickable box; "Anchor layers by position" for a frame); `constraints_row`/`pretty` kept unused.
+- `crates/engine/src/canvas/tools/drag.rs` `move_down` (`board_background`, and the selection-box
+  fallback) and `pointer.rs` `hover`: a selected top-level frame with layers marquees instead of being
+  dragged, and shows no hover over its background (`tools/frame_work.rs`, new, `mod` in `tools.rs`;
+  `frame_work_tests` in `lib.rs`); `draw.rs` `board_click`: Shift-click takes a selected frame out.
 - Upstream tests changed for position anchoring: `history_behaviour_tests` scene and
   `canvas_fixes_tests::a_selected_layer_shows_its_constraint_guides_in_its_frame` anchor by hand.
 - `crates/engine/src/shift_select.rs` (new, `mod` in `lib.rs`) and `canvas/tools/drag.rs` press: Shift-click
