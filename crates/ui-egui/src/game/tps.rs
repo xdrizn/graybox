@@ -10,7 +10,7 @@ use figcraft_game::tps::{ClipId, Tps};
 use serde_json::{Value, json};
 
 /// The line at the bottom of Play while the third-person game runs.
-pub(crate) const HELP: &str = "WASD: move  ·  mouse: camera  ·  Space: jump  ·  Shift: run  ·  C: crouch  ·  F10 / Del: editor";
+pub(crate) const HELP: &str = "WASD: move  ·  mouse: camera  ·  Space: jump  ·  Shift: run  ·  C: crouch  ·  Ctrl: roll  ·  F10 / Del: editor";
 /// The same while the clip preview (debug builds) shows a clip.
 const PREVIEW_HELP: &str = "Clip preview  ·  F6 / Shift+F6: next / previous clip  ·  F7: end  ·  mouse: camera  ·  F10 / Del: editor";
 
@@ -104,6 +104,7 @@ pub(crate) fn inspect(play: &Play) -> Option<Value> {
         "cameraYaw": tps.camera.yaw, "cameraPitch": tps.camera.pitch,
         "clip": tps.hero.animator.current().name(), "preview": tps.hero.animator.previewing().map(ClipId::name),
         "weapon": tps.hero.animator.weapon().name(), "weaponInHand": tps.hero.animator.in_hand(),
+        "action": tps.hero.moves.action.name(), "stamina": tps.hero.moves.stamina,
         "paused": tps.paused, "captured": play.captured, "ticks": tps.ticks(),
     }))
 }

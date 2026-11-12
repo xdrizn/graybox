@@ -1,7 +1,7 @@
 //! The orbit camera: turned by the mouse and the right stick on its own, the hero always centred.
 //!
-//! PLACEHOLDER (G11.1): follows exactly, no easing, pulls up out of the ground only. G11.4 owns
-//! this file (easing behind the hero after a while, collision with props, bow aim, lock-on).
+//! G11.4: it stops short of walls, trunks and hills between it and the hero. Still to come (G11.6):
+//! easing back behind the hero after a while, the bow aim over the shoulder, lock-on.
 use super::world::World;
 use glam::Vec3;
 
@@ -14,6 +14,10 @@ const DISTANCE: f32 = 4.5;
 const FOCUS_HEIGHT: f32 = 1.0;
 /// The camera never goes lower than this above the ground.
 const GROUND_CLEARANCE: f32 = 0.3;
+/// When something is in the way, the camera stops this far in front of it, and never closer to the
+/// hero's middle than `MIN_DISTANCE`.
+const NEAR_GAP: f32 = 0.25;
+const MIN_DISTANCE: f32 = 0.6;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct OrbitCamera {
@@ -55,7 +59,13 @@ impl OrbitCamera {
     /// Where the camera is and what it looks at, for a hero whose feet are at `feet`.
     pub fn eye_and_target(&self, feet: Vec3, world: &World) -> (Vec3, Vec3) {
         let target = feet + Vec3::Y * FOCUS_HEIGHT;
-        let mut eye = target - self.direction() * self.distance.clamp(1.0, 12.0);
+        let distance = self.distance.clamp(1.0, 12.0);
+        let mut eye = target - self.direction() * distance;
+        // G11.4: stop short of a wall, a trunk or a hill between the hero and the camera.
+        let clear = super::collide::clear_sight(world, target, eye);
+        if clear < 1.0 {
+            eye = target - self.direction() * (clear * distance - NEAR_GAP).max(MIN_DISTANCE);
+        }
         let floor = world.ground_height(eye.x, eye.z) + GROUND_CLEARANCE;
         if eye.y < floor {
             eye.y = floor;

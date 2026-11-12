@@ -226,7 +226,8 @@ fn slerp(a: Quat, b: Quat, t: f32) -> Quat {
     if q.is_finite() && q.length_squared() > 1e-6 { q.normalize() } else { b }
 }
 
-fn smooth(t: f32) -> f32 {
+/// Smoothstep on 0..1 (clamped): eases in and out.
+pub(crate) fn smooth(t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }

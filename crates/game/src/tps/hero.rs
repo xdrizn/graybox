@@ -4,6 +4,7 @@
 //! and blend clips. G11.4 owns how the state changes (`controller.rs`).
 use super::animator::{Animator, Drive, Weapon};
 use super::clip::ClipId;
+use super::controller::Moves;
 use super::rig::Pose;
 use glam::{Quat, Vec3};
 
@@ -33,6 +34,8 @@ pub struct Hero {
     pub(crate) previous_facing: f32,
     /// Chooses and blends the clips (G11.3); stepped after each move.
     pub animator: Animator,
+    /// Climbing, rolling, stamina… (G11.4).
+    pub moves: Moves,
 }
 
 impl Hero {
@@ -46,6 +49,7 @@ impl Hero {
             previous_position: position,
             previous_facing: 0.0,
             animator: Animator::new(),
+            moves: Moves::default(),
         }
     }
 

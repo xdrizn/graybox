@@ -24,6 +24,8 @@ pub struct Input {
     pub reload: bool,
     pub heal: bool,
     pub respawn: bool,
+    /// Third person (G11.4): a roll / dodge press.
+    pub roll: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]

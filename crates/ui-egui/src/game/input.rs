@@ -64,5 +64,18 @@ pub(crate) fn read(i: &InputState, settings: &GameSettings, held: u32, pressed: 
         reload: edge("reload"),
         heal: edge("heal"),
         respawn: edge("respawn"),
+        roll: edge_or(i, settings, "roll", ROLL_KEYS, pressed),
+    }
+}
+
+/// Third person: roll with Ctrl or the controller's X when the file binds no "roll" of its own.
+const ROLL_KEYS: &[&str] = &["Control", "Gamepad X"];
+
+/// A press of `name` as the file binds it, or of `defaults` for files made before the action existed.
+fn edge_or(i: &InputState, settings: &GameSettings, name: &str, defaults: &[&str], buttons: u32) -> bool {
+    if settings.bindings.contains_key(name) {
+        action(i, settings, name, buttons, true)
+    } else {
+        defaults.iter().any(|key| binding(i, key, buttons, true))
     }
 }

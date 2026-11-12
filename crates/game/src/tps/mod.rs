@@ -7,12 +7,13 @@
 //! Who owns which file (so phases can be built side by side):
 //! - G11.2 world: `world.rs` (and new files for terrain, props, climbable tags).
 //! - G11.3 hero and animation: `hero.rs` (the pose), `rig.rs`, `clip.rs`, `clips.rs`, `animator.rs`.
-//! - G11.4 movement and camera: `controller.rs`, `camera.rs`.
+//! - G11.4 movement and camera: `controller.rs`, `collide.rs`, `camera.rs`.
 //! - G11.5 combat: new files, plus the events and variables of this module.
 mod animator;
 mod camera;
 mod clip;
 mod clips;
+mod collide;
 mod controller;
 mod hero;
 mod layout;
@@ -30,6 +31,7 @@ pub use animator::{Animator, Drive, LOCOMOTION, Look, Weapon, locomotion_weights
 pub use camera::{OrbitCamera, PITCH_MAX, PITCH_MIN};
 pub use clip::{Clip, ClipId, Ease, Key, Layer, Mode};
 pub use clips::clip;
+pub use controller::{Action, Moves, Presses, STAMINA_MAX};
 pub use hero::{HEIGHT as HERO_HEIGHT, Hero, HeroPose, RADIUS as HERO_RADIUS};
 pub use layout::{ROCK_MAX, TREE_MAX};
 pub use props::{
@@ -41,6 +43,8 @@ pub use world::{HALF_EXTENT, World};
 
 #[cfg(test)]
 mod animation_tests;
+#[cfg(test)]
+mod movement_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
@@ -68,8 +72,8 @@ pub struct Tps {
     pub hero: Hero,
     pub camera: OrbitCamera,
     world: World,
-    /// A jump pressed since the last step (a press shorter than a step is not lost).
-    pending_jump: bool,
+    /// Presses since the last step (a press shorter than a step is not lost): jump, roll.
+    pending: Presses,
 }
 
 impl Default for Tps {
@@ -84,7 +88,7 @@ impl Default for Tps {
             hero,
             camera: OrbitCamera::default(),
             world,
-            pending_jump: false,
+            pending: Presses::default(),
         }
     }
 }
@@ -103,20 +107,23 @@ impl Tps {
         if self.paused {
             self.input.look = [0.0; 2];
             self.input.jump = false;
-            self.pending_jump = false;
+            self.input.roll = false;
+            self.pending = Presses::default();
             return 0;
         }
         self.camera.turn(self.input.look);
         self.input.look = [0.0; 2];
-        self.pending_jump |= std::mem::take(&mut self.input.jump);
+        self.pending.jump |= std::mem::take(&mut self.input.jump);
+        self.pending.roll |= std::mem::take(&mut self.input.roll);
         let steps = self.clock.advance(dt);
         for _ in 0..steps {
             self.ticks = self.ticks.saturating_add(1);
-            let jump = std::mem::take(&mut self.pending_jump);
+            let presses = std::mem::take(&mut self.pending);
             // The pose viewer (debug) shows a clip with the hero standing still.
-            let input = if self.hero.animator.previewing().is_some() { Input { forward: 0.0, strafe: 0.0, ..self.input } } else { self.input };
-            let jump = jump && self.hero.animator.previewing().is_none();
-            controller::step(&mut self.hero, &input, self.camera.yaw, &self.world, jump, DT);
+            let previewing = self.hero.animator.previewing().is_some();
+            let input = if previewing { Input { forward: 0.0, strafe: 0.0, ..self.input } } else { self.input };
+            let presses = if previewing { Presses::default() } else { presses };
+            controller::step(&mut self.hero, &input, self.camera.yaw, &self.world, presses, DT);
             self.hero.animate(input.crouch, DT);
         }
         steps

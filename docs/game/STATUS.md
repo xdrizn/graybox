@@ -3,6 +3,37 @@
 **Current milestone:** G7 — Share (and G0.3, G2.3 leftovers)
 
 ## Done
+- G11.4 (2026-11-12, asked by Adriel after trying G11.3: "the hero walks through things, does not
+  climb, does not attack"): movement and camera.
+  - Collision (`tps/collide.rs`): the hero is a standing cylinder; the world's solid boxes push it out
+    and cancel the part of its speed that runs into them; their tops are ground (it stands on crates,
+    the tower's base, the wall's top), also after a long fall; a step of 0.3 m is walked up; downhill it
+    keeps its feet on the ground instead of hopping.
+  - Controller (`tps/controller.rs`, rewritten): jump with 0.12 s of coyote time and a 0.12 s buffered
+    press; Ctrl rolls (a dodge, 15 stamina), and Ctrl just before landing turns the landing into a roll;
+    a fall of more than 7 m without it knocks the hero down (knockdown, then get-up; damage comes with
+    G11.5); walking into a ladder grabs it (W/S up and down, Space lets go with a small push, off the top
+    onto what is behind when there is room, off the bottom onto the ground); walking into a ledge, crate
+    or block 0.45–2 m high mantles onto it; walking into the rock wall climbs it on both axes (W/S, A/D;
+    what stands in front of it, like the broken pillar, stops the hero) and costs stamina (it lets go when
+    spent); running costs stamina (back after 0.8 s; spent out, it jogs until 25).
+  - Camera: stops short of solids and hills between it and the hero.
+  - Input: `Input::roll` (`game/input.rs`): "roll" reads the file's binding when it has one, else Ctrl or
+    the controller's X. `inspect` shows `action` and `stamina`.
+  - Code review (high, twice) caught and fixed: Space on a ladder or the wall also fired a full jump
+    (coyote time from before the grab); a fall faster than 18 m/s went through crate tops; climbing the
+    wall sideways went through the broken pillar; the top of a ladder or wall could pull the hero into a
+    box behind it. Not fixed (small): the default Ctrl roll also fires when Shift changes while Ctrl is
+    held, because egui gives no "Ctrl went down" event; fixing it needs last frame's modifiers through
+    the upstream Play hook.
+  - Tests (`tps/movement_tests.rs`): never inside a solid while walking every way from the start; a wall
+    stops the hero; every ladder of the valley climbs to the top; down and off a ladder, jump lets go with
+    only a small push; the rock wall climbs to the top, costs stamina, and sideways stops at the pillar;
+    every ledge, crate and block with room on top is mantled onto, and landed on from up to 30 m; roll;
+    hard fall knocks down unless rolled; buffered jump; the camera stops in front of a wall.
+  - Checked in the real app: walked to the crate by the start and climbed it, jumped off; trunks and
+    walls stop the hero; Ctrl roll; the tower ladder (Space off it rises 0.17 m); on the wall, sideways
+    stops at the broken pillar. Seen: the camera goes into tree crowns (only trunks are solid) — G11.6.
 - G11.3 (2026-11-11): the third-person hero and its animation. An 18-bone rigid-part skeleton
   (`crates/game/src/tps/rig.rs`: pelvis, spine, chest, head, two cloak bones, arms, legs; `Pose` holds
   a rotation per bone and a root offset), an original faceted hooded adventurer with a cloak, belt, strap
@@ -196,6 +227,14 @@
   `Event`s, which is what it will use.
 
 ## Decisions
+- G11.4 movement (recommended option each time):
+  - No physics engine: one cylinder against the world's axis-aligned boxes (two passes) plus the
+    heightfield; a few hundred boxes per step is cheap at 60 Hz and the same on wasm.
+  - Roll is Ctrl / controller X by default without adding an action to `GameSettings` (adding one would
+    change how every saved file reads back); a file can still bind "roll" itself. The spec's B is crouch
+    in the first-person defaults, so X was free.
+  - Falls only knock down for now (no health yet); the damage numbers of the spec (4 m / 12 m) come
+    with G11.5's health.
 - G11.2 world (Adriel was away; the recommended option each time):
   - The ground is a heightfield with alternating triangle splits, and the walking height is looked up in
     those same triangles, so what you see is what you stand on. Only integer hashing and smoothstep make
@@ -552,8 +591,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 
 ## Next
 - G11 (third-person game; spec [`specs/2026-11-11-third-person-design.md`](specs/2026-11-11-third-person-design.md)).
-  Milestone G11 is in `PLAN.md`. G11.2 (world) and G11.3 (hero and animation) are done; next G11.4
-  (movement, climbing and camera collision), which needs both.
+  Milestone G11 is in `PLAN.md`. G11.2, G11.3 and G11.4 are done; next G11.5 (weapons and strikes,
+  dummies and husks to hit, damage and health, arrows, game variables and events, the third-person HUD).
+  G11.6: camera easing, bow over the shoulder, crowns in the camera's way.
 - Navigable menus phase 2: tab bars (LB/RB) switching the menu below; spatial focus for layers
   without auto layout. To check: Tab sent through the control channel did not open the starter
   Inventory in Play (the controller's View did).

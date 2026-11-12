@@ -173,8 +173,9 @@ action game, original, made in code. One session per phase, each ends committed 
 - [x] G11.2 World: terrain, grass, props, lights, river, waterfall, sky, climbable tags, budgets test
   (parallel with G11.3).
 - [x] G11.3 Hero and animation: rig, meshes, clips and crossfades, test pose viewer (parallel with G11.2).
-- [ ] G11.4 Movement and camera: controller (walk to climb), orbit camera with collision, bindings,
-  interpolation. Needs G11.2 and G11.3.
+- [x] G11.4 Movement and camera: controller (walk to climb), orbit camera with collision, bindings,
+  interpolation. Needs G11.2 and G11.3. (Camera easing, bow over-the-shoulder and crowns in the camera's
+  way moved to G11.6.)
 - [ ] G11.5 Combat and the bridge: weapons, bow, dummies and husks, damage, game variables and events,
   third-person starter HUD. Needs G11.4.
 - [ ] G11.6 Polish and performance: browser at 60 fps, memory and size budgets, feel tuning, installed copy.
