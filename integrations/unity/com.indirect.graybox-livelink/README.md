@@ -19,8 +19,33 @@ one), so letters are a little wider or narrower than in Graybox. Change the font
 it stays on the next import. With TextMeshPro, import its essentials once per project
 (Window → TextMeshPro → Import TMP Essential Resources), or texts have no font.
 
-**Pixel art:** turn on "Pixel art (no smoothing)" in the window (or set `GrayboxLiveLink.PixelArt`)
-and import again: sprites get Point filtering and no compression, so they stay sharp.
+**Pixel art:** layers drawn in Graybox's Pixel mode always import sharp (Point filtering, no
+compression, no mipmaps), whatever the window says. To get the same for every sprite, turn on "Pixel
+art (no smoothing)" in the window (or set `GrayboxLiveLink.PixelArt`) and import again.
+
+**Animated pixel layers** (more than one frame) come with their sprite sheet (`sprites/<id>_anim.png`
+and `.json`). Live Link copies the PNG to `Assets/Graybox/<screen>/`, cuts it into one sprite per
+picture (frames that look the same share a sprite), makes one `AnimationClip` per tag (one, `all`,
+when there are none) that swaps the `Image`'s sprite, and gives the layer an `Animator` whose first
+state plays the sprite's "play" tag. The `Image` keeps the still sprite while the game is not
+running. Clips and `<id>_anim.controller` sit next to the PNG, and are updated in place on the next
+import (a tag deleted in Graybox loses its clip and state; states you add stay).
+
+## Sprite sheets dropped in Assets
+
+Graybox's pixel export in the **unity** format (`pixel.export` with `format: "unity"`) writes
+`<name>.png` and `<name>.json`. Put both anywhere in `Assets` (the export folder can be inside the
+project): when a PNG has a Graybox JSON of the same name next to it, Unity imports it as a Sprite
+(Multiple), Point filtering, no compression, no mipmaps, the JSON's pixels per unit, one sprite per
+picture named `<name>_<frame number>` with its pivot and 9-slice border, and makes
+`<name>_<tag>.anim` clips (animating a `SpriteRenderer`) and `<name>.controller` beside it. Export again
+over the same files and the sprites, clips and controller update in place. Delete the JSON to set the
+PNG up by hand. A JSON that is not Graybox's is left alone; a broken Graybox one logs a warning.
+
+Clip details: frames play in the tag's direction (forward, reverse, ping-pong without repeating its
+ends: 0, 1, 2, 1) for the time each frame lasts. A tag that repeats forever loops; one with a finite
+repeat count plays once (Unity clips cannot count repeats). Each clip has one extra key at its end so
+the last picture lasts as long as it should.
 
 Objects keep a `GrayboxNode`, so an update changes them in place and components you add stay.
 Layers deleted in Graybox are deleted in the scene; a layer that stops painting loses its Image.
@@ -40,6 +65,14 @@ translucent layer) imports with the layers, anchors, sprite borders, text and co
 made larger. A second export updates the scene in place. Both text paths (TextMeshPro and UI Text) are
 checked. Watch was checked headless (the window opens, a rewritten `layout.json` is imported).
 Not checked by hand: clicking the window's buttons.
+
+Pixel sheets (batch mode, 2022.3.39f1, UI Text path): a sheet in `Assets` gets the right sprite count
+(one per unique rectangle), Point, uncompressed, pixels per unit, flipped rectangles, pivots, borders,
+one clip per tag with the right keys (ping-pong 3 frames: 0, 1, 2, 1) and a controller playing the
+`play` tag; editing the JSON updates them. A Live Link screen with an animated layer gets its
+`Animator`, and in Play mode the `Image` swaps sprites on time (0.1 s, 0.3 s, 0.4 s, 0.6 s for
+durations 100, 200, 100, 200 ms ping-pong). Not run: the TextMeshPro path of this feature (it does not
+touch text; the code compiles with and without `GRAYBOX_TMP`), and Unity 6.
 
 Unity 6 (6000.x): prepared, not run. The Canvas lookup uses `FindFirstObjectByType` there, and
 `GRAYBOX_TMP` is also set for uGUI 2.0 (where TextMeshPro lives); the C# compiles in 2022.3 with

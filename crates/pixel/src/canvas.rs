@@ -107,41 +107,14 @@ impl Canvas {
 
     /// This canvas as a PNG (RGBA, 8 bits).
     pub fn to_png(&self) -> Option<Vec<u8>> {
-        let mut out = Vec::new();
-        {
-            let mut enc = png::Encoder::new(&mut out, self.width, self.height);
-            enc.set_color(png::ColorType::Rgba);
-            enc.set_depth(png::BitDepth::Eight);
-            enc.set_compression(png::Compression::Fast);
-            let mut w = enc.write_header().ok()?;
-            w.write_image_data(&self.to_bytes()).ok()?;
-            w.finish().ok()?;
-        }
-        Some(out)
+        encode_png(self.width, self.height, &self.to_bytes())
     }
 
     /// A canvas from a PNG (any colour type at 8 bits, palettes and greys expanded), or None for a
     /// broken or too large one.
     pub fn from_png(bytes: &[u8]) -> Option<Self> {
-        let mut dec = png::Decoder::new(std::io::Cursor::new(bytes));
-        dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
-        dec.set_limits(png::Limits { bytes: (Self::MAX_SIDE as usize * Self::MAX_SIDE as usize * 4) * 2 });
-        let mut reader = dec.read_info().ok()?;
-        let (w, h) = (reader.info().width, reader.info().height);
-        if w == 0 || h == 0 || w > Self::MAX_SIDE || h > Self::MAX_SIDE {
-            return None;
-        }
-        let mut buf = vec![0; reader.output_buffer_size()?];
-        let info = reader.next_frame(&mut buf).ok()?;
-        let data = buf.get(..info.buffer_size())?;
-        let px: Vec<Rgba> = match info.color_type {
-            png::ColorType::Rgba => data.chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect(),
-            png::ColorType::Rgb => data.chunks_exact(3).map(|c| [c[0], c[1], c[2], 255]).collect(),
-            png::ColorType::GrayscaleAlpha => data.chunks_exact(2).map(|c| [c[0], c[0], c[0], c[1]]).collect(),
-            png::ColorType::Grayscale => data.iter().map(|&g| [g, g, g, 255]).collect(),
-            png::ColorType::Indexed => return None,
-        };
-        Self::from_pixels(w, h, px)
+        let (w, h, px) = decode_png(bytes, Self::MAX_SIDE)?;
+        Self::from_bytes(w, h, &px)
     }
 
     /// A copy `width` × `height` with this picture at `dx`, `dy` (what falls outside is cut).
@@ -156,6 +129,48 @@ impl Canvas {
         }
         Some(out)
     }
+}
+
+/// RGBA `px` (`width` × `height`, 8 bits) as a PNG, or None when they don't match.
+pub fn encode_png(width: u32, height: u32, px: &[u8]) -> Option<Vec<u8>> {
+    if width == 0 || height == 0 || px.len() as u64 != u64::from(width) * u64::from(height) * 4 {
+        return None;
+    }
+    let mut out = Vec::new();
+    {
+        let mut enc = png::Encoder::new(&mut out, width, height);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        enc.set_compression(png::Compression::Fast);
+        let mut w = enc.write_header().ok()?;
+        w.write_image_data(px).ok()?;
+        w.finish().ok()?;
+    }
+    Some(out)
+}
+
+/// A PNG's size and RGBA pixels (any colour type at 8 bits, palettes and greys expanded), or None
+/// for a broken one or one more than `max_side` on a side.
+pub fn decode_png(bytes: &[u8], max_side: u32) -> Option<(u32, u32, Vec<u8>)> {
+    let mut dec = png::Decoder::new(std::io::Cursor::new(bytes));
+    dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    dec.set_limits(png::Limits { bytes: (max_side as usize * max_side as usize * 4) * 2 });
+    let mut reader = dec.read_info().ok()?;
+    let (w, h) = (reader.info().width, reader.info().height);
+    if w == 0 || h == 0 || w > max_side || h > max_side {
+        return None;
+    }
+    let mut buf = vec![0; reader.output_buffer_size()?];
+    let info = reader.next_frame(&mut buf).ok()?;
+    let data = buf.get(..info.buffer_size())?;
+    let px: Vec<u8> = match info.color_type {
+        png::ColorType::Rgba => data.to_vec(),
+        png::ColorType::Rgb => data.chunks_exact(3).flat_map(|c| [c[0], c[1], c[2], 255]).collect(),
+        png::ColorType::GrayscaleAlpha => data.chunks_exact(2).flat_map(|c| [c[0], c[0], c[0], c[1]]).collect(),
+        png::ColorType::Grayscale => data.iter().flat_map(|&g| [g, g, g, 255]).collect(),
+        png::ColorType::Indexed => return None,
+    };
+    (px.len() as u64 == u64::from(w) * u64::from(h) * 4).then_some((w, h, px))
 }
 
 /// `over` drawn on `under` at `opacity` (straight alpha "source over").

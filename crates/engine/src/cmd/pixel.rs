@@ -20,6 +20,7 @@ use crate::{Result, Session, bad, spec};
 
 mod anim;
 mod edit;
+pub(crate) mod io;
 pub(crate) mod kit;
 
 /// The most pointer positions one stroke takes.
@@ -95,6 +96,7 @@ pub fn specs() -> Vec<CommandSpec> {
     ];
     list.extend(edit::specs());
     list.extend(anim::specs());
+    list.extend(io::specs());
     list.extend(kit::specs());
     list
 }

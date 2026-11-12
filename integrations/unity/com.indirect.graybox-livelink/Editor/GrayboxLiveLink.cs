@@ -50,6 +50,10 @@ namespace Indirect.Graybox.Editor
         public string sprite = "";
         public float[] border = new float[0];
         public TextData text = new TextData();
+        // A pixel-art layer: its sprite is imported with Point filtering and no compression.
+        public bool pixel;
+        // An animated pixel layer: the sprite sheet JSON (its PNG has the same name), e.g. "sprites/7_anim.json".
+        public string animation = "";
     }
 
     [Serializable]
@@ -249,7 +253,7 @@ namespace Indirect.Graybox.Editor
             if (layout == null || layout.nodes == null || layout.nodes.Length == 0) return;
             var assets = $"{AssetRoot}/{Path.GetFileName(dir)}";
             Directory.CreateDirectory(assets);
-            var sprites = ImportSprites(dir, assets, layout);
+            var sprites = ImportSprites(dir, assets, layout, out var animations);
             if (canvas == null) canvas = FindOrMakeCanvas(layout);
             var root = layout.nodes[0];
             var byId = new Dictionary<long, NodeData>();
@@ -272,7 +276,7 @@ namespace Indirect.Graybox.Editor
                 if (n.id != root.id) rt.SetSiblingIndex(order++);
                 var parentData = n.id == root.id ? null : byId.TryGetValue(n.parent, out var pd) ? pd : null;
                 Place(rt, n, parentData);
-                Look(go, n, sprites);
+                Look(go, n, sprites, animations);
                 SetOpacity(go, n.opacity);
                 built[n.id] = rt;
                 seen.Add(n.id);
@@ -313,24 +317,62 @@ namespace Indirect.Graybox.Editor
         }
 
         /// Copy the screen's sprites into the project as 9-sliced (where they have a border) sprites.
-        static Dictionary<string, Sprite> ImportSprites(string dir, string assets, Layout layout)
+        /// Animated pixel layers also get their sprite sheet cut into sprites, and a clip per tag (animating
+        /// the Image's sprite) in an AnimatorController: `animations` has that controller by layer.
+        static Dictionary<string, Sprite> ImportSprites(string dir, string assets, Layout layout, out Dictionary<long, RuntimeAnimatorController> animations)
         {
             var map = new Dictionary<string, Sprite>();
+            animations = new Dictionary<long, RuntimeAnimatorController>();
             // Copy them all, then let the project see the folder and its files once.
             var copied = new List<(NodeData node, string path)>();
+            var sheets = new List<(NodeData node, GrayboxSheet.Data data, string path)>();
             foreach (var n in layout.nodes)
             {
-                if (string.IsNullOrEmpty(n.sprite)) continue;
-                var src = Path.Combine(dir, n.sprite);
-                if (!File.Exists(src)) continue;
-                var dst = $"{assets}/{Path.GetFileName(n.sprite)}";
-                File.Copy(src, dst, true);
-                copied.Add((n, dst));
+                if (!string.IsNullOrEmpty(n.sprite))
+                {
+                    var src = Path.Combine(dir, n.sprite);
+                    if (File.Exists(src))
+                    {
+                        var dst = $"{assets}/{Path.GetFileName(n.sprite)}";
+                        File.Copy(src, dst, true);
+                        copied.Add((n, dst));
+                    }
+                }
+                if (string.IsNullOrEmpty(n.animation)) continue;
+                // The sheet's JSON is read here and not copied into the project: next to its PNG it would
+                // make Unity treat the PNG as a sheet dropped in Assets (GrayboxSheetPostprocessor).
+                var json = Path.Combine(dir, n.animation);
+                var png = Path.ChangeExtension(json, ".png");
+                if (!File.Exists(json) || !File.Exists(png)) continue;
+                var data = GrayboxSheet.Parse(File.ReadAllText(json), n.animation);
+                if (data == null) continue;
+                var sheet = $"{assets}/{Path.GetFileName(png)}";
+                File.Copy(png, sheet, true);
+                sheets.Add((n, data, sheet));
             }
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-            bool pixel = PixelArt;
+            foreach (var (n, data, path) in sheets)
+            {
+                try
+                {
+                    if (AssetImporter.GetAtPath(path) is TextureImporter ti)
+                    {
+                        // The same size as the layer's own sprite (see below), so slicing fits whichever shows.
+                        GrayboxSheet.Configure(ti, data, path, 100f * Mathf.Max(0.01f, layout.scale));
+                        ti.SaveAndReimport();
+                    }
+                    var controller = GrayboxSheet.BuildAnimation(data, path, typeof(Image));
+                    if (controller != null) animations[n.id] = controller;
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"Graybox Live Link: {n.name}: its animation could not be set up ({e.Message})");
+                }
+            }
             foreach (var (n, dst) in copied)
             {
+                // A pixel layer stays sharp whatever the window's Pixel art toggle says.
+                bool pixel = PixelArt || n.pixel;
                 if (AssetImporter.GetAtPath(dst) is TextureImporter ti)
                 {
                     ti.textureType = TextureImporterType.Sprite;
@@ -393,7 +435,7 @@ namespace Indirect.Graybox.Editor
         }
 
         /// The layer's sprite (an Image, sliced when it has a border) or its text.
-        static void Look(GameObject go, NodeData n, Dictionary<string, Sprite> sprites)
+        static void Look(GameObject go, NodeData n, Dictionary<string, Sprite> sprites, Dictionary<long, RuntimeAnimatorController> animations)
         {
             if (n.type == "text")
             {
@@ -417,6 +459,22 @@ namespace Indirect.Graybox.Editor
                 if (img != null && img.sprite != null && AssetDatabase.GetAssetPath(img.sprite).StartsWith(AssetRoot + "/"))
                     UnityEngine.Object.DestroyImmediate(img);
             }
+            SetAnimator(go, n, animations);
+        }
+
+        /// An animated pixel layer plays its sheet: the sprite above stays as it rests, an Animator
+        /// swaps it while the game runs. A layer that stopped being animated loses the Animator we made.
+        static void SetAnimator(GameObject go, NodeData n, Dictionary<long, RuntimeAnimatorController> animations)
+        {
+            var animator = go.GetComponent<Animator>();
+            if (animations.TryGetValue(n.id, out var controller) && go.GetComponent<Image>() != null)
+            {
+                if (animator == null) animator = go.AddComponent<Animator>();
+                animator.runtimeAnimatorController = controller;
+            }
+            else if (animator != null && animator.runtimeAnimatorController != null
+                && AssetDatabase.GetAssetPath(animator.runtimeAnimatorController).StartsWith(AssetRoot + "/"))
+                UnityEngine.Object.DestroyImmediate(animator);
         }
 
         static Color ParseColor(string hex)

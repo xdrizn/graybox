@@ -105,9 +105,16 @@ pub fn put_selection(data: &mut Data, mask: Option<&Mask>) {
 
 /// Frame `index` with its visible layers drawn bottom to top at their opacity.
 pub fn frame_image(data: &Data, sprite: &Sprite, index: usize) -> Option<Canvas> {
+    frame_image_of(data, sprite, index, None)
+}
+
+/// Frame `index` with layers `only` (by id, shown or hidden) drawn bottom to top at their opacity,
+/// or its visible layers when `only` is None.
+pub fn frame_image_of(data: &Data, sprite: &Sprite, index: usize, only: Option<&[u32]>) -> Option<Canvas> {
     let frame = sprite.frames.get(index)?;
     let mut out = Canvas::new(sprite.width, sprite.height)?;
-    for l in sprite.layers.iter().filter(|l| l.visible && l.opacity > 0) {
+    let wanted = |l: &crate::Layer| only.map_or(l.visible, |ids| ids.contains(&l.id)) && l.opacity > 0;
+    for l in sprite.layers.iter().filter(|l| wanted(l)) {
         if !data.contains_key(&cel_key(l.id, frame.id)) {
             continue;
         }

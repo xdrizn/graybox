@@ -203,6 +203,8 @@ fn node_json(
             }
         }
     }
+    // A pixel layer imports sharp, and an animated one brings its sheet (G16.5).
+    crate::cmd::pixel::io::unity_layer(doc, n, sprites, scale, &mut v)?;
     if !children.is_empty() {
         v["children"] = Value::Array(children);
     }

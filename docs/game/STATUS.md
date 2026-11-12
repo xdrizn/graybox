@@ -415,6 +415,44 @@
     before in red, after in blue, under the one drawn on). The panel has a "Plays" menu.
   - Checked in the real app: a 4-frame bouncing ball with a ping-pong tag, onion skin, playing in
     the editor and in Prototype (the presented screen redraws as the frames change).
+- G16.5 (2026-11-12): export and import. Plan: the pure exporters first
+  (`crates/pixel/src/export.rs`: a `PixelExporter` trait over frames already drawn, with PNG, PNG
+  per frame, sprite sheet + JSON, GIF and Unity; scale, tag, layers, trim, padding, extrude,
+  power of two, layout), then sheet import (`crates/pixel/src/import.rs`: a PNG cut by a grid into
+  frames), then the commands (`pixel.export` writes files or returns them, `pixel.import` makes a
+  pixel layer), then the Unity screen export marking pixel layers and writing a sheet for animated
+  ones, then the Live Link side (C#, through the `unity-livelink` agent, batchmode check), then
+  the Export and Import section in the Pixel art panel with presets.
+  Built:
+  - `crates/pixel/src/export.rs`: `PixelExporter` (frames already drawn + options → files, no
+    disk), with `Png` (first frame), `Frames` (`name_0.png`…), `Sheet` (PNG + JSON in the common
+    sprite-sheet layout: `frames[]` with `frame`, `spriteSourceSize`, `sourceSize`, `duration`,
+    `pivot`, `border`; `meta` with `frameTags`, `slices`), `Gif` (the tag in its direction, its
+    repeats, exact colours up to 256) and `Unity` (a sheet whose `meta.unity` says Sprite Multiple,
+    Point, no compression, pixels per unit, the tag to play). Options: scale 1–16, one tag, layers
+    (hidden ones too when picked), trim (the empty border all frames share, so the pivot holds),
+    padding, extrude, power of two, layout (packed: near square and identical frames stored once;
+    grid; row). Caps: 8192 a side, 32 M pixels a picture, 64 M pixels a whole export.
+  - `crates/pixel/src/import.rs`: a PNG (up to 8192 a side) cut by a frame size into frames, left
+    to right then down; empty cells after the last painted one are dropped.
+  - Commands: `pixel.export {id, format, dir?, …}` (writes into `dir`, or hands the files back as
+    base64 for Claude, the CLI and the browser; in the junk-sweep skip list since it writes) and
+    `pixel.import {path | data, frameWidth?, frameHeight?, duration?, scale?, x?, y?, parent?}`
+    (a new pixel layer, one undo step). The layer's 9-slice goes into the JSON (slices, borders).
+  - Unity screen export (`unity_export.rs`, ours): a pixel layer's entry says `pixel: true`, and an
+    animated one also writes `sprites/<id>_anim.png/.json` (`animation`), each art pixel as big as
+    on the screen; a sheet too big to make is left out and the still sprite stays.
+  - Live Link (C#, through the `unity-livelink` agent): `GrayboxSheet.cs` imports a Graybox sheet
+    (Sprite Multiple, one sprite per unique frame, pivot and border, Point, uncompressed, PPU), a
+    clip per tag (ping-pong without repeating the ends) and an AnimatorController whose default
+    state is the played tag; an `AssetPostprocessor` does it for a PNG + JSON dropped into Assets.
+    Screen import: `pixel` layers always import sharp; animated ones get an Animator on their
+    Image (the still sprite stays at rest). Checked in Unity 2022.3.39f1 batchmode.
+  - Pixel art panel: "Export pixel art" (presets Unity sheet, Sprite sheet + JSON, PNG, PNG per
+    frame, GIF; scale, padding, which frames, Packed/Grid/Row, Trim; Export… asks for a folder, the
+    browser downloads) and "Import pixel art" (frame size, Import… makes the layer beside it).
+  - Checked in the real app: the panel, a GIF and a Unity sheet of the bouncing ball written to a
+    folder, a row sheet imported back as a 4-frame layer, a screen with it sent to Unity.
 
 ## Decisions
 - G16 pixel art, details the spec left open (chosen as a pixel artist would expect):
@@ -467,6 +505,15 @@
     under the frame drawn on, hidden while playing.
   - G16.4 review, left for the G16.6 performance pass: the animation clock reads each pixel
     layer's sprite description every time it is asked (each presented frame).
+  - G16.5: export settings last for the session (not saved in the file). Presets: Unity sheet and
+    Sprite sheet + JSON start with 1 px padding (no bleed between frames), GIF at ×4, PNG at ×1.
+    Trim is shared by all exported frames (Aseprite's "trim sprite", not per cel), so one pivot
+    fits every frame. Pixels per unit default 16 art pixels a unit (× the export scale); screens
+    use the Live Link's 100 × layout scale so a sheet matches its still sprite. A GIF tag with
+    Repeat 1 plays once; Unity clips loop unless a repeat is set (Unity can't count repeats).
+  - G16.5 review, left: the export param parsers repeat the anim ones (small); an animated pixel
+    layer resized without 9-slice exports frames at art size, so Unity stretches them (resize the
+    art instead, or use 9-slice).
 - G11.4 movement (recommended option each time):
   - No physics engine: one cylinder against the world's axis-aligned boxes (two passes) plus the
     heightfield; a few hundred boxes per step is cheap at 60 Hz and the same on wasm.
@@ -873,6 +920,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     call `cmd::pixel::kit` for pixel layers.
   - G16.4: `render/src/images.rs` `animation_clock`: one line, `pixel::tick` adds pixel layers'
     frames to the clock (Prototype and Play redraw when a frame is due).
+  - G16.5: `engine/src/tests.rs`: `pixel.export` in the junk-sweep skip list (it writes files);
+    `crates/pixel/Cargo.toml` (ours) uses the workspace `image` for GIFs.
 
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.

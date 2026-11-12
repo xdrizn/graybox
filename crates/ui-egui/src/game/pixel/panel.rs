@@ -53,6 +53,7 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[Node
         plays_row(app, ui, *id, &sprite);
     }
     resize_rows(app, ui, doc, *id, &sprite, &t);
+    super::export::section(app, ui, doc, *id, &sprite, &t);
     if editing {
         layers(app, ui, *id, &sprite, &t);
         palette(app, ui, doc, *id, &sprite, &t);
@@ -150,7 +151,7 @@ fn resize_rows(app: &mut FigApp, ui: &mut Ui, doc: &Document, id: NodeId, sprite
 }
 
 /// A small text button; true when clicked.
-fn text_button(ui: &mut Ui, label: &str, tip: &str, t: &Tokens, enabled: bool) -> bool {
+pub(super) fn text_button(ui: &mut Ui, label: &str, tip: &str, t: &Tokens, enabled: bool) -> bool {
     let font = crate::theme::regular(11.0);
     let w = ui.painter().layout_no_wrap(label.to_string(), font.clone(), t.text).size().x + 14.0;
     let (r, resp) = ui.allocate_exact_size(vec2(w, 22.0), if enabled { Sense::click() } else { Sense::hover() });

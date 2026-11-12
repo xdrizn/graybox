@@ -16,6 +16,7 @@ use crate::icons::Icon;
 
 pub(crate) mod colors;
 mod draw;
+mod export;
 mod input;
 mod panel;
 mod pill;
@@ -229,6 +230,8 @@ pub struct Editor {
     /// Onion skin: the frames before and after shown faintly, and their pictures (decode keys).
     pub(crate) onion: bool,
     pub(crate) onion_tex: Vec<(u64, egui::TextureHandle)>,
+    /// The Export and Import settings (G16.5).
+    pub(crate) export: export::Prefs,
 }
 
 impl Default for Editor {
@@ -269,6 +272,7 @@ impl Default for Editor {
             frame_drag: None,
             onion: false,
             onion_tex: Vec::new(),
+            export: export::Prefs::default(),
         }
     }
 }
