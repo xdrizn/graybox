@@ -182,7 +182,7 @@ action game, original, made in code. One session per phase, each ends committed 
 - [ ] G11.6 Polish and performance: browser at 60 fps, memory and size budgets, feel tuning, installed copy.
 
 ### G13 — Documents (owner's request, 2026-11-12)
-Spec: [`specs/2026-11-12-documents-design.md`](specs/2026-11-12-documents-design.md) (decisions P1â€“P10).
+Spec: [`specs/2026-11-12-documents-design.md`](specs/2026-11-12-documents-design.md) (decisions P1–P10).
 Notion-like documents inside the project file, a Documents tab, versions closed by signature.
 - [x] G13.1 Model, commands and the Documents tab (tree, open a document).
 - [ ] G13.2 Block editor: left handle (turn into anything), `/` menu, formatting, embeds, tables.
@@ -202,4 +202,18 @@ Notion-like documents inside the project file, a Documents tab, versions closed 
 ## Later
 Third-person preset (now G11), 2D platformer and top-down presets, safe-area guides and resolution presets,
 export package for engines (assets + spec sheet, 9-slice), Godot scene export, Unity plugin,
+### G16 — Pixel art (owner's request, 2026-11-12)
+Spec: [`specs/2026-11-12-pixel-art-design.md`](specs/2026-11-12-pixel-art-design.md) (decisions D1–D10).
+Pixel layers edited in place in a Pixel mode, Aseprite-style standard tools, smart resize with pixel
+9-slice, pixel buttons that grow with their text, basic animation, Unity-first export.
+- [ ] G16.1 Core and drawing: `crates/pixel`, pixel layer, sharp render, Pixel mode, pencil to ellipse,
+  brush, mirror with an axis, grid, undo.
+- [ ] G16.2 Selection, transform and colour: marquee, lasso, wand, move, outline, replace colour,
+  palette tied to styles and variables, Selection colours, sprite layers.
+- [ ] G16.3 Smart resize, pixel 9-slice, insets as padding, Pixel text, Pixel button starter, tile mode,
+  components and palette-swap variants.
+- [ ] G16.4 Animation: timeline, durations, onion skin, tags, playback in Prototype and Play.
+- [ ] G16.5 Export and import: exporter trait, PNG, sheet and JSON, Unity with Live Link, PNG and sheet import.
+- [ ] G16.6 Polish: pixel fonts, shade, Claude MCP tools, performance, guide, installed copy.
+
 comparing a game screenshot with the design.
