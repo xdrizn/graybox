@@ -84,6 +84,8 @@ fn edit_pill(app: &mut FigApp, ui: &mut Ui) {
     let opts_w: f32 = opts.iter().map(|o| o.width() + GAP).sum();
     let width = PAD * 2.0 + tools_w + DIVIDER + GAP + TOOL_CELL + GAP + DIVIDER + GAP + opts_w + ZOOM_W + GAP + DIVIDER + GAP + DONE_W;
     let rect = pill(ui, &mut app.ui.nav, app.canvas.rect, width, &t);
+    // The timeline sits over the pill (G16.4).
+    super::timeline::timeline(app, ui, rect);
     let cy = rect.center().y;
     let mut x = rect.min.x + PAD;
     for slot in Tool::SLOTS {

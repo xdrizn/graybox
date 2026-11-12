@@ -185,6 +185,8 @@ fn op_name(op: Op) -> &'static str {
 
 /// A press with `tool` at art pixel `at`.
 fn press(app: &mut FigApp, id: figcraft_doc::NodeId, d: &super::Decoded, tool: Tool, at: Pt, secondary: bool, mods: egui::Modifiers) {
+    // Playing stops on the frame shown, so the press draws there (G16.4).
+    app.pixel.playing = None;
     match tool {
         Tool::Pencil | Tool::Eraser | Tool::Replace => {
             // Shift-click draws a straight line on from the last point drawn (as pixel editors do).
@@ -348,7 +350,7 @@ pub(crate) fn key(app: &mut FigApp, ev: &Event) -> bool {
         return true;
     }
     // Held down, only the brush size keys repeat (a held X would swap the colours back and forth).
-    if *repeat && !matches!(key, Key::OpenBracket | Key::CloseBracket) {
+    if *repeat && !matches!(key, Key::OpenBracket | Key::CloseBracket | Key::Comma | Key::Period) {
         return matches!(key, Key::B | Key::E | Key::G | Key::I | Key::L | Key::U | Key::X | Key::R | Key::M | Key::Q | Key::W | Key::V);
     }
     let tool = |t: Tool| Some(t);
@@ -373,6 +375,9 @@ pub(crate) fn key(app: &mut FigApp, ev: &Event) -> bool {
     }
     match key {
         Key::X => app.pixel.colors.swap(0, 1),
+        // The timeline (G16.4): previous and next frame (Enter stays Done, as in vector edit).
+        Key::Comma if editing => super::timeline::step(app, false),
+        Key::Period if editing => super::timeline::step(app, true),
         Key::OpenBracket => step_brush(&mut app.pixel, false),
         Key::CloseBracket => step_brush(&mut app.pixel, true),
         Key::Delete | Key::Backspace if editing => on_cel(app, "pixel.clear", json!({})),

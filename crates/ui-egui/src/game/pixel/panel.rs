@@ -49,12 +49,36 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[Node
     let frames = sprite.frames.len();
     let more = if frames > 1 { format!(", {frames} frames") } else { String::new() };
     widgets::note(ui, &format!("{} × {} art pixels{more}", sprite.width, sprite.height), t.text_secondary);
+    if frames > 1 {
+        plays_row(app, ui, *id, &sprite);
+    }
     resize_rows(app, ui, doc, *id, &sprite, &t);
     if editing {
         layers(app, ui, *id, &sprite, &t);
         palette(app, ui, doc, *id, &sprite, &t);
     }
     true
+}
+
+/// What the layer plays in Prototype and Play (G16.4): every frame or one tag. A hover or pressed
+/// variant whose sprite plays another tag switches what plays with the prototype's own triggers.
+fn plays_row(app: &mut FigApp, ui: &mut Ui, id: NodeId, sprite: &figcraft_pixel::Sprite) {
+    const ALL: &str = "All frames";
+    let current = sprite.play.clone().unwrap_or_else(|| ALL.to_string());
+    let width = widgets::col_width(ui.available_width()) * 2.0;
+    crate::right::row(ui, 32.0, |ui| {
+        ui.label("Plays");
+        let resp = widgets::dropdown(ui, &current, width - 48.0, None).on_hover_text("What the layer plays in Prototype and Play");
+        crate::right::menu_popup(&resp).show(|ui| {
+            for name in std::iter::once(ALL).chain(sprite.tags.iter().map(|t| t.name.as_str())) {
+                if crate::right::menu_item(ui, name, "") {
+                    let play = if name == ALL { "" } else { name };
+                    app.run("pixel.set", json!({"id": id.0, "play": play}));
+                    ui.close();
+                }
+            }
+        });
+    });
 }
 
 /// The Pixel text section when only text layers are selected (G16.3): on, the text draws with no

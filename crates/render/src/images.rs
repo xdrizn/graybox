@@ -374,6 +374,8 @@ pub fn frame_at(hash: &str, data: Option<&ImageData>, filters: &ImageFilters, pr
 pub fn animation_clock(doc: &Document, root: NodeId, t: f64) -> Option<(u64, f64)> {
     let mut clock: Option<(u64, f64)> = None;
     for n in doc.subtree(root).into_iter().filter_map(|id| doc.node(id)).filter(|n| n.visible) {
+        // Graybox: pixel layers play their frames too (G16.4).
+        crate::pixel::tick(doc, n, t, &mut clock);
         for p in n.fills.iter().chain(&n.strokes).filter(|p| p.visible) {
             if let PaintKind::Image(img) = &p.kind
                 && let Some(a) = animation(&img.image, doc.images.get(&img.image), &img.filters, doc.color_profile)

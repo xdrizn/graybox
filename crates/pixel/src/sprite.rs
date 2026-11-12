@@ -19,6 +19,8 @@ pub const MAX_PALETTE: usize = 256;
 pub const MAX_SCALE: u32 = 64;
 /// A frame's shortest and longest time on screen (milliseconds).
 pub const DURATION_RANGE: (u32, u32) = (10, 60_000);
+/// The most times a tag plays before it stops (0 loops forever).
+pub const MAX_REPEAT: u32 = 10_000;
 const MAX_NAME: usize = 200;
 
 fn one() -> u32 {
@@ -73,6 +75,13 @@ pub struct Tag {
     pub to: usize,
     #[serde(default)]
     pub direction: Direction,
+    /// How many times it plays before it stops on its last frame; 0 loops forever.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub repeat: u32,
+}
+
+fn is_zero(v: &u32) -> bool {
+    *v == 0
 }
 
 /// A sprite's description (its pixels are stored per cel).
@@ -88,6 +97,9 @@ pub struct Sprite {
     pub frames: Vec<Frame>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<Tag>,
+    /// The tag the layer plays in Prototype and Play (G16.4); None plays every frame.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub play: Option<String>,
     /// The sprite's own colours, as `#rrggbb` or `#rrggbbaa`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub palette: Vec<String>,
@@ -117,6 +129,7 @@ impl Sprite {
             layers: vec![Layer { id: 1, name: "Layer 1".into(), visible: true, opacity: 255 }],
             frames: vec![Frame { id: 2, duration: 100 }],
             tags: Vec::new(),
+            play: None,
             palette: Vec::new(),
             next_id: 3,
             resize: Resize::default(),
@@ -163,8 +176,12 @@ impl Sprite {
         for t in &mut self.tags {
             t.to = t.to.min(last);
             t.name = clip(&t.name);
+            t.repeat = t.repeat.min(MAX_REPEAT);
         }
         self.tags.truncate(MAX_TAGS);
+        if self.play.as_deref().is_some_and(|p| self.tag(p).is_none()) {
+            self.play = None;
+        }
         self.palette.retain(|c| parse_hex(c).is_some());
         self.palette.truncate(MAX_PALETTE);
         Some(self)
@@ -215,6 +232,60 @@ impl Sprite {
         }
         let l = self.layers.remove(i);
         self.layers.insert(to, l);
+        true
+    }
+
+    /// A new frame at `index` (past the end: last) lasting `duration` ms. A tag that holds the frame
+    /// before it grows to take it in; tags after it move along. Its id, or None at [`MAX_FRAMES`].
+    pub fn insert_frame(&mut self, index: usize, duration: u32) -> Option<u32> {
+        if self.frames.len() >= MAX_FRAMES {
+            return None;
+        }
+        let i = index.min(self.frames.len());
+        let id = self.take_id();
+        self.frames.insert(i, Frame { id, duration: duration.clamp(DURATION_RANGE.0, DURATION_RANGE.1) });
+        for t in &mut self.tags {
+            if i > 0 && t.from < i && t.to >= i - 1 {
+                t.to += 1;
+            } else if t.from >= i {
+                t.from += 1;
+                t.to += 1;
+            }
+        }
+        Some(id)
+    }
+
+    /// Takes frame `index` out (never the last one). Tags close up over it; a tag of only that frame
+    /// goes. Whether it went.
+    pub fn remove_frame(&mut self, index: usize) -> bool {
+        if self.frames.len() <= 1 || index >= self.frames.len() {
+            return false;
+        }
+        self.frames.remove(index);
+        self.tags.retain(|t| !(t.from == index && t.to == index));
+        for t in &mut self.tags {
+            if t.from > index {
+                t.from -= 1;
+            }
+            if t.to >= index && t.to > 0 {
+                t.to -= 1;
+            }
+        }
+        if self.play.as_deref().is_some_and(|p| self.tag(p).is_none()) {
+            self.play = None;
+        }
+        true
+    }
+
+    /// Moves frame `from` to `to` (indices). Tags keep their places, so the frame leaves or joins
+    /// them as it moves. Whether it moved.
+    pub fn move_frame(&mut self, from: usize, to: usize) -> bool {
+        let to = to.min(self.frames.len().saturating_sub(1));
+        if from >= self.frames.len() || from == to {
+            return false;
+        }
+        let f = self.frames.remove(from);
+        self.frames.insert(to, f);
         true
     }
 }
@@ -272,5 +343,86 @@ mod tests {
         assert!(s.remove_layer(a) && s.remove_layer(b));
         assert!(!s.remove_layer(1), "the last layer stays");
         assert_ne!(a, b);
+    }
+}
+
+#[cfg(test)]
+mod frame_tests {
+    use super::*;
+
+    fn tag(name: &str, from: usize, to: usize) -> Tag {
+        Tag { name: name.into(), from, to, direction: Direction::Forward, repeat: 0 }
+    }
+
+    fn ranges(s: &Sprite) -> Vec<(usize, usize)> {
+        s.tags.iter().map(|t| (t.from, t.to)).collect()
+    }
+
+    #[test]
+    fn a_new_frame_joins_the_tag_of_the_frame_before_it_and_moves_later_tags_along() {
+        let mut s = Sprite::new(2, 2, 1).unwrap();
+        for i in 1..4 {
+            s.insert_frame(i, 100).unwrap();
+        }
+        s.tags = vec![tag("idle", 0, 1), tag("hover", 2, 3)];
+        // After frame 1 (idle's last): idle grows, hover moves along.
+        s.insert_frame(2, 80).unwrap();
+        assert_eq!(ranges(&s), [(0, 2), (3, 4)]);
+        assert_eq!(s.frames[2].duration, 80);
+        // At the very start: everything moves along.
+        s.insert_frame(0, 100).unwrap();
+        assert_eq!(ranges(&s), [(1, 3), (4, 5)]);
+        // Past the end: the last frame, the tag holding the old last frame takes it in.
+        let id = s.insert_frame(99, 5).unwrap();
+        assert_eq!(s.frames.last().map(|f| (f.id, f.duration)), Some((id, DURATION_RANGE.0)));
+        assert_eq!(ranges(&s), [(1, 3), (4, 6)]);
+    }
+
+    #[test]
+    fn a_deleted_frame_closes_its_tags_and_a_tag_of_only_it_goes() {
+        let mut s = Sprite::new(2, 2, 1).unwrap();
+        for i in 1..5 {
+            s.insert_frame(i, 100).unwrap();
+        }
+        s.tags = vec![tag("a", 0, 1), tag("b", 2, 2), tag("c", 3, 4)];
+        s.play = Some("b".into());
+        assert!(s.remove_frame(2));
+        assert_eq!(ranges(&s), [(0, 1), (2, 3)]);
+        assert_eq!(s.play, None, "the tag it played went");
+        assert!(s.remove_frame(0));
+        assert_eq!(ranges(&s), [(0, 0), (1, 2)]);
+        assert!(!s.remove_frame(9));
+        while s.frames.len() > 1 {
+            assert!(s.remove_frame(0));
+        }
+        assert!(!s.remove_frame(0), "the last frame stays");
+    }
+
+    #[test]
+    fn a_moved_frame_keeps_its_id_and_tags_keep_their_places() {
+        let mut s = Sprite::new(2, 2, 1).unwrap();
+        for i in 1..3 {
+            s.insert_frame(i, 100).unwrap();
+        }
+        s.tags = vec![tag("a", 0, 1)];
+        let ids: Vec<u32> = s.frames.iter().map(|f| f.id).collect();
+        assert!(s.move_frame(0, 2));
+        assert_eq!(s.frames.iter().map(|f| f.id).collect::<Vec<_>>(), [ids[1], ids[2], ids[0]]);
+        assert_eq!(ranges(&s), [(0, 1)]);
+        assert!(!s.move_frame(1, 1));
+        assert!(s.move_frame(0, 99), "past the end: last");
+        assert_eq!(s.frames.last().map(|f| f.id), Some(ids[1]));
+    }
+
+    #[test]
+    fn a_tag_naming_play_and_repeat_survive_mending() {
+        let json = r#"{"width": 2, "height": 2, "layers": [{"id": 1, "name": "a"}], "frames": [{"id": 2}, {"id": 3}],
+            "tags": [{"name": "idle", "from": 0, "to": 1, "repeat": 3}], "play": "idle"}"#;
+        let s: Sprite = serde_json::from_str(json).unwrap();
+        let s = s.sanitized().unwrap();
+        assert_eq!((s.play.as_deref(), s.tags[0].repeat), (Some("idle"), 3));
+        let json = r#"{"width": 2, "height": 2, "layers": [], "frames": [], "play": "gone"}"#;
+        let s: Sprite = serde_json::from_str(json).unwrap();
+        assert_eq!(s.sanitized().unwrap().play, None);
     }
 }

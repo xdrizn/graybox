@@ -388,6 +388,33 @@
   - Checked in the real app: Pixel button from the pill (three sharp states, a longer label grows
     the button), a sprite resized with Middle, 9-slice and Tile, the Pixel text section, and a
     palette swap made into a variant from the Pixel colors picker.
+- G16.4 (2026-11-12): animation. Plan: the pure playback first (`crates/pixel/src/anim.rs`: which
+  frame shows at a moment, per tag and direction, worked examples), frame and tag edits on the
+  sprite (tags follow inserted and deleted frames), then the commands (`pixel.frame.*`,
+  `pixel.tag.*`, `pixel.set {play}`), then the renderer (a pixel layer shows its frame at the
+  presenter's time, and the animation clock wakes Prototype and Play), then the timeline strip in
+  Pixel mode (frames × layers, durations, drag, onion skin, play) and a "Plays" row in the panel.
+  Built:
+  - `crates/pixel/src/anim.rs`: `sequence` (a tag's frames in its direction; ping-pong shows each
+    end once a turn), `frame_in` / `frame_at` (the frame at a moment from each frame's duration,
+    looping, or stopping on the last frame after `repeat` runs). Sprites keep `play` (the tag
+    played in Prototype and Play) and tags keep `repeat`; `insert_frame`, `remove_frame`,
+    `move_frame` keep tags in step.
+  - Commands: `pixel.frame.add {index?, copy?, duration?}` (new or duplicate), `pixel.frame.delete
+    {frame | frames}` (one undo step), `pixel.frame.move`, `pixel.frame.set {frame | frames,
+    duration}`, `pixel.tag.add / set / delete`, `pixel.set {play}`. The image fill shows the
+    played tag's first frame.
+  - Renderer: a pixel layer shows the frame its tag is at at the presenter's time; the animation
+    clock counts pixel layers, so Prototype and Play redraw when a frame is due (same path as
+    animated GIFs).
+  - Pixel mode: a timeline strip over the pill (frames across with number and duration, layers
+    down with a dot per cel that has pixels, tags as coloured bands), play/stop, previous/next
+    (`,` and `.`), new, duplicate and delete frames, one duration for the picked frames, drag a
+    frame header to move it, Shift+click picks a run of frames, New tag, a tag row (name,
+    Forward/Reverse/Ping-pong, Repeat, Plays in Prototype, Delete tag), and onion skin (the frame
+    before in red, after in blue, under the one drawn on). The panel has a "Plays" menu.
+  - Checked in the real app: a 4-frame bouncing ball with a ping-pong tag, onion skin, playing in
+    the editor and in Prototype (the presented screen redraws as the frames change).
 
 ## Decisions
 - G16 pixel art, details the spec left open (chosen as a pixel artist would expect):
@@ -429,6 +456,17 @@
     turning "Cuts as padding" on sets the padding to the cuts. An instance of a pixel component
     shows (and `pixel.get` reads) its main's pixels; it isn't drawn on, recoloured or sliced as
     pixel art itself.
+  - G16.4: switching what plays on hover or press is a variant whose sprite plays another tag
+    (the Pixel button's Hover and Pressed states), so every prototype trigger already switches
+    tags; no new prototype action. A layer with no tag chosen plays every frame. Design shows the
+    first frame of what it plays (still); Pixel mode plays with its own button. The play button
+    runs the tag the current frame is in (the played one first), else every frame, always looping.
+  - G16.4: a new frame after a tag's last frame joins the tag (as you'd add a frame to `idle`);
+    a moved frame leaves the tags where they are. Enter stays Done in Pixel mode (as in vector
+    edit), so play has no key; `,` and `.` step frames. Onion skin is one frame each side, drawn
+    under the frame drawn on, hidden while playing.
+  - G16.4 review, left for the G16.6 performance pass: the animation clock reads each pixel
+    layer's sprite description every time it is asked (each presented frame).
 - G11.4 movement (recommended option each time):
   - No physics engine: one cylinder against the world's axis-aligned boxes (two passes) plus the
     heightfield; a few hundred boxes per step is cheap at 60 Hz and the same on wasm.
@@ -833,6 +871,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     text, then `nine_slice::draw`); `render/src/nine_slice.rs` (ours) leaves pixel layers to
     `pixel`; `engine/src/cmd/game.rs` (ours): `game.nineSlice.set` and `game.image.toBackground`
     call `cmd::pixel::kit` for pixel layers.
+  - G16.4: `render/src/images.rs` `animation_clock`: one line, `pixel::tick` adds pixel layers'
+    frames to the clock (Prototype and Play redraw when a frame is due).
 
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.

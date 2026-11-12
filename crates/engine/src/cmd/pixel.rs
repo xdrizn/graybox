@@ -18,6 +18,7 @@ use super::CommandSpec;
 use crate::automation::params::{boolean, color_of, get, num, opt_id, req_id};
 use crate::{Result, Session, bad, spec};
 
+mod anim;
 mod edit;
 pub(crate) mod kit;
 
@@ -80,7 +81,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "pixel.set",
             "Sprite settings",
-            "{id, scale? (1–64: the layer takes width × scale), resize? (middle|edges|tile: how the art regrows when the layer is resized without 9-slice), sliceFill? (tile|stretch: the 9-slice edges and middle), slicePadding? (a frame with auto layout takes the 9-slice cuts as its padding)} → {scale, resize, sliceFill, slicePadding}",
+            "{id, scale? (1–64: the layer takes width × scale), resize? (middle|edges|tile: how the art regrows when the layer is resized without 9-slice), sliceFill? (tile|stretch: the 9-slice edges and middle), slicePadding? (a frame with auto layout takes the 9-slice cuts as its padding), play? (the tag it plays in Prototype and Play; empty for every frame)} → {scale, resize, sliceFill, slicePadding, play}",
             true,
             settings
         ),
@@ -93,6 +94,7 @@ pub fn specs() -> Vec<CommandSpec> {
         ),
     ];
     list.extend(edit::specs());
+    list.extend(anim::specs());
     list.extend(kit::specs());
     list
 }
@@ -235,12 +237,15 @@ fn edit_cel(s: &mut Session, id: NodeId, sprite: &Sprite, (layer, frame): (u32, 
     Ok(changed)
 }
 
-/// Puts the sprite's first frame in layer `id`'s image fill (adding one if it has none), so the
-/// art shows wherever the sprite itself isn't drawn (exports, older FigCraft). The picture it
+/// Puts the frame the sprite shows at rest (the first its played tag shows) in layer `id`'s image
+/// fill (adding one if it has none), so the art shows wherever the sprite itself isn't drawn
+/// (exports, older FigCraft). The picture it
 /// replaces leaves the document when nothing else shows it (undo brings back the document that had it).
 pub fn show(doc: &mut Document, id: NodeId, sprite: &Sprite) {
     let Some(n) = doc.node(id) else { return };
-    let Some(png) = store::frame_image(&n.plugin_data, sprite, 0).and_then(|c| c.to_png()) else { return };
+    let Some(png) = store::frame_image(&n.plugin_data, sprite, figcraft_pixel::anim::frame_at(sprite, 0.0).0).and_then(|c| c.to_png()) else {
+        return;
+    };
     let Ok((hash, _, _)) = figcraft_format::add_image(doc, png) else { return };
     let Some(n) = doc.node_mut(id) else { return };
     let old = match n.fills.iter_mut().rev().find_map(|f| match &mut f.kind {
@@ -490,8 +495,17 @@ fn settings(s: &mut Session, p: &Value) -> Result<Value> {
             sprite.slice_padding
         }
     };
+    // What it plays in Prototype and Play (G16.4): a tag's name, or "" for every frame.
+    if let Some(v) = get(p, "play").filter(|v| !v.is_null()) {
+        let v = v.as_str().ok_or_else(|| bad(cmd, "`play` must be a tag's name, or empty for every frame"))?.to_string();
+        if !v.is_empty() && sprite.tag(&v).is_none() {
+            return Err(bad(cmd, format!("no tag called \"{v}\"")));
+        }
+        sprite.play = (!v.is_empty()).then_some(v);
+    }
     let doc = s.doc_mut()?;
     store::save(&mut doc.get_mut(id)?.plugin_data, &sprite);
+    show(doc, id, &sprite);
     if repad {
         kit::repad(doc, id, &sprite)?;
     }
@@ -500,6 +514,7 @@ fn settings(s: &mut Session, p: &Value) -> Result<Value> {
         "resize": label(&sprite.resize),
         "sliceFill": label(&sprite.slice_fill),
         "slicePadding": sprite.slice_padding,
+        "play": sprite.play,
     }))
 }
 

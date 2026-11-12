@@ -357,3 +357,59 @@ fn the_pixel_button_in_the_new_pill_makes_the_component_set_and_leaves_pixel_mod
     assert_eq!(doc.node(set).unwrap().name, "Pixel button");
     assert_eq!(doc.node(set).unwrap().children.len(), 3);
 }
+
+fn pixel_in(u: &mut Ui, id: u64, frame: usize, x: i64, y: i64) -> Option<String> {
+    let r = u.app.session.execute("pixel.pick", &json!({"id": id, "x": x, "y": y, "frame": frame})).unwrap();
+    r["color"].as_str().map(str::to_string)
+}
+
+fn click(u: &mut Ui, p: Pos2) {
+    u.frame(vec![Event::PointerMoved(p)]);
+    press(u, p, PointerButton::Primary, true);
+    press(u, p, PointerButton::Primary, false);
+    u.frame(vec![]);
+}
+
+#[test]
+fn the_period_and_comma_keys_step_through_frames_and_the_pencil_draws_on_the_frame_shown() {
+    let (mut u, id) = editing();
+    u.app.run("pixel.frame.add", json!({"id": id}));
+    u.frame(vec![]);
+    key(&mut u, Key::Period, false);
+    assert_eq!(u.app.pixel.frame, 1);
+    let p = at(&u, 2.0, 2.0);
+    click(&mut u, p);
+    assert_eq!(pixel_in(&mut u, id, 1, 2, 2).as_deref(), Some("#1b1d29"), "drawn in frame 2");
+    assert_eq!(pixel_in(&mut u, id, 0, 2, 2), None, "frame 1 untouched");
+    key(&mut u, Key::Period, false);
+    assert_eq!(u.app.pixel.frame, 0, "past the last frame it wraps round");
+    key(&mut u, Key::Comma, false);
+    assert_eq!(u.app.pixel.frame, 1);
+    // With the onion skin on, the frame before shows faintly (its picture is made once).
+    u.app.pixel.onion = true;
+    u.frame(vec![]);
+    u.frame(vec![]);
+    assert_eq!(u.app.pixel.onion_tex.len(), 1, "frame 1 is the only neighbour of frame 2");
+}
+
+#[test]
+fn play_runs_the_frames_of_the_current_tag_and_any_click_in_the_timeline_stops_it() {
+    let (mut u, id) = editing();
+    for _ in 0..3 {
+        u.app.run("pixel.frame.add", json!({"id": id}));
+    }
+    u.app.run("pixel.tag.add", json!({"id": id, "from": 2, "to": 3, "name": "blink"}));
+    u.app.pixel.frame = 3;
+    super::timeline::toggle_play(&mut u.app);
+    assert_eq!(u.app.pixel.playing.as_ref().map(|p| p.seq.clone()), Some(vec![2, 3]), "the tag the frame is in");
+    u.frame(vec![]);
+    assert!(u.app.pixel.playing.as_ref().is_some_and(|p| p.since.is_some()), "the clock starts on the first frame drawn");
+    assert!((2..=3).contains(&u.app.pixel.frame));
+    key(&mut u, Key::Period, false);
+    assert!(u.app.pixel.playing.is_none(), "stepping stops playing");
+    u.app.pixel.frame = 0;
+    super::timeline::toggle_play(&mut u.app);
+    assert_eq!(u.app.pixel.playing.as_ref().map(|p| p.seq.len()), Some(4), "outside a tag: every frame");
+    super::timeline::toggle_play(&mut u.app);
+    assert!(u.app.pixel.playing.is_none());
+}

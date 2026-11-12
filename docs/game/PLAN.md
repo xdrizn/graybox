@@ -212,7 +212,7 @@ Pixel layers edited in place in a Pixel mode, Aseprite-style standard tools, sma
   palette tied to styles and variables, Selection colours, sprite layers.
 - [x] G16.3 Smart resize, pixel 9-slice, insets as padding, Pixel text, Pixel button starter, tile mode,
   components and palette-swap variants.
-- [ ] G16.4 Animation: timeline, durations, onion skin, tags, playback in Prototype and Play.
+- [x] G16.4 Animation: timeline, durations, onion skin, tags, playback in Prototype and Play.
 - [ ] G16.5 Export and import: exporter trait, PNG, sheet and JSON, Unity with Live Link, PNG and sheet import.
 - [ ] G16.6 Polish: pixel fonts, shade, Claude MCP tools, performance, guide, installed copy.
 

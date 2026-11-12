@@ -21,6 +21,7 @@ mod panel;
 mod pill;
 #[cfg(test)]
 mod tests;
+pub(crate) mod timeline;
 
 pub(crate) use draw::draw;
 pub(crate) use input::{input, key, off_canvas, paste_events};
@@ -217,6 +218,17 @@ pub struct Editor {
     pub(crate) cut: bool,
     /// The New sprite size: width, height, scale.
     pub(crate) new_size: [u32; 3],
+    /// The timeline (G16.4): the other end of a run of frames picked with Shift (the current
+    /// frame is the first end), the first frame column shown, the frames playing, the tag whose
+    /// settings are open, the frame header being dragged.
+    pub(crate) frame_to: Option<usize>,
+    pub(crate) first_frame: usize,
+    pub(crate) playing: Option<timeline::Playing>,
+    pub(crate) tag_open: Option<String>,
+    pub(crate) frame_drag: Option<usize>,
+    /// Onion skin: the frames before and after shown faintly, and their pictures (decode keys).
+    pub(crate) onion: bool,
+    pub(crate) onion_tex: Vec<(u64, egui::TextureHandle)>,
 }
 
 impl Default for Editor {
@@ -250,6 +262,13 @@ impl Default for Editor {
             pasted: false,
             cut: false,
             new_size: [32, 32, 4],
+            frame_to: None,
+            first_frame: 0,
+            playing: None,
+            tag_open: None,
+            frame_drag: None,
+            onion: false,
+            onion_tex: Vec::new(),
         }
     }
 }
@@ -283,6 +302,10 @@ pub(crate) fn enter(app: &mut FigApp, id: NodeId) {
         app.pixel.axis = [i64::from(sprite.width), i64::from(sprite.height)];
         app.pixel.layer = None;
         app.pixel.frame = 0;
+        app.pixel.frame_to = None;
+        app.pixel.first_frame = 0;
+        app.pixel.playing = None;
+        app.pixel.tag_open = None;
         app.pixel.decoded = None;
         app.pixel.last = None;
     }
@@ -308,6 +331,7 @@ pub(crate) fn enter_from_switcher(app: &mut FigApp) {
 pub(crate) fn leave(app: &mut FigApp) {
     app.pixel.mode = Mode::Off;
     app.pixel.gesture = None;
+    app.pixel.playing = None;
     app.pixel.decoded = None;
     app.pixel.hover = None;
     app.pixel.picking = None;

@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use crate::Session;
 use crate::cmd::file::{file_bytes, load_bytes};
 
+mod anim;
 mod kit;
 
 fn ex(s: &mut Session, command: &str, params: Value) -> Value {
@@ -177,6 +178,8 @@ fn every_pixel_command_survives_junk_on_a_sprite() {
         json!({"op": "rotateCW", "png": "iVBORw0KGgo=", "source": 1, "index": 4294967296u64, "layer": 1, "colors": [1, "x"], "add": "#zz", "remove": 3}),
         json!({"op": "move", "dx": -1e308, "dy": 1e308, "text": "GIMP Palette\n999 -1 x\n", "format": "pdf", "from": "#ff0000", "to": [1]}),
         json!({"kind": "lasso", "points": [[0, 0], [1e9, 1e9], [-1e9, 3]], "op": "add", "x": 1e308, "tolerance": 255}),
+        json!({"copy": 1e308, "duration": "x", "frames": [1, "x"], "tag": 5, "direction": 7, "repeat": -1, "play": 3, "index": -1, "from": "x", "to": 1e308}),
+        json!({"copy": 0, "duration": -1e308, "frames": [], "tag": "Tag 1", "direction": "pingPong", "repeat": 1e308, "play": "", "index": 1e308, "from": 0, "to": 0}),
     ];
     for spec in crate::cmd::all_commands().iter().filter(|c| c.id.starts_with("pixel.")) {
         for j in &junk {

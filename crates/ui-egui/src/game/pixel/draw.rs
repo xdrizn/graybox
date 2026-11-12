@@ -136,6 +136,7 @@ fn draw_edit(app: &mut FigApp, painter: &egui::Painter, id: figcraft_doc::NodeId
         Rect::from_min_max(pos2(0.0, 0.0), pos2((w / f64::from(cell)) as f32 / 2.0, (h / f64::from(cell)) as f32 / 2.0)),
         Color32::WHITE,
     ));
+    onion(app, &ctx, painter, id, &d, q);
     painter.add(quad(tex, q, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE));
     if app.pixel.grid && zoom >= GRID_FROM {
         grid(app, painter, xf, w, h, zoom);
@@ -145,6 +146,35 @@ fn draw_edit(app: &mut FigApp, painter: &egui::Painter, id: figcraft_doc::NodeId
     brush_preview(app, painter, xf, &d, zoom);
     selection_outline(app, painter, xf, &d);
     axes(app, painter, xf, w, h, &t);
+}
+
+/// The onion skin (G16.4): the frame before (red) and after (blue), faint, under the one drawn on.
+fn onion(app: &mut FigApp, ctx: &egui::Context, painter: &egui::Painter, id: figcraft_doc::NodeId, d: &super::Decoded, q: [Pos2; 4]) {
+    if !app.pixel.onion || app.pixel.playing.is_some() {
+        return;
+    }
+    let frames = d.sprite.frames.len();
+    let around = [
+        (d.frame.checked_sub(1), Color32::from_rgba_unmultiplied(255, 70, 70, 80)),
+        ((d.frame + 1 < frames).then_some(d.frame + 1), Color32::from_rgba_unmultiplied(70, 130, 255, 80)),
+    ];
+    let mut keep = Vec::new();
+    for (frame, tint) in around {
+        let Some(f) = frame else { continue };
+        let Some(n) = app.session.doc().ok().and_then(|doc| doc.node(id)) else { return };
+        let key = figcraft_pixel::store::frame_hash(&n.plugin_data, &d.sprite, f);
+        let tex = match app.pixel.onion_tex.iter().find(|(k, _)| *k == key) {
+            Some((_, t)) => t.clone(),
+            None => {
+                let Some(pic) = figcraft_pixel::store::frame_image(&n.plugin_data, &d.sprite, f) else { continue };
+                let img = ColorImage::from_rgba_unmultiplied([pic.width() as usize, pic.height() as usize], &pic.to_bytes());
+                ctx.load_texture(format!("graybox-pixel-onion-{key}"), img, TextureOptions::NEAREST)
+            }
+        };
+        painter.add(quad(tex.id(), q, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), tint));
+        keep.push((key, tex));
+    }
+    app.pixel.onion_tex = keep;
 }
 
 /// What the picture on screen depends on besides the cel: the stroke or shape in progress and the

@@ -62,8 +62,18 @@ pub fn shown(doc: &Document, n: &Node, time: f64) -> Option<Shown> {
         let cut = |v: f64| if v.is_finite() { (v / scale).round().clamp(0.0, f64::from(Canvas::MAX_SIDE)) as u32 } else { 0 };
         (s.insets.map(cut), sprite.slice_fill)
     });
-    let _ = time;
-    Some(Shown { sprite, frame: 0, size, slice })
+    let frame = figcraft_pixel::anim::frame_at(&sprite, time).0;
+    Some(Shown { sprite, frame, size, slice })
+}
+
+/// Adds pixel layer `n`'s frames to an animation clock (see `images::animation_clock`): a number
+/// for the frame it shows `t` seconds in and the seconds until it changes. Nothing for a sprite
+/// that doesn't move (one frame, or a tag played to its end).
+pub fn tick(doc: &Document, n: &Node, t: f64, clock: &mut Option<(u64, f64)>) {
+    let Some(sprite) = source(doc, n).and_then(|src| store::load(&src.plugin_data)) else { return };
+    let (frame, Some(next)) = figcraft_pixel::anim::frame_at(&sprite, t) else { return };
+    let (key, soonest) = clock.unwrap_or((0, f64::INFINITY));
+    *clock = Some((key.wrapping_mul(31).wrapping_add(frame as u64 + 1), soonest.min(next)));
 }
 
 /// The picture of `shown` at its art size, premultiplied for drawing (cached while its cels, size

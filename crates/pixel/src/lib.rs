@@ -9,6 +9,7 @@
 //! [`store::KEY`] and each cel as a base64 PNG under its own key, so a stroke rewrites one cel.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+pub mod anim;
 pub mod canvas;
 pub mod paint;
 pub mod palette;
