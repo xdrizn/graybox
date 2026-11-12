@@ -2,11 +2,12 @@
 //! it stops at the world's solid boxes and stands on their tops; it jumps with coyote time and a
 //! buffered press; it rolls (a dodge on the ground, or on landing to take a fall); it climbs ladders,
 //! mantles onto ledges and climbs the rock wall; running, rolling and the wall cost stamina; a hard
-//! fall without a roll knocks it down.
+//! fall without a roll knocks it down. What the weapons do is in `combat.rs`.
 use super::animator::smooth;
 use super::clip::ClipId;
 use super::clips::clip;
 use super::collide::{self, STEP};
+use super::combat;
 use super::hero::{Hero, RADIUS, wrap_pi};
 use super::props::{ClimbKind, Climbable};
 use super::world::World;
@@ -57,7 +58,7 @@ const MANTLE_MAX: f32 = 2.0;
 /// What the hero is doing besides walking about.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum Action {
-    /// On the ground or in the air, moving freely.
+    /// On the ground or in the air, moving freely (attacks happen here too).
     #[default]
     Free,
     Roll {
@@ -104,6 +105,9 @@ impl Action {
 pub struct Presses {
     pub jump: bool,
     pub roll: bool,
+    pub attack: bool,
+    /// 1 sword, 2 spear, 3 club, 4 bow; 0 is no press.
+    pub weapon: u8,
 }
 
 /// The movement state kept between steps.
@@ -183,7 +187,7 @@ pub(super) fn step(hero: &mut Hero, input: &Input, camera_yaw: f32, world: &Worl
     moves.rest += dt;
 
     match hero.moves.action {
-        Action::Free => free(hero, input, wish, world, dt),
+        Action::Free => free(hero, input, wish, camera_yaw, world, dt),
         Action::Roll { time, direction } => roll(hero, world, time, direction, dt),
         Action::Ladder { index } => ladder(hero, input, world, index, presses, dt),
         Action::Wall { index } => wall(hero, input, world, index, presses, dt),
@@ -227,21 +231,25 @@ fn travel(hero: &mut Hero, world: &World, dt: f32) -> bool {
     landed
 }
 
-fn free(hero: &mut Hero, input: &Input, wish: Vec3, world: &World, dt: f32) {
+fn free(hero: &mut Hero, input: &Input, wish: Vec3, camera_yaw: f32, world: &World, dt: f32) {
+    let pace = combat::pace(&hero.combat);
     let running = input.run && !hero.moves.tired && wish.length_squared() > 0.01;
-    let top = if input.crouch {
+    let mut top = if input.crouch {
         CROUCH_SPEED
     } else if running {
         RUN_SPEED
     } else {
         JOG_SPEED
     };
+    if let Some(limit) = pace.limit {
+        top = top.min(limit);
+    }
     if running && hero.grounded && hero.speed() > JOG_SPEED + 0.5 {
         hero.moves.spend(RUN_COST * dt);
     }
 
     // Roll on the ground (a dodge): where the stick points, or straight ahead.
-    if hero.moves.roll_buffer > 0.0 && hero.grounded && hero.moves.stamina >= ROLL_COST {
+    if hero.moves.roll_buffer > 0.0 && hero.grounded && !pace.busy && hero.moves.stamina >= ROLL_COST {
         let direction = if wish.length_squared() > 0.01 { wish.normalize() } else { forward_of(hero.facing) };
         start_roll(hero, direction);
         return;
@@ -249,12 +257,15 @@ fn free(hero: &mut Hero, input: &Input, wish: Vec3, world: &World, dt: f32) {
 
     let accel = if hero.grounded { GROUND_ACCEL } else { AIR_ACCEL };
     let current = Vec3::new(hero.velocity.x, 0.0, hero.velocity.z);
-    let horizontal = current + (wish * top - current).clamp_length_max(accel * dt);
+    let mut horizontal = current + (wish * top - current).clamp_length_max(accel * dt);
+    if pace.lunge > 0.0 && hero.grounded {
+        horizontal = horizontal.lerp(forward_of(hero.facing) * pace.lunge, 0.5);
+    }
 
     let moves = &mut hero.moves;
     moves.since_ground = if hero.grounded { 0.0 } else { moves.since_ground + dt };
     let mut vertical = hero.velocity.y;
-    if moves.jump_buffer > 0.0 && moves.since_ground <= COYOTE {
+    if moves.jump_buffer > 0.0 && moves.since_ground <= COYOTE && !pace.busy {
         vertical = JUMP_SPEED;
         moves.jump_buffer = 0.0;
         moves.since_ground = COYOTE + 1.0;
@@ -284,14 +295,15 @@ fn free(hero: &mut Hero, input: &Input, wish: Vec3, world: &World, dt: f32) {
         hero.moves.highest = hero.moves.highest.max(hero.position.y);
     }
 
-    if start_climb(hero, world, wish) {
+    if !pace.busy && start_climb(hero, world, wish) {
         return;
     }
 
-    // Face where the player wants to go, turning smoothly.
-    let wanted = (wish.length_squared() > 0.01).then(|| yaw_of(wish));
+    // Face where the player wants to go (or where the camera looks while aiming), turning smoothly.
+    let wanted = if pace.face_camera { Some(camera_yaw) } else { (wish.length_squared() > 0.01).then(|| yaw_of(wish)) };
     if let Some(wanted) = wanted.filter(|w| w.is_finite()) {
-        hero.facing = wrap_pi(hero.facing + wrap_pi(wanted - hero.facing) * (1.0 - (-FACING_RATE * dt).exp()));
+        let rate = FACING_RATE * pace.turn;
+        hero.facing = wrap_pi(hero.facing + wrap_pi(wanted - hero.facing) * (1.0 - (-rate * dt).exp()));
     }
 }
 

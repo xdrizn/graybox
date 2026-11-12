@@ -3,6 +3,20 @@
 **Current milestone:** G7 — Share (and G0.3, G2.3 leftovers)
 
 ## Done
+- G11.5, first part (2026-11-12, with G11.4, same request from Adriel): weapons and strikes.
+  - Weapons (`tps/combat.rs`): 1–4 pick sword, spear, club, bow (drawn from the back; the same key again
+    puts it away; also in the air; a key pressed mid-strike counts when the strike ends); click strikes
+    (drawn at once if on the back): three sword strikes chain when clicked in time, the spear thrusts, the
+    club swings; a strike slows the hero, lunges a little and keeps the facing; the bow draws while the
+    button is held (walk pace, facing where the camera looks) and shoots on release. Nothing is hit yet.
+  - Input: `Input::weapon` (`game/input.rs`, 1–4); the attack is the existing "shoot" binding. The Play
+    help line lists both. `inspect` shows `strike` and `aiming`.
+  - Code review (high, twice) caught and fixed: an attack during the sheathe moved the sword to the back
+    mid-swing; a weapon key during a strike or a jump was lost; a strike cut short by walking off an edge
+    kept playing its swing in the air. Each has a test.
+  - Tests (`tps/movement_tests.rs`): the sword combo, weapon keys and the bow; the three fixes above.
+  - Checked in the real app: sword combo, 2 spear, 3 club, 4 bow (held: aiming, released: shot); sheathe
+    then click keeps the sword in hand; 4 during a club swing switches when it ends; 2 in a jump draws.
 - G11.4 (2026-11-12, asked by Adriel after trying G11.3: "the hero walks through things, does not
   climb, does not attack"): movement and camera.
   - Collision (`tps/collide.rs`): the hero is a standing cylinder; the world's solid boxes push it out
@@ -235,6 +249,11 @@
     in the first-person defaults, so X was free.
   - Falls only knock down for now (no health yet); the damage numbers of the spec (4 m / 12 m) come
     with G11.5's health.
+- G11.5 strikes (recommended option each time):
+  - Attack is the existing "shoot" binding (left click / RT); weapons are the number keys 1–4. D-pad and
+    wheel switching wait for G11.5's bindings.
+  - The sword combo counts a click after 35% of the current strike; a strike blocks jump, roll and
+    climbing until it ends.
 - G11.2 world (Adriel was away; the recommended option each time):
   - The ground is a heightfield with alternating triangle splits, and the walking height is looked up in
     those same triangles, so what you see is what you stand on. Only integer hashing and smoothstep make
@@ -591,9 +610,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 
 ## Next
 - G11 (third-person game; spec [`specs/2026-11-11-third-person-design.md`](specs/2026-11-11-third-person-design.md)).
-  Milestone G11 is in `PLAN.md`. G11.2, G11.3 and G11.4 are done; next G11.5 (weapons and strikes,
-  dummies and husks to hit, damage and health, arrows, game variables and events, the third-person HUD).
-  G11.6: camera easing, bow over the shoulder, crowns in the camera's way.
+  Milestone G11 is in `PLAN.md`. G11.2, G11.3 and G11.4 are done (with weapon switching and strikes);
+  next the rest of G11.5: dummies and husks to hit, damage and health, arrows, game variables and
+  events, the third-person HUD. G11.6: camera easing, bow over the shoulder, crowns in the camera's way.
 - Navigable menus phase 2: tab bars (LB/RB) switching the menu below; spatial focus for layers
   without auto layout. To check: Tab sent through the control channel did not open the starter
   Inventory in Play (the controller's View did).

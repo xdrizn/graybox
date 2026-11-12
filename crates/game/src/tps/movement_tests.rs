@@ -1,5 +1,5 @@
 //! G11.4 movement: collision, climbing every ladder, wall and ledge of the valley, rolls, falls,
-//! and the camera's line of sight.
+//! the camera's line of sight, and the weapons (G11.5's first part).
 use super::*;
 use crate::state::Input;
 
@@ -256,6 +256,40 @@ fn a_jump_pressed_just_before_landing_still_jumps() {
 }
 
 #[test]
+fn the_sword_chains_three_strikes_and_keys_pick_weapons() {
+    let mut tps = Tps::new();
+    let mut seen = Vec::new();
+    for step in 0..180 {
+        // Click about every 0.3 s.
+        let shoot = step % 18 < 2;
+        run(&mut tps, Input { shoot, ..Input::default() }, 1.0 / 60.0);
+        if let Some(strike) = tps.hero.combat.striking()
+            && seen.last() != Some(&strike)
+        {
+            seen.push(strike);
+        }
+    }
+    assert_eq!(seen.get(..3), Some(&[ClipId::Sword1, ClipId::Sword2, ClipId::Sword3][..]));
+    assert!(tps.hero.animator.in_hand());
+
+    run(&mut tps, Input { weapon: 2, ..Input::default() }, 1.0 / 60.0);
+    assert_eq!(tps.hero.animator.weapon(), Weapon::Spear);
+    run(&mut tps, Input::default(), 1.0);
+    assert!(tps.hero.animator.in_hand(), "drawn");
+    run(&mut tps, Input { shoot: true, ..Input::default() }, 1.0 / 60.0);
+    assert_eq!(tps.hero.combat.striking(), Some(ClipId::SpearThrust));
+    run(&mut tps, Input::default(), 1.5);
+    assert_eq!(tps.hero.combat.striking(), None);
+
+    // The bow: hold to draw, let go to shoot.
+    run(&mut tps, Input { weapon: 4, ..Input::default() }, 1.0);
+    run(&mut tps, Input { shoot: true, ..Input::default() }, 0.5);
+    assert!(tps.hero.combat.aiming());
+    run(&mut tps, Input::default(), 1.0 / 60.0);
+    assert!(!tps.hero.combat.aiming());
+}
+
+#[test]
 fn the_camera_stops_short_of_a_wall_behind_the_hero() {
     let mut tps = Tps::new();
     // Stand with the tower base right behind (the camera looks from the south, the base is north).
@@ -345,4 +379,49 @@ fn climbing_the_wall_sideways_stops_at_what_stands_in_front_of_it() {
             }
         }
     }
+}
+
+#[test]
+fn an_attack_during_the_sheathe_keeps_the_weapon_in_hand() {
+    let mut tps = Tps::new();
+    run(&mut tps, Input { shoot: true, ..Input::default() }, 1.0 / 60.0);
+    run(&mut tps, Input::default(), 1.5);
+    assert!(tps.hero.animator.in_hand());
+    run(&mut tps, Input { weapon: 1, ..Input::default() }, 1.0 / 60.0);
+    run(&mut tps, Input::default(), 0.1);
+    run(&mut tps, Input { shoot: true, ..Input::default() }, 1.0 / 60.0);
+    for _ in 0..30 {
+        run(&mut tps, Input::default(), 1.0 / 60.0);
+        assert!(tps.hero.animator.in_hand(), "the sword went to the back mid-swing");
+    }
+}
+
+#[test]
+fn a_weapon_picked_during_a_strike_or_a_jump_is_not_lost() {
+    let mut tps = Tps::new();
+    run(&mut tps, Input { shoot: true, ..Input::default() }, 1.0 / 60.0);
+    run(&mut tps, Input::default(), 0.1);
+    assert!(tps.hero.combat.striking().is_some());
+    run(&mut tps, Input { weapon: 2, ..Input::default() }, 1.0 / 60.0);
+    run(&mut tps, Input::default(), 1.0);
+    assert_eq!(tps.hero.animator.weapon(), Weapon::Spear, "picked after the strike");
+
+    run(&mut tps, Input { jump: true, ..Input::default() }, 1.0 / 60.0);
+    run(&mut tps, Input::default(), 0.1);
+    assert!(!tps.hero.grounded);
+    run(&mut tps, Input { weapon: 3, ..Input::default() }, 1.0 / 60.0);
+    run(&mut tps, Input::default(), 1.0);
+    assert_eq!(tps.hero.animator.weapon(), Weapon::Club, "picked in the air");
+}
+
+#[test]
+fn a_strike_cut_short_by_a_fall_stops_its_clip() {
+    let mut tps = Tps::new();
+    run(&mut tps, Input { shoot: true, ..Input::default() }, 1.0 / 60.0);
+    assert_eq!(tps.hero.combat.striking(), Some(ClipId::Sword1));
+    tps.hero.position.y += 4.0;
+    tps.hero.grounded = false;
+    run(&mut tps, Input::default(), 0.3);
+    assert_eq!(tps.hero.combat.striking(), None);
+    assert_ne!(tps.hero.animator.current(), ClipId::Sword1, "still swinging in the air");
 }

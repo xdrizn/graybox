@@ -8,12 +8,13 @@
 //! - G11.2 world: `world.rs` (and new files for terrain, props, climbable tags).
 //! - G11.3 hero and animation: `hero.rs` (the pose), `rig.rs`, `clip.rs`, `clips.rs`, `animator.rs`.
 //! - G11.4 movement and camera: `controller.rs`, `collide.rs`, `camera.rs`.
-//! - G11.5 combat: new files, plus the events and variables of this module.
+//! - G11.5 combat: `combat.rs` (weapons and strikes) and new files, plus the events and variables of this module.
 mod animator;
 mod camera;
 mod clip;
 mod clips;
 mod collide;
+mod combat;
 mod controller;
 mod hero;
 mod layout;
@@ -31,6 +32,7 @@ pub use animator::{Animator, Drive, LOCOMOTION, Look, Weapon, locomotion_weights
 pub use camera::{OrbitCamera, PITCH_MAX, PITCH_MIN};
 pub use clip::{Clip, ClipId, Ease, Key, Layer, Mode};
 pub use clips::clip;
+pub use combat::Combat;
 pub use controller::{Action, Moves, Presses, STAMINA_MAX};
 pub use hero::{HEIGHT as HERO_HEIGHT, Hero, HeroPose, RADIUS as HERO_RADIUS};
 pub use layout::{ROCK_MAX, TREE_MAX};
@@ -72,8 +74,10 @@ pub struct Tps {
     pub hero: Hero,
     pub camera: OrbitCamera,
     world: World,
-    /// Presses since the last step (a press shorter than a step is not lost): jump, roll.
+    /// Presses since the last step (a press shorter than a step is not lost): jump, roll, attack, weapon.
     pending: Presses,
+    /// The attack button was held last frame (a press is when it goes down).
+    attack_held: bool,
 }
 
 impl Default for Tps {
@@ -89,6 +93,7 @@ impl Default for Tps {
             camera: OrbitCamera::default(),
             world,
             pending: Presses::default(),
+            attack_held: false,
         }
     }
 }
@@ -108,13 +113,21 @@ impl Tps {
             self.input.look = [0.0; 2];
             self.input.jump = false;
             self.input.roll = false;
+            self.input.weapon = 0;
             self.pending = Presses::default();
             return 0;
         }
         self.camera.turn(self.input.look);
         self.input.look = [0.0; 2];
+        let held = self.input.shoot;
         self.pending.jump |= std::mem::take(&mut self.input.jump);
         self.pending.roll |= std::mem::take(&mut self.input.roll);
+        self.pending.attack |= held && !self.attack_held;
+        self.attack_held = held;
+        let weapon = std::mem::take(&mut self.input.weapon);
+        if weapon != 0 {
+            self.pending.weapon = weapon;
+        }
         let steps = self.clock.advance(dt);
         for _ in 0..steps {
             self.ticks = self.ticks.saturating_add(1);
@@ -123,6 +136,7 @@ impl Tps {
             let previewing = self.hero.animator.previewing().is_some();
             let input = if previewing { Input { forward: 0.0, strafe: 0.0, ..self.input } } else { self.input };
             let presses = if previewing { Presses::default() } else { presses };
+            combat::step(&mut self.hero, presses, held && !previewing, DT);
             controller::step(&mut self.hero, &input, self.camera.yaw, &self.world, presses, DT);
             self.hero.animate(input.crouch, DT);
         }

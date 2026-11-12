@@ -366,6 +366,14 @@ impl Animator {
         self.overlay = None;
     }
 
+    /// Let go of an upper-body clip (the bow drawn) and keep the rest as it is.
+    pub fn release(&mut self) {
+        if self.overlay.is_some() {
+            self.begin_fade(0.2);
+            self.overlay = None;
+        }
+    }
+
     /// How fast a whole-body clip plays (1 is as authored; 0 holds it, as on a ladder standing still).
     pub fn set_rate(&mut self, rate: f32) {
         self.rate = if rate.is_finite() { rate.clamp(-3.0, 3.0) } else { 1.0 };

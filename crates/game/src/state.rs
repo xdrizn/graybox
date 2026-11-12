@@ -26,6 +26,8 @@ pub struct Input {
     pub respawn: bool,
     /// Third person (G11.4): a roll / dodge press.
     pub roll: bool,
+    /// Third person: a weapon picked this frame (1 sword, 2 spear, 3 club, 4 bow; 0 is no press).
+    pub weapon: u8,
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -65,11 +65,14 @@ pub(crate) fn read(i: &InputState, settings: &GameSettings, held: u32, pressed: 
         heal: edge("heal"),
         respawn: edge("respawn"),
         roll: edge_or(i, settings, "roll", ROLL_KEYS, pressed),
+        weapon: WEAPON_KEYS.iter().position(|key| i.key_pressed(*key)).map_or(0, |index| index as u8 + 1),
     }
 }
 
 /// Third person: roll with Ctrl or the controller's X when the file binds no "roll" of its own.
 const ROLL_KEYS: &[&str] = &["Control", "Gamepad X"];
+/// Third person: 1 sword, 2 spear, 3 club, 4 bow.
+const WEAPON_KEYS: [Key; 4] = [Key::Num1, Key::Num2, Key::Num3, Key::Num4];
 
 /// A press of `name` as the file binds it, or of `defaults` for files made before the action existed.
 fn edge_or(i: &InputState, settings: &GameSettings, name: &str, defaults: &[&str], buttons: u32) -> bool {
