@@ -683,3 +683,6 @@ mod game_kind_tests;
 // Graybox: documents (G13).
 #[cfg(test)]
 mod docs_cmd_tests;
+// Graybox: nested pages (G9).
+#[cfg(test)]
+mod page_tree_tests;

@@ -8,7 +8,7 @@ use figcraft_doc::{Document, NodeId, NodeKind};
 use serde_json::json;
 
 use crate::a11y::{self, Region, RowInfo, Tip};
-use crate::i18n::{tr, trf, trn};
+use crate::i18n::{tr, trn};
 use crate::icons::{self, Icon};
 use crate::theme::{ACCENT, Tokens, regular, semibold};
 use crate::{FigApp, LeftTab};
@@ -240,152 +240,9 @@ fn pages(app: &mut FigApp, ui: &mut Ui) {
     if app.ui.page_search {
         search_field(ui, w, search_id, tr("Search pages"), &mut app.ui.page_filter, &mut app.ui.page_search, sresp.clicked());
     }
-    let Ok(ds) = app.session.ds() else { return };
-    let pages: Vec<(NodeId, String, bool)> =
-        ds.doc.pages.iter().filter_map(|p| ds.doc.node(*p).map(|n| (*p, n.name.clone(), ds.doc.is_divider(*p)))).collect();
-    let filter = app.ui.page_filter.trim().to_lowercase();
-    let filtering = !filter.is_empty();
-    let cur = ds.page;
-    let uid = ds.uid;
-    let sel = ds.selection.clone();
-    let mut select = None;
-    let mut rename_done: Option<(NodeId, String)> = None;
-    // Layers dragged from the list onto another page move there.
-    let dragging: Option<NodeId> = ui.data(|d| d.get_temp(layer_drag_id()));
-    let pointer = ui.input(|i| i.pointer.hover_pos());
-    let mut move_to: Option<(NodeId, String)> = None;
-    // Pages are dragged up and down the list to reorder them.
-    let mut reorder = crate::list_drag::ListDrag::in_order(ui, "pages");
-    let page_key = (uid, cur);
-    let scroll_to_cur = app.ui.pages_seen_page != Some(page_key);
-    let mut current_row_rendered = false;
-    // A long list scrolls in its own area, so the layers keep their room below it.
-    let max_h = pages_list_height(app.ui.pages_height, ui.available_height());
-    let mut moved = egui::ScrollArea::vertical().id_salt("pages_list").max_height(max_h).show(ui, |ui| {
-        for (k, (id, name, divider)) in pages.iter().cloned().enumerate() {
-            if filtering && (divider || !name.to_lowercase().contains(&filter)) {
-                continue;
-            }
-            let sense = if filtering { Sense::click() } else { Sense::click_and_drag() };
-            let (r, resp) = ui.allocate_exact_size(vec2(w, 32.0), sense);
-            if dev && resp.drag_started() {
-                crate::menus::dev_mode_refuses(app, "page.move");
-            }
-            if id == cur {
-                current_row_rendered = true;
-                if scroll_to_cur {
-                    ui.scroll_to_rect(r, None);
-                }
-            }
-            if !filtering && !dev {
-                reorder.row_by(&resp, k, r, || if divider { tr("Divider").to_string() } else { name.clone() });
-            }
-            a11y::list_item(&resp, if divider { tr("Divider") } else { &name }, id == cur);
-            let r = r.shrink2(vec2(8.0, 0.0));
-            a11y::ring_around(ui, r, &resp);
-            let renaming = app.ui.rename_page.as_ref().is_some_and(|(i, _)| *i == id);
-            if divider && !renaming {
-                // A divider is a line between pages: it opens nothing and takes no layers.
-                ui.painter().line_segment([pos2(r.min.x + 10.0, r.center().y), pos2(r.max.x - 10.0, r.center().y)], Stroke::new(1.0, t.border));
-            } else if resp.hovered() || id == cur {
-                ui.painter().rect_filled(r, CornerRadius::same(5), t.hover);
-            }
-            if dragging.is_some()
-                && id != cur
-                && !divider
-                // The gap between rows counts too.
-                && pointer.is_some_and(|p| resp.interact_rect.expand2(vec2(0.0, 3.0)).contains(p))
-            {
-                ui.painter().rect_stroke(r, CornerRadius::same(5), Stroke::new(2.0, ACCENT), egui::StrokeKind::Inside);
-                if ui.input(|i| i.pointer.any_released()) {
-                    move_to = Some((id, name.clone()));
-                }
-            }
-            if renaming {
-                let tr = Rect::from_min_max(pos2(r.min.x + 8.0, r.min.y + 4.0), pos2(r.max.x - 4.0, r.max.y - 4.0));
-                let start = ui.data_mut(|d| d.remove_temp::<bool>(page_rename_start_id())).unwrap_or(false);
-                let font = if id == cur { semibold(11.0) } else { regular(11.0) };
-                let (out, open) = crate::widgets::rename_field(ui, Id::unique(("pagename", id)), &name, tr, font, start);
-                if let Some(new) = out {
-                    rename_done = Some((id, new));
-                } else if !open {
-                    // Cancelled, or committed unchanged: the row goes back to its name, or the idle
-                    // field would catch the next click and a click wouldn't open this page.
-                    app.ui.rename_page = None;
-                }
-            } else if !divider {
-                let font = if id == cur { semibold(11.0) } else { regular(11.0) };
-                crate::bidi::paint_name(ui.painter(), pos2(r.min.x + 10.0, r.center().y), &name, font, t.text, r.width() - 14.0);
-            }
-            if resp.clicked() && !divider {
-                select = Some(id);
-                app.ui.pages_focus = Some(uid);
-                app.ui.layers_focus = false;
-            }
-            if resp.double_clicked() && !crate::menus::dev_mode_refuses(app, "page.rename") {
-                app.ui.rename_page = Some((id, name.clone()));
-                // The field takes the focus next frame, once it's drawn: focusing it now would put a
-                // node that isn't there yet in the screen reader tree, which AccessKit aborts on.
-                ui.data_mut(|d| d.insert_temp(page_rename_start_id(), true));
-            }
-            crate::right::context_popup(&resp).show(|ui| {
-                if ui.button(tr("Rename page")).clicked() {
-                    if !crate::menus::dev_mode_refuses(app, "page.rename") {
-                        app.ui.rename_page = Some((id, name.clone()));
-                        ui.data_mut(|d| d.insert_temp(page_rename_start_id(), true));
-                    }
-                    ui.close();
-                }
-                if ui.button(tr("Duplicate page")).clicked() {
-                    if !crate::menus::dev_mode_refuses(app, "page.duplicate") {
-                        app.run("page.duplicate", json!({"id": id}));
-                    }
-                    ui.close();
-                }
-                if ui.button(tr("Delete page")).clicked() {
-                    if !crate::menus::dev_mode_refuses(app, "page.delete") {
-                        delete_page(app, id);
-                    }
-                    ui.close();
-                }
-            });
-        }
-        reorder.finish(ui)
-    });
-    if current_row_rendered {
-        app.ui.pages_seen_page = Some(page_key);
-    }
-    // A drop outside the list's visible area (and the row gap at its edges) isn't on a page row,
-    // even one scrolled out of view.
-    if !ui.input(|i| i.pointer.latest_pos()).is_some_and(|p| moved.inner_rect.expand2(vec2(0.0, 3.0)).contains(p)) {
-        moved.inner = None;
-        move_to = None;
-    }
-    if let Some((from, to)) = moved.inner
-        && let Some((id, ..)) = pages.get(from)
-        && !crate::menus::dev_mode_refuses(app, "page.move")
-    {
-        app.run("page.move", json!({"id": id, "index": to}));
-    }
-    if let Some((id, new)) = rename_done {
-        app.ui.rename_page = None;
-        app.run("page.rename", json!({"id": id, "name": new}));
-    }
-    if let Some((page, name)) = move_to
-        && !crate::menus::dev_mode_refuses(app, "object.moveToPage")
-    {
-        let ids = dragged_layers(dragging, &sel);
-        if app.run("object.moveToPage", json!({"ids": ids, "page": page})).is_some() {
-            app.toast(trf("Moved to {name}", &[("name", &name)]));
-        }
-    }
-    if let Some(p) = select
-        && p != cur
-    {
-        app.run("page.select", json!({"id": p}));
-    }
-    // `inner_rect` is the room the list was given; a short list shrinks to its rows.
-    pages_edge(app, ui, moved.inner_rect.height().min(moved.content_size.y));
+    // Graybox: the Pages list is the tree the Docs tab uses: pages inside pages, a chevron to collapse (G9).
+    let Some(shown) = crate::game::page_list::show(app, ui, dev) else { return };
+    pages_edge(app, ui, shown);
 }
 
 /// The Pages list has the keyboard: a page row (or the add-page button) of the open file was
@@ -397,6 +254,10 @@ pub(crate) fn pages_have_keyboard(app: &FigApp) -> bool {
 
 /// Delete `page` (no confirmation: Undo brings it back) and say so.
 pub(crate) fn delete_page(app: &mut FigApp, page: NodeId) {
+    // Graybox: a page with pages inside it asks first (G9).
+    if crate::game::page_list::ask_before_delete(app, page) {
+        return;
+    }
     if app.run("page.delete", json!({"id": page})).is_some() {
         app.toast(tr("Page deleted"));
     }
@@ -451,12 +312,12 @@ fn pages_edge(app: &mut FigApp, ui: &mut Ui, shown: f32) {
 }
 
 /// A page rename just asked for by a double click: its field takes the focus when drawn (temp data).
-fn page_rename_start_id() -> Id {
+pub(crate) fn page_rename_start_id() -> Id {
     Id::unique("page_rename_start")
 }
 
 /// The layer row being dragged in the panel (temp data).
-fn layer_drag_id() -> Id {
+pub(crate) fn layer_drag_id() -> Id {
     Id::unique("layer_drag")
 }
 
@@ -476,7 +337,7 @@ fn sweep_id() -> Id {
 }
 
 /// What a drag of row `dragging` moves: the selection when the row is in it, else the row.
-fn dragged_layers(dragging: Option<NodeId>, sel: &[NodeId]) -> Vec<NodeId> {
+pub(crate) fn dragged_layers(dragging: Option<NodeId>, sel: &[NodeId]) -> Vec<NodeId> {
     match dragging {
         Some(dg) if sel.contains(&dg) => sel.to_vec(),
         Some(dg) => vec![dg],

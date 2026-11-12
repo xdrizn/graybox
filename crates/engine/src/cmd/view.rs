@@ -182,6 +182,8 @@ fn page_step(s: &mut Session, dir: i64) -> Result<Value> {
             _ => break ds.page,
         }
     };
+    // Graybox: the pages above it expand (G9).
+    super::page_tree::reveal(s, pg)?;
     let ds = s.ds_mut()?;
     ds.page = pg;
     ds.selection.clear();

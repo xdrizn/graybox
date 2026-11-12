@@ -3,6 +3,32 @@
 **Current milestone:** G7 — Share (and G0.3, G2.3 leftovers)
 
 ## Done
+- G9 nested pages (2026-11-12): the **Pages list is the same tree as the Docs tab**, and pages can sit
+  inside other pages. Every page keeps its own canvas; nesting only organises the list. Data in
+  `crates/doc/src/page_tree.rs` (ours): `Document::page_tree` = each nested page's parent + the collapsed
+  pages, saved under `page_tree` only when something is nested or collapsed (old files open flat, upstream
+  ignores the key); `Document::pages` stays a flat list but is **always the tree walked top to bottom**, so
+  next/previous page, the page menus, the Actions palette, the prototype and the Unity export follow the tree
+  with no change. `settle_pages` (run on load through `validate`/`repair`, and after every page edit) drops a
+  parent that is not a page, cuts cycles and puts the list back in tree order; a page whose parent is missing
+  is top-level. Commands in `crates/engine/src/cmd/page_tree.rs` (ours): `page.nest {id?, parent?, index?}`,
+  `page.unnest {id?}` (right after its parent), `page.collapse {id?, collapsed?}` and `page.reveal {id?}`
+  (not undo steps, but they make the file dirty), read-only `page.tree`; and the page commands learned
+  `page.add {parent}` (one undo step), `page.delete {subpages}` (by default the pages inside move up a
+  level), `page.duplicate` (the copy sits in the page its source is in), `page.move` (settles). Going to a
+  page (`page.select`, next/previous page, the list seeing the open page hidden after undo or opening a
+  file) opens the pages above it. UI: `crates/ui-egui/src/game/tree_list.rs` (ours) is the tree widget the Docs
+  tab and the Pages list both use (row 28 high, chevron, indent 16, hover, `+` and `…` at the end, drag
+  indicator, top/bottom quarter = before/after, middle = inside); `game/page_list.rs` is the Pages list
+  (dividers stay lines and hold nothing; search lists matches flat, also inside closed pages; Dev Mode opens
+  and collapses but nests nothing; layers dragged onto a page row still move there; half a row of slack above
+  the first and below the last row; Escape cancels a drag). Delete (menu or key) on a page with pages inside
+  asks: Cancel / Keep the subpages / Delete with subpages. Strings in `en.toml` and `pt-BR.toml`. Tests:
+  `doc/src/page_tree_tests.rs`, `engine/src/page_tree_tests.rs` (also the junk sweep), `game/page_list/tests.rs`.
+  Not synced in live collaboration (like `docs` and `game`): a collaborator's page edits keep the list
+  valid but may flatten the nesting. Found in the real app and fixed for both lists: a row's `+` and `…`
+  buttons vanished as soon as the pointer moved onto them (the row stops counting as hovered under its own
+  buttons), so the `…` menu could not be opened; `tree_list::hovered` asks the row's rectangle instead.
 - G13.1 (2026-11-12): documents, the model, the commands and the Documents tab (spec
   [`specs/2026-11-12-documents-design.md`](specs/2026-11-12-documents-design.md), decisions P1-P10 there).
   Model in `crates/doc/src/docs.rs` (ours): `Documents` is a tree of `Doc`s (id, title, icon, children),
@@ -640,6 +666,22 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     `control.rs`: `leftTab: "documents"`. `game/mod.rs`: `pub(crate) mod docs;`.
   - `crates/ui-egui/locales/en.toml` and `pt-BR.toml`: a "Graybox: Documents" block of strings at the end
     of `[ui]` (the other languages show English until translated).
+- Nested pages (G9; `crates/doc/src/page_tree.rs`, `crates/engine/src/cmd/page_tree.rs`,
+  `crates/ui-egui/src/game/tree_list.rs` and `page_list.rs` are ours):
+  - `crates/doc/src/lib.rs`: `pub mod page_tree;`, `Document::page_tree` (serde default, skipped when
+    empty), its initialiser in `without_pages`, `validate` (reports a nesting that is not in order, so
+    loading repairs it), `repair` (calls `settle_pages`), `mod page_tree_tests;`.
+  - `crates/engine/src/cmd.rs`: `pub mod page_tree;` and `list.extend(page_tree::specs())`;
+    `engine/src/lib.rs`: `mod page_tree_tests;`; `engine/src/tests.rs`: three junk entries in the sweep.
+  - `crates/engine/src/cmd/page.rs`: `page.add` (`parent`), `page.select` (`reveal`), `page.delete`
+    (`subpages`, `before_delete`), `page.duplicate` (`place_copy`), `page.move` (`settle_pages`);
+    `cmd/view.rs` `page_step`: `reveal`.
+  - `crates/ui-egui/src/panels/layers.rs`: `pages` calls `game::page_list::show` instead of drawing its own
+    list (the old loop is gone); `delete_page` asks via `game::page_list::ask_before_delete`;
+    `page_rename_start_id`, `layer_drag_id` and `dragged_layers` became `pub(crate)`; the `trf` import went.
+  - `crates/ui-egui/src/game/mod.rs`: `pub(crate) mod page_list;` and `tree_list;`.
+    `game/docs/tree.rs` now draws through `tree_list` (same look and behaviour).
+  - `crates/ui-egui/locales/en.toml` and `pt-BR.toml`: a "Graybox: nested pages" block of strings.
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.
 

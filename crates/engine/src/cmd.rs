@@ -19,6 +19,8 @@ pub mod layout;
 pub mod library;
 pub mod lists;
 pub mod page;
+// Graybox: nested pages (G9), the `page.nest|unnest|collapse|reveal|tree` commands.
+pub mod page_tree;
 pub mod props;
 pub mod proto;
 pub mod proto_actions;
@@ -106,6 +108,8 @@ fn registry() -> &'static Registry {
         list.extend(game_kind::specs());
         // Graybox: the `doc.*` commands (G13).
         list.extend(docs::specs());
+        // Graybox: the nested-pages commands (G9).
+        list.extend(page_tree::specs());
         list.extend(game_share::specs());
         list.extend(audio::specs());
         list.extend(comment::specs());

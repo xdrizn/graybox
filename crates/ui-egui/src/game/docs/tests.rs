@@ -228,3 +228,17 @@ fn another_command_sends_the_pending_words_first() {
     let text = u.app.session.doc().unwrap().docs.get(figcraft_doc::docs::DocId(a)).unwrap().current().unwrap().blocks[0].plain_text();
     assert!(text.contains('y'), "got {text:?}");
 }
+
+#[test]
+fn the_dots_button_on_a_row_opens_its_menu() {
+    // The row's buttons sit on top of it: the pointer going onto them must not make them vanish.
+    let (s, _, _) = session_with_documents();
+    let mut u = documents_tab(s);
+    let row = text_center(&shapes(&mut u), "Spec");
+    let dots = egui::Pos2::new(273.0, row.y);
+    for p in [row, dots, dots] {
+        u.frame(vec![Event::PointerMoved(p)]);
+    }
+    click(&mut u, dots);
+    assert!(has_text(&shapes(&mut u), "Move to the top level") || has_text(&shapes(&mut u), "Add a document inside"), "the menu is open");
+}

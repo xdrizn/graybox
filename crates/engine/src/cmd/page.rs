@@ -36,7 +36,7 @@ fn page_target(s: &Session, cmd: &str, p: &Value) -> crate::Result<NodeId> {
 /// The page and ruler guide commands.
 pub fn specs() -> Vec<CommandSpec> {
     vec![
-        spec!("page.add", "Add page", "{name?} (a name starting with a hyphen adds a divider)", true, |s, p| {
+        spec!("page.add", "Add page", "{name?, parent? (a page to put it inside)} (a name starting with a hyphen adds a divider)", true, |s, p| {
             // An added page takes the current page's colour; the theme only decides new files.
             let current = s.page().ok().and_then(|p| match s.doc().ok()?.node(p)?.kind {
                 NodeKind::Page { background, .. } => Some(background),
@@ -49,6 +49,8 @@ pub fn specs() -> Vec<CommandSpec> {
             if let NodeKind::Page { background: b, .. } = &mut doc.get_mut(id)?.kind {
                 *b = background;
             }
+            // Graybox: `parent` makes it a subpage (G9).
+            super::page_tree::nest_added(doc, id, p)?;
             if doc.is_divider(id) {
                 return Ok(json!({"id": id, "divider": true}));
             }
@@ -73,6 +75,8 @@ pub fn specs() -> Vec<CommandSpec> {
             if doc.is_divider(id) {
                 return Err(bad("page.select", "a divider isn't a page to open"));
             }
+            // Graybox: the pages above it expand (G9).
+            super::page_tree::reveal(s, id)?;
             let ds = s.ds_mut()?;
             ds.page = id;
             ds.selection.clear();
@@ -87,9 +91,12 @@ pub fn specs() -> Vec<CommandSpec> {
             settle(s, "page.rename")?;
             ok()
         }),
-        spec!("page.delete", "Delete page", "{id?}", true, |s, p| {
+        spec!("page.delete", "Delete page", "{id?, subpages? (true: the pages inside it go too; by default they move up a level)}", true, |s, p| {
             let id = page_target(s, "page.delete", p)?;
+            // Graybox: the pages inside it move up or go with it (G9).
+            super::page_tree::before_delete(s.doc_mut()?, id, boolean(p, "subpages").unwrap_or(false))?;
             s.doc_mut()?.remove(id)?;
+            s.doc_mut()?.settle_pages();
             settle(s, "page.delete")?;
             ok()
         }),
@@ -124,6 +131,8 @@ pub fn specs() -> Vec<CommandSpec> {
                 doc.pages.retain(|x| *x != np);
                 doc.pages.insert(si + 1, np);
             }
+            // Graybox: the copy sits in the page its source is in (G9).
+            super::page_tree::place_copy(doc, src, np);
             s.ds_mut()?.page = np;
             Ok(json!({"id": np}))
         }),
@@ -137,6 +146,8 @@ pub fn specs() -> Vec<CommandSpec> {
             doc.pages.retain(|x| *x != id);
             let k = k.min(doc.pages.len());
             doc.pages.insert(k, id);
+            // Graybox: the list stays in tree order (G9).
+            doc.settle_pages();
             ok()
         }),
         spec!("page.setBackground", "Page background", "{id?, color}", true, |s, p| {

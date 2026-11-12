@@ -147,6 +147,9 @@ Death are only *examples* in the starter kit, never required.
 - [x] Gradient Rotate 90° turns about the layer's middle.
 - [x] FigCraft v0.17 merged (Developer Mode, pick select, Alt-scrub on number fields, web fonts...).
 - [x] A whole ellipse edits with four points.
+- [x] Nested pages: the Pages list is the Docs tab's tree (chevron, indent, drag in or before/after, row
+  menu with Add subpage and Move out); the expanded state is saved in the file; the tree order is the page
+  order everywhere.
 - [x] The Pen shows no selection box while drawing; a click's wobble (8 px) makes no curve.
 - [x] Join selection welds the meeting ends of several layers (an arrow of three lines).
 - [x] Cmd/Ctrl-drag from a frame's background selects the layers inside it.

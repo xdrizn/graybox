@@ -37,6 +37,9 @@ pub(crate) mod style_fill;
 pub(crate) mod kind_ui;
 pub(crate) mod tps;
 pub(crate) mod unity_ui;
+// Graybox: the tree list shared by the Docs tab and the Pages list, and the Pages list itself (G9).
+pub(crate) mod page_list;
+pub(crate) mod tree_list;
 
 /// Platform hosts read these markers inside the browser's trusted input event, before egui's
 /// next frame. Fullscreen and pointer lock cannot reliably be requested from that later frame.

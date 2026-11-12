@@ -45,6 +45,8 @@ pub use crt::{Crt, CrtDirection};
 pub mod corner_style;
 // Graybox: documents (G13), see docs.rs.
 pub mod docs;
+// Graybox: nested pages (G9), see page_tree.rs.
+pub mod page_tree;
 pub use corner_style::CornerStyle;
 pub use styles::*;
 pub use text::*;
@@ -220,6 +222,10 @@ pub struct Document {
     /// Graybox: written documents with versions (G13); absent from files that have none.
     #[serde(default, skip_serializing_if = "docs::Documents::is_empty")]
     pub docs: docs::Documents,
+    /// Graybox: which pages sit inside which, and which are collapsed in the list (G9); absent from
+    /// files with nothing nested.
+    #[serde(default, skip_serializing_if = "page_tree::PageTree::is_empty")]
+    pub page_tree: page_tree::PageTree,
     /// Embedded sounds and mix levels saved in this file.
     #[serde(default)]
     pub audio: audio::AudioLibrary,
@@ -297,6 +303,7 @@ impl Document {
             variables: Variables::default(),
             game: game::GameSettings::default(),
             docs: docs::Documents::default(),
+            page_tree: page_tree::PageTree::default(),
             audio: audio::AudioLibrary::default(),
             images: BTreeMap::new(),
             current_page: None,
@@ -1166,6 +1173,10 @@ impl Document {
         for id in self.nodes.keys().filter(|k| !reachable.contains(*k)) {
             note(&mut issues, || format!("{id} is not under a page (cycle or detached)"));
         }
+        // Graybox: nested pages must be valid and the page list in tree order (G9).
+        if !self.page_tree_is_settled() {
+            note(&mut issues, || "the nested pages are not in order".to_string());
+        }
         issues
     }
 
@@ -1244,6 +1255,8 @@ impl Document {
         if self.current_page.is_none_or(|p| !self.pages.contains(&p)) {
             self.current_page = self.pages.first().copied();
         }
+        // Graybox: nested pages are put in order (a parent that is gone, a cycle).
+        self.settle_pages();
         self.link_layer_text_styles();
     }
 
@@ -1366,6 +1379,9 @@ mod guides_tests;
 mod handoff_tests;
 #[cfg(test)]
 mod ids_tests;
+// Graybox: nested pages (G9).
+#[cfg(test)]
+mod page_tree_tests;
 #[cfg(test)]
 mod print_tests;
 #[cfg(test)]

@@ -1899,6 +1899,14 @@ status = "draft — needs native review"
 "Heading 2" = "Título 2"
 "Heading 3" = "Título 3"
 
+# Graybox: páginas dentro de páginas (G9).
+"Rename, move, delete" = "Renomear, mover, excluir"
+"Add a subpage inside" = "Adicionar uma subpágina dentro"
+"Add subpage" = "Adicionar subpágina"
+"It has {n} subpage inside it. Keep it by moving it up a level, or delete it too. You can undo this." = { one = "Ela tem {n} subpágina dentro. Você pode mantê-la subindo um nível ou excluí-la também. Você pode desfazer.", other = "Ela tem {n} subpáginas dentro. Você pode mantê-las subindo um nível ou excluí-las também. Você pode desfazer." }
+"Keep the subpages" = "Manter as subpáginas"
+"Delete with subpages" = "Excluir com as subpáginas"
+
 [commands]
 "align.bottom" = "Alinhar embaixo"
 "align.hcenter" = "Alinhar centros horizontalmente"

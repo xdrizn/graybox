@@ -430,6 +430,10 @@ fn every_command_survives_junk_params() {
         // Plugin directories: ids, versions, servers and confirmations as junk.
         json!({"id": "../../x", "version": {"x": 1}, "server": "ws://\u{0}/?key=", "confirm": "yes", "path": [5], "plugin": [1], "query": 7, "sha256": 3}),
         json!({"id": "org.example.x", "version": "1.0.0", "server": "wss://[::1", "confirm": true, "plugin": "nope"}),
+        // Graybox: nested pages (page.nest, page.unnest, page.collapse, page.add parent, page.delete subpages) as junk.
+        json!({"id": 1, "parent": "x", "index": -1, "subpages": [], "collapsed": {"x": 1}}),
+        json!({"id": 1, "parent": 1, "index": 1e308, "subpages": "yes", "collapsed": null}),
+        json!({"id": u64::MAX, "parent": u64::MAX, "index": u64::MAX, "subpages": true}),
         // Prototype expressions and gamepad keys as junk.
         json!({"id": -5, "expression": "x[\u{0}", "expr": {"op": {"op": "add", "args": [1]}}, "trigger": {"type": "keyPress", "key": "Gamepad \u{0}"}}),
         json!({"id": 1, "expr": {"inMode": {"variable": [], "mode": 1e308}}, "trigger": {"type": "keyPress", "key": 7}}),

@@ -2076,3 +2076,11 @@ name = "English"
 "Heading 1" = "Heading 1"
 "Heading 2" = "Heading 2"
 "Heading 3" = "Heading 3"
+
+# Graybox: nested pages (G9).
+"Rename, move, delete" = "Rename, move, delete"
+"Add a subpage inside" = "Add a subpage inside"
+"Add subpage" = "Add subpage"
+"It has {n} subpage inside it. Keep it by moving it up a level, or delete it too. You can undo this." = { one = "It has {n} subpage inside it. Keep it by moving it up a level, or delete it too. You can undo this.", other = "It has {n} subpages inside it. Keep them by moving them up a level, or delete them too. You can undo this." }
+"Keep the subpages" = "Keep the subpages"
+"Delete with subpages" = "Delete with subpages"

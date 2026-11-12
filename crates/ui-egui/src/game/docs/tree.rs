@@ -3,21 +3,17 @@
 
 use std::collections::BTreeSet;
 
-use egui::{Align2, Color32, CornerRadius, Id, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind, Ui, pos2, vec2};
+use egui::{Align2, CornerRadius, Pos2, Rect, Sense, Ui, pos2, vec2};
 use figcraft_doc::docs::{DocId, Documents};
 use serde_json::{Value, json};
 
 use super::state::{self, State, Target};
-use crate::a11y::{self, Tip};
+use crate::a11y;
+use crate::game::tree_list::{self, DragEnd};
 use crate::i18n::{tr, trf, trn};
 use crate::icons::{self, Icon};
-use crate::theme::{ACCENT, Tokens, regular, semibold};
+use crate::theme::{Tokens, regular, semibold};
 use crate::{FigApp, widgets};
-
-const ROW_H: f32 = 28.0;
-const INDENT: f32 = 16.0;
-const PAD: f32 = 8.0;
-const BUTTON: f32 = 22.0;
 
 /// The icons a document can wear: simple symbols and emoji (the person can pick any of them).
 pub(super) const ICONS: [&str; 24] =
@@ -53,12 +49,7 @@ fn rows(docs: &Documents, expanded: &BTreeSet<DocId>) -> Vec<Row> {
 }
 
 /// Where a dragged document would land.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Drop {
-    Before(DocId),
-    After(DocId),
-    Inside(DocId),
-}
+pub(super) type Drop = tree_list::Drop<DocId>;
 
 pub(super) fn panel(app: &mut FigApp, ui: &mut Ui) {
     let Some(uid) = state::uid(app) else { return };
@@ -136,79 +127,38 @@ fn create(app: &mut FigApp, st: &mut State, parent: Option<DocId>) {
     st.focus = Some(Target::Title);
 }
 
-fn small_button(ui: &mut Ui, id: Id, rect: Rect, icon: Icon, tip: &str) -> Response {
-    let t = Tokens::get(ui.ctx());
-    let resp = ui.interact(rect, id, Sense::click()).tip(tip);
-    if resp.hovered() {
-        ui.painter().rect_filled(rect, CornerRadius::same(4), t.pressed);
-    }
-    icons::paint(ui.painter(), rect.shrink(4.0), icon, t.icon);
-    resp
-}
-
-fn arrow(painter: &egui::Painter, at: Pos2, open: bool, color: Color32) {
-    let s = 3.5;
-    let pts = if open {
-        vec![at + vec2(-s, -s * 0.6), at + vec2(s, -s * 0.6), at + vec2(0.0, s * 0.8)]
-    } else {
-        vec![at + vec2(-s * 0.6, -s), at + vec2(-s * 0.6, s), at + vec2(s * 0.8, 0.0)]
-    };
-    painter.add(Shape::convex_polygon(pts, color, Stroke::NONE));
-}
-
 /// One row of the tree; returns the room it took.
 fn row_ui(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, row: &Row, w: f32) -> Rect {
-    let (rect, resp) = ui.allocate_exact_size(vec2(w, ROW_H), Sense::click_and_drag());
+    let f = tree_list::row(ui, w, Sense::click_and_drag(), row.depth);
+    let resp = f.resp.clone();
+    let (rect, mid) = (f.rect, f.mid);
     let name = shown_title(&row.title).to_string();
     a11y::button(&resp, &name);
     let selected = st.open == Some(row.id);
     let dragging = st.drag == Some(row.id);
-    let inner = rect.shrink2(vec2(6.0, 1.0));
-    let hover = resp.hovered() && st.drag.is_none();
-    if selected {
-        ui.painter().rect_filled(inner, CornerRadius::same(5), t.selected_row);
-    } else if hover {
-        ui.painter().rect_filled(inner, CornerRadius::same(5), t.hover);
-    }
-    let x0 = rect.min.x + PAD + 6.0 + row.depth as f32 * INDENT;
-    let mid = rect.center().y;
-    // The arrow, a hit area of its own on top of the row.
-    if row.has_children {
-        let hit = Rect::from_center_size(pos2(x0 + 6.0, mid), vec2(16.0, ROW_H - 4.0));
-        let a = ui.interact(hit, resp.id.with("arrow"), Sense::click());
-        arrow(ui.painter(), hit.center(), row.expanded, if a.hovered() { t.text } else { t.icon_secondary });
-        if a.clicked() && !st.expanded.remove(&row.id) {
-            st.expanded.insert(row.id);
-        }
+    let hover = tree_list::hovered(ui, &f) && st.drag.is_none();
+    tree_list::paint_background(ui, t, &f, selected, hover);
+    if row.has_children && tree_list::chevron(ui, t, &f, row.expanded) && !st.expanded.remove(&row.id) {
+        st.expanded.insert(row.id);
     }
     // The icon.
-    let icon_c = pos2(x0 + 26.0, mid);
     let ink = if dragging { t.text_tertiary } else { t.icon };
     if row.icon.is_empty() {
-        icons::paint(ui.painter(), Rect::from_center_size(icon_c, vec2(16.0, 16.0)), Icon::Document, ink);
+        tree_list::paint_icon(ui, &f, Icon::Document, ink);
     } else {
-        ui.painter().text(icon_c, Align2::CENTER_CENTER, &row.icon, regular(14.0), ink);
+        tree_list::paint_glyph(ui, &f, &row.icon, ink);
     }
     // The buttons at the right end, while the pointer is on the row (or its menu is open).
     let menu_id = resp.id.with("menu");
     let menu_open = egui::Popup::is_id_open(ui.ctx(), menu_id) || egui::Popup::is_id_open(ui.ctx(), menu_id.with("ctx"));
     let show_buttons = (hover || menu_open) && st.renaming != Some(row.id);
-    let mut right = inner.max.x - 4.0;
-    let mut more = None;
-    if show_buttons {
-        let dots = Rect::from_center_size(pos2(right - BUTTON / 2.0, mid), vec2(BUTTON, BUTTON));
-        right -= BUTTON + 2.0;
-        let plus = Rect::from_center_size(pos2(right - BUTTON / 2.0, mid), vec2(BUTTON, BUTTON));
-        right -= BUTTON + 2.0;
-        let d = small_button(ui, resp.id.with("dots"), dots, Icon::Dots, tr("Rename, icon, delete"));
-        if small_button(ui, resp.id.with("plus"), plus, Icon::Plus, tr("Add a document inside")).clicked() {
-            create(app, st, Some(row.id));
-        }
-        more = Some(d);
+    let buttons = tree_list::end_buttons(ui, &f, show_buttons, tr("Rename, icon, delete"), tr("Add a document inside"));
+    if buttons.plus_clicked {
+        create(app, st, Some(row.id));
     }
+    let (right, more) = (buttons.right, buttons.dots);
     // The title, or its rename field.
-    let text_x = x0 + 40.0;
-    let text_rect = Rect::from_min_max(pos2(text_x, rect.min.y + 3.0), pos2((right - 2.0).max(text_x + 20.0), rect.max.y - 3.0));
+    let text_rect = tree_list::title_rect(&f, right);
     if st.renaming == Some(row.id) {
         let start = std::mem::take(&mut st.rename_start);
         let (new, open) = widgets::rename_field(ui, resp.id.with("rename"), &row.title, text_rect, regular(12.0), start);
@@ -224,7 +174,7 @@ fn row_ui(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, row: &Row, 
         ui.painter().text(pos2(text_rect.min.x, mid), Align2::LEFT_CENTER, shown, regular(12.0), color);
     }
     // Clicks.
-    let on_buttons = ui.input(|i| i.pointer.interact_pos()).is_some_and(|p| p.x > right);
+    let on_buttons = tree_list::on_buttons(ui, right);
     if st.renaming != Some(row.id) && resp.clicked() && !on_buttons {
         st.open = Some(row.id);
     }
@@ -311,59 +261,22 @@ fn icon_grid(ui: &mut Ui, current: &str) -> Option<String> {
 /// While a row is dragged: show where it would land, and move it when the pointer is let go.
 fn drag_and_drop(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, list: &[Row], rects: &[(DocId, Rect)], visible: Rect) {
     let Some(dragged) = st.drag else { return };
-    let ctx = ui.ctx().clone();
-    let pointer = ctx.input(|i| i.pointer.interact_pos());
-    let released = ctx.input(|i| i.pointer.any_released()) || !ctx.input(|i| i.pointer.any_down());
-    let target = pointer.filter(|p| visible.contains(*p)).and_then(|p| drop_at(app, p, dragged, rects));
-    if let Some(drop) = target {
-        let Some(&(_, r)) = rects.iter().find(|(id, _)| *id == drop_row(drop)) else { return };
-        let depth = list.iter().find(|row| row.id == drop_row(drop)).map_or(0, |row| row.depth);
-        let x0 = r.min.x + PAD + 6.0 + depth as f32 * INDENT;
-        match drop {
-            Drop::Before(_) => widgets::insertion_line(ui.painter(), x0, r.max.x - 6.0, r.min.y),
-            Drop::After(_) => widgets::insertion_line(ui.painter(), x0, r.max.x - 6.0, r.max.y),
-            Drop::Inside(_) => {
-                ui.painter().rect_stroke(r.shrink2(vec2(6.0, 1.0)), CornerRadius::same(5), Stroke::new(1.5, ACCENT), StrokeKind::Inside);
-            }
-        }
-    }
-    if let Some(p) = pointer {
-        let title = list.iter().find(|r| r.id == dragged).map(|r| shown_title(&r.title).to_string()).unwrap_or_default();
-        let galley = ui.painter().layout_no_wrap(title, regular(11.5), t.text);
-        widgets::drag_ghost(&ctx, p, galley);
-    }
-    if released {
+    let title = list.iter().find(|r| r.id == dragged).map(|r| shown_title(&r.title).to_string()).unwrap_or_default();
+    let depth_of = |id: DocId| list.iter().find(|row| row.id == id).map_or(0, |row| row.depth);
+    let end = tree_list::drag(ui, t, &title, rects, visible, depth_of, |p| drop_at(app, p, dragged, rects));
+    if let DragEnd::Done(target) = end {
         st.drag = None;
         if let Some(drop) = target {
             apply_drop(app, st, dragged, drop);
         }
-    } else {
-        ctx.request_repaint();
     }
 }
 
-fn drop_row(d: Drop) -> DocId {
-    match d {
-        Drop::Before(id) | Drop::After(id) | Drop::Inside(id) => id,
-    }
-}
-
-/// The drop under the pointer: the top quarter of a row is before it, the bottom quarter after it,
-/// the middle inside it. Not on the dragged document or anything inside it.
+/// The drop under the pointer (see [`tree_list::drop_at`]). Not on the dragged document or anything
+/// inside it.
 fn drop_at(app: &FigApp, p: Pos2, dragged: DocId, rects: &[(DocId, Rect)]) -> Option<Drop> {
     let docs = &app.session.doc().ok()?.docs;
-    let &(id, r) = rects.iter().find(|(_, r)| r.y_range().contains(p.y) && r.x_range().contains(p.x))?;
-    if docs.is_inside(id, dragged) {
-        return None;
-    }
-    let f = (p.y - r.min.y) / r.height().max(1.0);
-    Some(if f < 0.25 {
-        Drop::Before(id)
-    } else if f > 0.75 {
-        Drop::After(id)
-    } else {
-        Drop::Inside(id)
-    })
+    tree_list::drop_at(p, rects, |id| docs.is_inside(id, dragged), |_| true)
 }
 
 pub(super) fn apply_drop(app: &mut FigApp, st: &mut State, dragged: DocId, drop: Drop) {
