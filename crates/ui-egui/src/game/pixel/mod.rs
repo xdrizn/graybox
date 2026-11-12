@@ -8,11 +8,13 @@ use figcraft_doc::NodeId;
 use figcraft_geom::{Affine, Point};
 use figcraft_pixel::paint::{BrushShape, Ink, Symmetry};
 use figcraft_pixel::raster::Pt;
-use figcraft_pixel::{Brush, Canvas, Rgba, Sprite, store};
+use figcraft_pixel::select::Op;
+use figcraft_pixel::{Brush, Canvas, Mask, Rgba, Sprite, store};
 
 use crate::FigApp;
 use crate::icons::Icon;
 
+pub(crate) mod colors;
 mod draw;
 mod input;
 mod panel;
@@ -21,25 +23,41 @@ mod pill;
 mod tests;
 
 pub(crate) use draw::draw;
-pub(crate) use input::{input, key, off_canvas};
+pub(crate) use input::{input, key, off_canvas, paste_events};
 pub(crate) use panel::section;
 pub(crate) use pill::toolbar;
 
 /// A Pixel mode tool.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub(crate) enum Tool {
     #[default]
     Pencil,
     Eraser,
     Bucket,
     Eyedropper,
+    Replace,
     Line,
     Rect,
     Ellipse,
+    Marquee,
+    Lasso,
+    Wand,
+    Move,
 }
 
 impl Tool {
-    pub(crate) const ALL: [Tool; 7] = [Tool::Pencil, Tool::Eraser, Tool::Bucket, Tool::Eyedropper, Tool::Line, Tool::Rect, Tool::Ellipse];
+    /// The pill's buttons: a tool alone, or a group of them that one button holds (the shapes, the
+    /// selection tools); a click on the group's button when it is in hand picks the next one.
+    pub(crate) const SLOTS: [&'static [Tool]; 8] = [
+        &[Tool::Pencil],
+        &[Tool::Eraser],
+        &[Tool::Bucket],
+        &[Tool::Eyedropper],
+        &[Tool::Replace],
+        &[Tool::Line, Tool::Rect, Tool::Ellipse],
+        &[Tool::Marquee, Tool::Lasso, Tool::Wand],
+        &[Tool::Move],
+    ];
 
     pub(crate) fn label(self) -> &'static str {
         match self {
@@ -47,9 +65,14 @@ impl Tool {
             Tool::Eraser => "Eraser",
             Tool::Bucket => "Paint bucket",
             Tool::Eyedropper => "Eyedropper",
+            Tool::Replace => "Replace colour (paints over the second colour only)",
             Tool::Line => "Line",
             Tool::Rect => "Rectangle",
             Tool::Ellipse => "Ellipse",
+            Tool::Marquee => "Marquee selection",
+            Tool::Lasso => "Lasso selection",
+            Tool::Wand => "Magic wand",
+            Tool::Move => "Move",
         }
     }
 
@@ -60,9 +83,14 @@ impl Tool {
             Tool::Eraser => "E",
             Tool::Bucket => "G",
             Tool::Eyedropper => "I",
+            Tool::Replace => "R",
             Tool::Line => "L",
             Tool::Rect => "U",
             Tool::Ellipse => "Shift+U",
+            Tool::Marquee => "M",
+            Tool::Lasso => "Q",
+            Tool::Wand => "W",
+            Tool::Move => "V",
         }
     }
 
@@ -72,10 +100,20 @@ impl Tool {
             Tool::Eraser => Icon::Eraser,
             Tool::Bucket => Icon::PaintBucket,
             Tool::Eyedropper => Icon::Eyedropper,
+            Tool::Replace => Icon::ReplaceColor,
             Tool::Line => Icon::Line,
             Tool::Rect => Icon::Rectangle,
             Tool::Ellipse => Icon::Ellipse,
+            Tool::Marquee => Icon::Marquee,
+            Tool::Lasso => Icon::Lasso,
+            Tool::Wand => Icon::MagicWand,
+            Tool::Move => Icon::Move,
         }
+    }
+
+    /// Whether it makes or changes a selection rather than drawing.
+    pub(crate) fn selects(self) -> bool {
+        matches!(self, Tool::Marquee | Tool::Lasso | Tool::Wand | Tool::Move)
     }
 }
 
@@ -100,6 +138,10 @@ pub(crate) enum Gesture {
     Axis(usize),
     /// Dragging out a new sprite (page points).
     NewSprite { from: Point, to: Point },
+    /// Making a selection: the marquee's two corners or the lasso's points, and how it combines.
+    Select { tool: Tool, points: Vec<Pt>, op: Op },
+    /// Moving the selected pixels (or the whole cel) from `from` to `to`.
+    Move { from: Pt, to: Pt },
 }
 
 /// The sprite being edited, decoded: the current layer's cel and what lies below and above it.
@@ -112,6 +154,9 @@ pub(crate) struct Decoded {
     pub(crate) cel: Canvas,
     below: Canvas,
     above: Canvas,
+    /// The sprite's selection, and its outline (unit edges in art pixels).
+    pub(crate) selection: Option<Mask>,
+    pub(crate) edges: Vec<(Pt, Pt)>,
     /// The layer's opacity, or 0 when hidden.
     opacity: u8,
 }
@@ -162,6 +207,14 @@ pub struct Editor {
     pub(crate) closed_picker: bool,
     /// The colours the frame being edited uses, and the decode key they were counted for.
     pub(crate) used: Option<(u64, Vec<figcraft_pixel::Rgba>)>,
+    /// What Copy took: the pixels and where their top left was.
+    pub(crate) clipboard: Option<(Canvas, i64, i64)>,
+    /// A copy waiting to go on the system clipboard (it needs the frame's context).
+    pub(crate) to_system: Option<Canvas>,
+    /// This frame pasted with the V key (the paste event a browser sends with it is then not a second paste).
+    pub(crate) pasted: bool,
+    /// This frame cut with the X key (likewise, a cut event with it is not a second cut).
+    pub(crate) cut: bool,
     /// The New sprite size: width, height, scale.
     pub(crate) new_size: [u32; 3],
 }
@@ -192,6 +245,10 @@ impl Default for Editor {
             picking: None,
             closed_picker: false,
             used: None,
+            clipboard: None,
+            to_system: None,
+            pasted: false,
+            cut: false,
             new_size: [32, 32, 4],
         }
     }
@@ -259,6 +316,8 @@ pub(crate) fn ui_request(app: &mut FigApp, data: &serde_json::Value) {
 
 /// Keeps the mode consistent with the app: the layer still there and a pixel layer, Design shown.
 pub(crate) fn settle(app: &mut FigApp) {
+    app.pixel.pasted = false;
+    app.pixel.cut = false;
     if app.pixel.mode == Mode::Off {
         return;
     }
@@ -291,6 +350,8 @@ pub(crate) fn ink(e: &Editor, secondary: bool, erase: bool) -> Ink {
         symmetry: Symmetry { x2: e.mirror[0].then_some(e.axis[0]), y2: e.mirror[1].then_some(e.axis[1]) },
         tile: e.tile,
         erase,
+        // Replace colour paints over the other colour only.
+        replace: (e.tool == Tool::Replace && !erase).then(|| e.colors[usize::from(!secondary)]),
     }
 }
 
@@ -311,6 +372,7 @@ pub(crate) fn decode(app: &mut FigApp, id: NodeId) -> Option<std::sync::Arc<Deco
     let mut h = std::collections::hash_map::DefaultHasher::new();
     (id, layer, frame).hash(&mut h);
     n.plugin_data.get(store::KEY).hash(&mut h);
+    n.plugin_data.get(store::SELECTION_KEY).hash(&mut h);
     for l in &sprite.layers {
         n.plugin_data.get(&store::cel_key(l.id, frame_id)).hash(&mut h);
     }
@@ -331,7 +393,9 @@ pub(crate) fn decode(app: &mut FigApp, id: NodeId) -> Option<std::sync::Arc<Deco
     let current = sprite.layers.get(index)?;
     let opacity = if current.visible { current.opacity } else { 0 };
     let cel = store::cel(&n.plugin_data, &sprite, layer, frame_id)?;
-    let d = std::sync::Arc::new(Decoded { key, sprite, layer, frame, cel, below, above, opacity });
+    let selection = store::selection(&n.plugin_data, &sprite);
+    let edges = selection.as_ref().map(Mask::edges).unwrap_or_default();
+    let d = std::sync::Arc::new(Decoded { key, sprite, layer, frame, cel, below, above, selection, edges, opacity });
     app.pixel.decoded = Some(d.clone());
     Some(d)
 }

@@ -280,6 +280,62 @@ fn draw_fliph(p: &P) {
     p.fill(&[(9.0, 3.0), (14.0, 13.0), (9.0, 13.0)]);
 }
 
+/// Graybox: the pixel art icons (G16), drawn from simple primitives.
+fn draw_pixel_art(p: &P, icon: Icon) {
+    use Icon::*;
+    match icon {
+        // Graybox: a frame with two checkered pixels (Pixel mode).
+        PixelArt => {
+            p.rect(2.5, 2.5, 13.5, 13.5, 1.0);
+            p.fill_rect(5.0, 5.0, 8.0, 8.0, 0.0);
+            p.fill_rect(8.0, 8.0, 11.0, 11.0, 0.0);
+        }
+        // Graybox: a one-pixel stair (pixel-perfect lines).
+        PixelPerfect => {
+            for i in 0..4 {
+                let k = i as f32 * 3.0;
+                p.fill_rect(2.0 + k, 11.0 - k, 5.0 + k, 14.0 - k, 0.0);
+            }
+        }
+        // Graybox: four tiles (tile mode).
+        Tiles => {
+            for (x, y) in [(2.5, 2.5), (8.5, 2.5), (2.5, 8.5), (8.5, 8.5)] {
+                p.rect(x, y, x + 5.0, y + 5.0, 0.5);
+            }
+        }
+        // Graybox: a dashed square (rectangle selection).
+        Marquee => {
+            for (a, b) in [(2.5, 5.0), (7.0, 9.0), (11.0, 13.5)] {
+                p.line(a, 2.5, b, 2.5);
+                p.line(a, 13.5, b, 13.5);
+                p.line(2.5, a, 2.5, b);
+                p.line(13.5, a, 13.5, b);
+            }
+        }
+        // Graybox: a wand with a spark (select by colour).
+        MagicWand => {
+            p.line(3.0, 13.0, 10.0, 6.0);
+            p.line(11.5, 1.5, 11.5, 4.5);
+            p.line(11.5, 7.5, 11.5, 10.5);
+            p.line(7.5, 6.0, 10.0, 6.0);
+            p.line(13.0, 6.0, 15.0, 6.0);
+        }
+        // Graybox: a filled square ringed by a one-pixel border (outline).
+        Outline => {
+            p.fill_rect(5.0, 5.0, 11.0, 11.0, 0.0);
+            p.rect(2.5, 2.5, 13.5, 13.5, 0.0);
+        }
+        // Graybox: two swatches with an arrow between them (replace colour).
+        ReplaceColor => {
+            p.fill_rect(2.0, 2.0, 7.0, 7.0, 1.0);
+            p.rect(9.5, 9.5, 13.5, 13.5, 1.0);
+            p.poly(&[(9.0, 3.5), (12.0, 3.5), (12.0, 6.5)], false);
+            p.poly(&[(10.5, 5.5), (12.0, 7.0), (13.5, 5.5)], false);
+        }
+        _ => {}
+    }
+}
+
 /// Draw `icon` on the 16-unit grid through `p`, which maps grid units to the target box.
 fn draw(p: &P, icon: Icon) {
     use Icon::*;
@@ -640,25 +696,8 @@ fn draw(p: &P, icon: Icon) {
             p.line(5.0, 5.5, 11.0, 5.5);
             p.line(5.0, 7.5, 9.0, 7.5);
         }
-        // Graybox: a frame with two checkered pixels (Pixel mode).
-        PixelArt => {
-            p.rect(2.5, 2.5, 13.5, 13.5, 1.0);
-            p.fill_rect(5.0, 5.0, 8.0, 8.0, 0.0);
-            p.fill_rect(8.0, 8.0, 11.0, 11.0, 0.0);
-        }
-        // Graybox: a one-pixel stair (pixel-perfect lines).
-        PixelPerfect => {
-            for i in 0..4 {
-                let k = i as f32 * 3.0;
-                p.fill_rect(2.0 + k, 11.0 - k, 5.0 + k, 14.0 - k, 0.0);
-            }
-        }
-        // Graybox: four tiles (tile mode).
-        Tiles => {
-            for (x, y) in [(2.5, 2.5), (8.5, 2.5), (2.5, 8.5), (8.5, 8.5)] {
-                p.rect(x, y, x + 5.0, y + 5.0, 0.5);
-            }
-        }
+        // Graybox: the pixel art icons (G16).
+        PixelArt | PixelPerfect | Tiles | Marquee | MagicWand | Outline | ReplaceColor => draw_pixel_art(p, icon),
         // Graybox: a page with lines of text (the Documents tab).
         Document => {
             p.poly(&[(3.5, 2.5), (9.5, 2.5), (12.5, 5.5), (12.5, 13.5), (3.5, 13.5)], true);

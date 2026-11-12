@@ -17,13 +17,15 @@ use super::CommandSpec;
 use crate::automation::params::{boolean, color_of, get, num, opt_id, req_id};
 use crate::{Result, Session, bad, spec};
 
+mod edit;
+
 /// The most pointer positions one stroke takes.
 const MAX_STROKE_POINTS: usize = 100_000;
 /// How far outside the sprite a point may be given (art pixels); further is brought in.
 const MAX_COORD: f64 = 1_000_000.0;
 
 pub fn specs() -> Vec<CommandSpec> {
-    vec![
+    let mut list = vec![
         spec!(
             "pixel.create",
             "New sprite",
@@ -52,7 +54,13 @@ pub fn specs() -> Vec<CommandSpec> {
             true,
             fill
         ),
-        spec!("pixel.clear", "Clear pixels", "{id, layer?, frame?}  makes a cel transparent → {changed}", true, clear),
+        spec!(
+            "pixel.clear",
+            "Clear pixels",
+            "{id, layer?, frame?}  makes the selected pixels (the whole cel when nothing is selected) transparent → {changed}",
+            true,
+            clear
+        ),
         spec!(
             "pixel.pick",
             "Pick a pixel colour",
@@ -75,7 +83,9 @@ pub fn specs() -> Vec<CommandSpec> {
             false,
             mode
         ),
-    ]
+    ];
+    list.extend(edit::specs());
+    list
 }
 
 /// The pixel layer `id` names and its sprite.
@@ -148,6 +158,10 @@ fn ink_of(cmd: &str, p: &Value) -> Result<Ink> {
         Some("circle" | "round") => BrushShape::Circle,
         Some(_) => return Err(bad(cmd, "`shape` must be square or circle")),
     };
+    let replace = match get(p, "replace") {
+        None | Some(Value::Null) => None,
+        Some(v) => Some(rgba_of(v).ok_or_else(|| bad(cmd, "`replace` must be a colour"))?),
+    };
     let mut symmetry = Symmetry::default();
     match get(p, "mirror") {
         None | Some(Value::Null) => {}
@@ -173,6 +187,7 @@ fn ink_of(cmd: &str, p: &Value) -> Result<Ink> {
         symmetry,
         tile: boolean(p, "tile").unwrap_or(false),
         erase: boolean(p, "erase").unwrap_or(false),
+        replace,
     })
 }
 
@@ -186,13 +201,20 @@ fn rgba_of(v: &Value) -> Option<Rgba> {
     color_of(v).map(|c| c.to_rgba8())
 }
 
-/// Runs `f` on the cel of layer `layer` in frame `frame` of pixel layer `id`, stores it and shows
-/// the new picture. How many pixels changed.
+/// Runs `f` on the cel of layer `layer` in frame `frame` of pixel layer `id`, keeps what it did
+/// inside the sprite's selection (all of it when nothing is selected), stores the cel and shows the
+/// new picture. How many pixels changed.
 fn edit_cel(s: &mut Session, id: NodeId, sprite: &Sprite, (layer, frame): (u32, u32), f: impl FnOnce(&mut Canvas) -> usize) -> Result<usize> {
     let doc = s.doc_mut()?;
     let n = doc.get(id)?;
     let Some(mut cel) = store::cel(&n.plugin_data, sprite, layer, frame) else { return Ok(0) };
-    let changed = f(&mut cel);
+    let mut changed = f(&mut cel);
+    if changed > 0
+        && let Some(mask) = store::selection(&n.plugin_data, sprite)
+        && let Some(before) = store::cel(&n.plugin_data, sprite, layer, frame)
+    {
+        changed = figcraft_pixel::transform::clip_to(&mut cel, &before, &mask);
+    }
     if changed > 0 {
         store::put_cel(&mut doc.get_mut(id)?.plugin_data, layer, frame, &cel);
         show(doc, id, sprite);

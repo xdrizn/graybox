@@ -1,21 +1,26 @@
 //! The Pixel art section of the Design panel, for one selected pixel layer: Edit pixels (Pixel
-//! mode), the art size and the scale (screen-size of one art pixel, in page units).
+//! mode), the art size and the scale. While the sprite is edited it also shows the sprite's layers
+//! (pick the one drawn on, show or hide, opacity, add, delete, reorder, merge down) and the palette:
+//! the sprite's own colours, the file's colour styles and colour variables. A click on a swatch
+//! takes it as the first colour, a right click as the second.
 
-use egui::{Id, Ui};
-use figcraft_doc::{Document, NodeId};
-use figcraft_pixel::store;
+use egui::{Align2, Color32, CornerRadius, Id, Rect, Sense, Stroke, Ui, vec2};
+use figcraft_doc::{Document, NodeId, StyleKind, VariableType, VariableValue};
+use figcraft_pixel::{Rgba, Sprite, canvas, store};
 use serde_json::json;
 
+use super::{Mode, current_layer};
 use crate::FigApp;
 use crate::icons::Icon;
+use crate::theme::Tokens;
 use crate::widgets::{self, Lead};
 
 /// Draws the section when exactly one pixel layer is selected. Returns whether it drew.
 pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[NodeId]) -> bool {
     let [id] = sel else { return false };
     let Some(sprite) = doc.node(*id).and_then(|n| store::load(&n.plugin_data)) else { return false };
-    let editing = super::active(app);
-    let buttons: &[(Icon, &str)] = if editing { &[] } else { &[(Icon::PixelArt, "Edit pixels (double-click)")] };
+    let editing = app.pixel.mode == Mode::Edit(*id);
+    let buttons: &[(Icon, &str)] = if super::active(app) { &[] } else { &[(Icon::PixelArt, "Edit pixels (double-click)")] };
     if widgets::section_header(ui, "Pixel art", buttons, false).is_some() {
         super::enter(app, *id);
     }
@@ -27,9 +32,263 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[Node
             app.run("pixel.set", json!({"id": id.0, "scale": v.round().clamp(1.0, 64.0)}));
         }
     });
-    let t = crate::theme::Tokens::get(ui.ctx());
+    let t = Tokens::get(ui.ctx());
     let frames = sprite.frames.len();
     let more = if frames > 1 { format!(", {frames} frames") } else { String::new() };
     widgets::note(ui, &format!("{} × {} art pixels{more}", sprite.width, sprite.height), t.text_secondary);
+    if editing {
+        layers(app, ui, *id, &sprite, &t);
+        palette(app, ui, doc, *id, &sprite, &t);
+    }
     true
+}
+
+/// A small text button; true when clicked.
+fn text_button(ui: &mut Ui, label: &str, tip: &str, t: &Tokens, enabled: bool) -> bool {
+    let font = crate::theme::regular(11.0);
+    let w = ui.painter().layout_no_wrap(label.to_string(), font.clone(), t.text).size().x + 14.0;
+    let (r, resp) = ui.allocate_exact_size(vec2(w, 22.0), if enabled { Sense::click() } else { Sense::hover() });
+    let fill = if enabled && resp.hovered() { t.hover } else { t.field };
+    ui.painter().rect_filled(r, CornerRadius::same(4), fill);
+    ui.painter().text(r.center(), Align2::CENTER_CENTER, label, font, if enabled { t.text } else { t.text_tertiary });
+    enabled && resp.on_hover_text(tip).clicked()
+}
+
+/// `add` inside the panel's content margins (16 in from the left, 8 from the right).
+pub(super) fn padded<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
+    let margin = egui::Margin { left: widgets::PAD as i8, right: widgets::PAD_RIGHT as i8, top: 2, bottom: 4 };
+    egui::Frame::NONE.inner_margin(margin).show(ui, add).inner
+}
+
+/// The sprite's layers, top first.
+fn layers(app: &mut FigApp, ui: &mut Ui, id: NodeId, sprite: &Sprite, t: &Tokens) {
+    ui.add_space(6.0);
+    if widgets::section_header(ui, "Sprite layers", &[(Icon::Plus, "New layer above")], false).is_some() {
+        let above = current_layer(&app.pixel, sprite).and_then(|l| sprite.layer_index(l)).map_or(sprite.layers.len(), |i| i + 1);
+        if let Some(r) = app.run("pixel.layer.add", json!({"id": id.0, "index": above}))
+            && let Some(l) = r["layer"].as_u64().and_then(|l| u32::try_from(l).ok())
+        {
+            app.pixel.layer = Some(l);
+        }
+    }
+    let current = current_layer(&app.pixel, sprite);
+    padded(ui, |ui| layer_rows(app, ui, id, sprite, current, t));
+    let Some(cur) = current else { return };
+    let index = sprite.layer_index(cur).unwrap_or(0);
+    let opacity = sprite.layers.get(index).map_or(255, |l| l.opacity);
+    let col = widgets::col_width(ui.available_width());
+    crate::right::row(ui, 32.0, |ui| {
+        let edit = widgets::number_field(
+            ui,
+            Id::unique(("graybox_pixel_layer_opacity", id.0, cur)),
+            Lead::Icon(Icon::Opacity, "Layer opacity"),
+            Some((f64::from(opacity) / 2.55).round()),
+            "%",
+            col,
+            1.0,
+        );
+        if let Some(widgets::FieldEdit::Set(v) | widgets::FieldEdit::Scrub(v, true)) = edit {
+            app.run("pixel.layer.set", json!({"id": id.0, "layer": cur, "opacity": v.clamp(0.0, 100.0)}));
+        }
+    });
+    padded(ui, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
+            let top = index + 1 >= sprite.layers.len();
+            if text_button(ui, "Up", "Move the layer up", t, !top) {
+                app.run("pixel.layer.move", json!({"id": id.0, "layer": cur, "index": index + 1}));
+            }
+            if text_button(ui, "Down", "Move the layer down", t, index > 0) {
+                app.run("pixel.layer.move", json!({"id": id.0, "layer": cur, "index": index.saturating_sub(1)}));
+            }
+            if text_button(ui, "Merge down", "Merge the layer into the one below it", t, index > 0) {
+                // Drawing goes on in the layer it merged into.
+                let merged = app.run("pixel.layer.merge", json!({"id": id.0, "layer": cur}));
+                app.pixel.layer = merged.and_then(|r| r["layer"].as_u64()).and_then(|l| u32::try_from(l).ok());
+            }
+            if text_button(ui, "Delete", "Delete the layer", t, sprite.layers.len() > 1) {
+                app.run("pixel.layer.delete", json!({"id": id.0, "layer": cur}));
+                app.pixel.layer = None;
+            }
+        });
+    });
+}
+
+/// One row per sprite layer, top first: the eye shows or hides it, a click draws on it.
+fn layer_rows(app: &mut FigApp, ui: &mut Ui, id: NodeId, sprite: &Sprite, current: Option<u32>, t: &Tokens) {
+    for l in sprite.layers.iter().rev() {
+        let w = ui.available_width();
+        let (r, resp) = ui.allocate_exact_size(vec2(w, 26.0), Sense::click());
+        let on = current == Some(l.id);
+        if on {
+            ui.painter().rect_filled(r, CornerRadius::same(4), t.accent.gamma_multiply(0.18));
+        } else if resp.hovered() {
+            ui.painter().rect_filled(r, CornerRadius::same(4), t.hover);
+        }
+        let eye = Rect::from_min_size(r.min + vec2(4.0, 3.0), vec2(20.0, 20.0));
+        let eye_resp =
+            ui.interact(eye, ui.scope_id().with(("graybox_pixel_eye", l.id)), Sense::click()).on_hover_text(if l.visible { "Hide" } else { "Show" });
+        crate::icons::paint(
+            ui.painter(),
+            eye.shrink(2.0),
+            if l.visible { Icon::Eye } else { Icon::EyeOff },
+            if l.visible { t.icon } else { t.icon_secondary },
+        );
+        ui.painter().text(
+            r.left_center() + vec2(30.0, 0.0),
+            Align2::LEFT_CENTER,
+            &l.name,
+            crate::theme::regular(11.5),
+            if l.visible { t.text } else { t.text_secondary },
+        );
+        let pct = (f64::from(l.opacity) / 2.55).round();
+        if pct < 100.0 {
+            ui.painter().text(
+                r.right_center() - vec2(6.0, 0.0),
+                Align2::RIGHT_CENTER,
+                format!("{pct:.0}%"),
+                crate::theme::regular(11.0),
+                t.text_secondary,
+            );
+        }
+        if eye_resp.clicked() {
+            app.run("pixel.layer.set", json!({"id": id.0, "layer": l.id, "visible": !l.visible}));
+        } else if resp.clicked() {
+            app.pixel.layer = Some(l.id);
+        }
+    }
+}
+
+/// Swatches with their tooltips.
+type Swatches = Vec<(Rgba, String)>;
+
+/// A row of swatches; returns the one clicked (and whether with the right button).
+fn swatches(ui: &mut Ui, colors: &[(Rgba, String)], t: &Tokens, salt: &str) -> Option<(Rgba, bool)> {
+    let mut hit = None;
+    padded(ui, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
+            for (i, (c, tip)) in colors.iter().enumerate() {
+                let (r, _) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::hover());
+                ui.painter().rect_filled(r, CornerRadius::same(3), Color32::from_gray(0xc8));
+                ui.painter().rect_filled(r, CornerRadius::same(3), Color32::from_rgba_unmultiplied(c[0], c[1], c[2], c[3]));
+                ui.painter().rect_stroke(r, CornerRadius::same(3), Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+                let resp = ui
+                    .interact(r, ui.scope_id().with((salt, i)), Sense::click())
+                    .on_hover_text(format!("{tip}\nClick: first colour · Right click: second colour"));
+                if resp.clicked() {
+                    hit = Some((*c, false));
+                } else if resp.secondary_clicked() {
+                    hit = Some((*c, true));
+                }
+            }
+        })
+    });
+    hit
+}
+
+/// The file's colour styles and colour variables (their first mode), as swatches.
+fn file_colors(doc: &Document) -> (Swatches, Swatches) {
+    let mut styles = Vec::new();
+    for s in &doc.styles {
+        if let StyleKind::Paint { paints } = &s.kind
+            && let Some(c) = paints.iter().find_map(|p| p.solid_color())
+        {
+            styles.push((c.to_rgba8(), s.name.clone()));
+        }
+    }
+    let mut vars = Vec::new();
+    for v in &doc.variables.variables {
+        if v.kind != VariableType::Color {
+            continue;
+        }
+        // Each collection in its default mode, aliases followed.
+        if let Some(VariableValue::Color(c)) = doc.variables.resolve(&v.id, &std::collections::BTreeMap::new()) {
+            vars.push((c.to_rgba8(), v.name.clone()));
+        }
+        if vars.len() >= 128 {
+            break;
+        }
+    }
+    styles.truncate(128);
+    (styles, vars)
+}
+
+/// The palette: the sprite's own colours (add the first colour, load and save `.gpl` / `.hex`),
+/// then the file's colour styles and variables.
+fn palette(app: &mut FigApp, ui: &mut Ui, doc: &Document, id: NodeId, sprite: &Sprite, t: &Tokens) {
+    ui.add_space(6.0);
+    let picked = widgets::section_header(ui, "Palette", &[(Icon::Plus, "Add the first colour"), (Icon::Minus, "Take the first colour out")], false);
+    let first = canvas::to_hex(app.pixel.colors[0]);
+    match picked {
+        Some(0) => {
+            app.run("pixel.palette.set", json!({"id": id.0, "add": first}));
+        }
+        Some(_) => {
+            app.run("pixel.palette.set", json!({"id": id.0, "remove": first}));
+        }
+        None => {}
+    }
+    let own: Vec<(Rgba, String)> = sprite.palette.iter().filter_map(|h| canvas::parse_hex(h).map(|c| (c, h.clone()))).collect();
+    let mut hit = None;
+    if own.is_empty() {
+        widgets::note(ui, "No colours yet: + adds the first colour", t.text_secondary);
+    } else {
+        hit = hit.or(swatches(ui, &own, t, "graybox_pixel_pal"));
+    }
+    padded(ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
+            if text_button(ui, "Load…", "Load a palette (.gpl or .hex)", t, true) {
+                load_palette(app, id);
+            }
+            if text_button(ui, "Save…", "Save the palette (.gpl)", t, !own.is_empty()) {
+                save_palette(app, id);
+            }
+        })
+    });
+    let (styles, vars) = file_colors(doc);
+    if !styles.is_empty() {
+        widgets::note(ui, "Colour styles", t.text_secondary);
+        hit = hit.or(swatches(ui, &styles, t, "graybox_pixel_styles"));
+    }
+    if !vars.is_empty() {
+        widgets::note(ui, "Colour variables", t.text_secondary);
+        hit = hit.or(swatches(ui, &vars, t, "graybox_pixel_vars"));
+    }
+    if let Some((c, second)) = hit {
+        app.pixel.colors[usize::from(second)] = c;
+    }
+}
+
+fn load_palette(app: &mut FigApp, id: NodeId) {
+    app.pick_file("Load palette", &["gpl", "hex", "txt"], true, move |app, file| {
+        use base64::Engine as _;
+        let text = if let Some(path) = file["path"].as_str() {
+            std::fs::read_to_string(path).ok()
+        } else {
+            file["data"].as_str().and_then(|d| base64::engine::general_purpose::STANDARD.decode(d).ok()).and_then(|b| String::from_utf8(b).ok())
+        };
+        match text {
+            Some(text) if !figcraft_pixel::palette::parse(&text).is_empty() => {
+                app.run("pixel.palette.set", json!({"id": id.0, "text": text}));
+            }
+            _ => app.show_error("That file has no palette colours in it.".to_string()),
+        }
+    });
+}
+
+fn save_palette(app: &mut FigApp, id: NodeId) {
+    let Some(r) = app.run("pixel.palette.export", json!({"id": id.0, "format": "gpl"})) else { return };
+    let text = r["text"].as_str().unwrap_or_default().to_string();
+    if cfg!(target_arch = "wasm32") {
+        use base64::Engine as _;
+        app.download("palette.gpl", &json!({"data": base64::engine::general_purpose::STANDARD.encode(text.as_bytes())}));
+        return;
+    }
+    app.pick_save("Save palette", "palette.gpl", &["gpl"], move |app, path| {
+        if std::fs::write(&path, text).is_err() {
+            app.show_error(format!("Couldn't save {}", path.display()));
+        }
+    });
 }

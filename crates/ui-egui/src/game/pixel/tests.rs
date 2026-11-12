@@ -231,3 +231,110 @@ fn selecting_another_layer_moves_or_leaves_pixel_mode() {
     u.frame(vec![]);
     assert_eq!(u.app.pixel.mode, Mode::Off, "a layer that isn't a sprite: Pixel mode ends");
 }
+
+// G16.2: selection, moving pixels, copy and paste.
+
+/// A drag from art pixel `a` to `b` with the left button.
+fn drag(u: &mut Ui, a: (f64, f64), b: (f64, f64)) {
+    let (p, q) = (at(u, a.0, a.1), at(u, b.0, b.1));
+    u.frame(vec![Event::PointerMoved(p)]);
+    press(u, p, PointerButton::Primary, true);
+    for i in 1..=4 {
+        u.frame(vec![Event::PointerMoved(p + (q - p) * (i as f32 / 4.0))]);
+    }
+    press(u, q, PointerButton::Primary, false);
+    u.frame(vec![]);
+}
+
+fn selected(u: &mut Ui, id: u64) -> Option<figcraft_pixel::Mask> {
+    let doc = u.app.session.doc().unwrap();
+    let n = doc.node(figcraft_doc::NodeId(id)).unwrap();
+    let sprite = store::load(&n.plugin_data).unwrap();
+    store::selection(&n.plugin_data, &sprite)
+}
+
+#[test]
+fn the_selection_keys_pick_their_tools() {
+    let (mut u, _) = editing();
+    for (k, tool) in [(Key::M, Tool::Marquee), (Key::Q, Tool::Lasso), (Key::W, Tool::Wand), (Key::V, Tool::Move), (Key::R, Tool::Replace)] {
+        key(&mut u, k, false);
+        assert_eq!(u.app.pixel.tool, tool);
+    }
+}
+
+#[test]
+fn a_marquee_drag_selects_and_strokes_stay_inside_until_esc() {
+    let (mut u, id) = editing();
+    key(&mut u, Key::M, false);
+    drag(&mut u, (2.0, 0.0), (4.0, 15.0));
+    assert_eq!(selected(&mut u, id).map(|m| m.count()), Some(3 * 16));
+    key(&mut u, Key::B, false);
+    drag(&mut u, (0.0, 1.0), (8.0, 1.0));
+    for x in 0..=8 {
+        assert_eq!(pixel(&mut u, id, x, 1).is_some(), (2..=4).contains(&x), "pixel {x}");
+    }
+    key(&mut u, Key::Escape, false);
+    assert!(selected(&mut u, id).is_none(), "the first Esc lets go of the selection");
+    assert!(matches!(u.app.pixel.mode, Mode::Edit(_)), "and stays in Pixel mode");
+    key(&mut u, Key::Escape, false);
+    assert_eq!(u.app.pixel.mode, Mode::Off);
+}
+
+#[test]
+fn the_move_tool_drags_the_selected_pixels_in_one_undo_step() {
+    let (mut u, id) = editing();
+    u.app.session.execute("pixel.stroke", &json!({"id": id, "points": [[1, 1], [2, 1]], "color": "#ff0000"})).unwrap();
+    u.app.session.execute("pixel.select", &json!({"id": id, "kind": "rect", "from": [1, 1], "to": [2, 1]})).unwrap();
+    u.frame(vec![]);
+    let before = undo_labels(&u).len();
+    key(&mut u, Key::V, false);
+    drag(&mut u, (1.0, 1.0), (5.0, 3.0));
+    assert_eq!(pixel(&mut u, id, 1, 1), None);
+    assert_eq!(pixel(&mut u, id, 5, 3).as_deref(), Some("#ff0000"));
+    assert_eq!(pixel(&mut u, id, 6, 3).as_deref(), Some("#ff0000"));
+    assert_eq!(undo_labels(&u).len(), before + 1);
+    key(&mut u, Key::ArrowRight, false);
+    assert_eq!(pixel(&mut u, id, 7, 3).as_deref(), Some("#ff0000"), "an arrow nudges them a pixel");
+}
+
+#[test]
+fn copy_and_paste_events_copy_and_paste_pixels_once() {
+    let (mut u, id) = editing();
+    u.app.session.execute("pixel.stroke", &json!({"id": id, "points": [[0, 0]], "color": "#00ff00"})).unwrap();
+    u.app.session.execute("pixel.select", &json!({"id": id, "kind": "rect", "from": [0, 0], "to": [0, 0]})).unwrap();
+    u.frame(vec![]);
+    u.frame(vec![Event::Copy]);
+    assert!(u.app.pixel.clipboard.is_some());
+    let before = undo_labels(&u).len();
+    let v = Event::Key { key: Key::V, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::COMMAND };
+    u.frame(vec![v, Event::Paste(String::new())]);
+    assert_eq!(undo_labels(&u).len(), before + 1, "the key and the browser's paste event paste once");
+    assert_eq!(u.app.pixel.tool, Tool::Move, "the paste is ready to move");
+    u.frame(vec![Event::Cut]);
+    assert_eq!(pixel(&mut u, id, 0, 0), None, "cut clears the pasted copy's pixels");
+    assert!(u.app.session.doc().unwrap().node(figcraft_doc::NodeId(id)).is_some(), "and not the layer");
+}
+
+#[test]
+fn delete_clears_only_the_selected_pixels() {
+    let (mut u, id) = editing();
+    u.app.session.execute("pixel.stroke", &json!({"id": id, "points": [[0, 0], [3, 0]]})).unwrap();
+    u.app.session.execute("pixel.select", &json!({"id": id, "kind": "rect", "from": [0, 0], "to": [1, 0]})).unwrap();
+    u.frame(vec![]);
+    key(&mut u, Key::Delete, false);
+    assert_eq!((pixel(&mut u, id, 1, 0), pixel(&mut u, id, 2, 0).is_some()), (None, true));
+}
+
+#[test]
+fn an_image_paste_after_copying_pixels_pastes_them_into_the_sprite_not_onto_the_page() {
+    let (mut u, id) = editing();
+    u.app.session.execute("pixel.stroke", &json!({"id": id, "points": [[4, 4]], "color": "#00ff00"})).unwrap();
+    u.frame(vec![]);
+    u.frame(vec![Event::Copy]);
+    let layers = u.app.session.doc().unwrap().nodes().count();
+    let before = undo_labels(&u).len();
+    u.frame(vec![Event::PasteImage(std::sync::Arc::default())]);
+    assert_eq!(u.app.session.doc().unwrap().nodes().count(), layers, "no new image layer");
+    assert_eq!(undo_labels(&u).len(), before + 1, "one paste into the sprite");
+    assert!(selected(&mut u, id).is_some(), "the pasted pixels are selected");
+}

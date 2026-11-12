@@ -108,11 +108,13 @@ pub struct Ink {
     pub tile: bool,
     /// Paint transparency instead of the colour.
     pub erase: bool,
+    /// Replace colour: paint only over pixels of this colour (the others stay).
+    pub replace: Option<Rgba>,
 }
 
 impl Default for Ink {
     fn default() -> Self {
-        Self { color: [0, 0, 0, 255], brush: Brush::default(), symmetry: Symmetry::default(), tile: false, erase: false }
+        Self { color: [0, 0, 0, 255], brush: Brush::default(), symmetry: Symmetry::default(), tile: false, erase: false, replace: None }
     }
 }
 
@@ -160,6 +162,9 @@ pub fn paint(cel: &mut Canvas, path: &[Pt], ink: &Ink) -> usize {
     let mut changed = 0;
     for (x, y) in covered(path, ink, cel.width(), cel.height()) {
         let Some(old) = cel.get(x, y) else { continue };
+        if ink.replace.is_some_and(|r| !similar(old, r, 0)) {
+            continue;
+        }
         let new = if ink.erase {
             CLEAR
         } else if ink.color[3] == 255 {
@@ -353,5 +358,16 @@ mod tests {
         // Erasing with the bucket still clears.
         assert_eq!(fill(&mut a, (0, 0), CLEAR, true, 0, false), 3);
         assert_eq!(a.get(1, 0), Some(CLEAR));
+    }
+
+    #[test]
+    fn replace_ink_paints_only_over_its_colour() {
+        let mut c = Canvas::new(4, 1).unwrap();
+        c.set(1, 0, [9, 9, 9, 255]);
+        c.set(2, 0, [9, 9, 9, 255]);
+        let ink = Ink { color: INK, replace: Some([9, 9, 9, 255]), ..Ink::default() };
+        assert_eq!(paint(&mut c, &freehand(&[(0, 0), (3, 0)], false), &ink), 2);
+        assert_eq!(picture(&c), [".##."]);
+        assert_eq!(c.get(1, 0), Some(INK));
     }
 }

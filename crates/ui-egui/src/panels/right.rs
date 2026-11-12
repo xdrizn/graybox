@@ -317,6 +317,10 @@ fn design(app: &mut FigApp, ui: &mut Ui) {
     effects(app, ui, &shown, &sel);
     widgets::separator(ui);
     crate::selection_colors::section(app, ui, &shown, &sel);
+    // Graybox: the colours pixel layers are drawn with, to swap one everywhere (G16).
+    if crate::game::pixel::colors::section(app, ui, &shown, &sel) {
+        widgets::separator(ui);
+    }
     if crate::selection_cache::every(&shown, &sel, |n| n.kind.is_frame_like()) {
         grids(app, ui, &shown, &sel);
         widgets::separator(ui);

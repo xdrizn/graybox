@@ -331,6 +331,35 @@
   - Checked in the real app on an Untitled document: sharp at 100 % and 293 %, grid and checker,
     Pixel art section, the pill, a mouse stroke with one "Draw pixels" undo step, handles hidden.
 
+- G16.2 (2026-11-12): selection, transform and colour. Plan: pure pieces first (selection mask,
+  transforms, palette files, sprite layers), then the commands, then Pixel mode and the panel.
+  Built:
+  - `crates/pixel`: `select::Mask` (rect, lasso polygon, magic wand contiguous or global with
+    tolerance, add/subtract/intersect, invert, move, outline edges merged into runs, stored packed
+    under `graybox.pixel.selection`), `transform` (move, flip, quarter turns, outline, replace colour,
+    copy/paste, clip to the selection), `palette` (`.gpl` and `.hex` read and write), sprite layers
+    (add, remove, move). Every drawing command keeps to the selection when there is one.
+  - Commands `pixel.select`, `pixel.transform`, `pixel.outline`, `pixel.replaceColor` (one sprite or
+    `ids`, every layer and frame), `pixel.copy`, `pixel.paste` (a PNG or any layer drawn at the
+    sprite's scale, at most 1024 art pixels a side), `pixel.layer.add/delete/set/move/merge`,
+    `pixel.palette.set/export` (`crates/engine/src/cmd/pixel/edit.rs`); in the junk sweep.
+  - Pixel mode: Replace colour R (paints only over the second colour), Marquee M, Lasso Q, Magic
+    wand W, Move V. The pill groups Line/Rectangle/Ellipse and Marquee/Lasso/Wand in one button each
+    (a corner mark; a click on the group in hand takes the next tool). Shift adds to the selection,
+    Alt takes away, both keep the overlap. Marching ants; the Move tool and the arrows (Shift: 10)
+    move the selected pixels; Flip H, Flip V, Rotate and Outline buttons with the selection tools.
+    Ctrl+A / Ctrl+D / Ctrl+Shift+I select all, none, invert; Ctrl+C / X / V copy, cut and paste
+    pixels (also as a picture on the system clipboard); Delete clears; Esc lets go of the
+    selection first, then leaves.
+  - Design panel: while a sprite is edited, the Pixel art section lists its sprite layers (eye,
+    pick the one drawn on, opacity, up, down, merge down, delete, +) and the palette (the sprite's
+    colours, Load/Save `.gpl`/`.hex`, then the file's colour styles and colour variables: click
+    takes the first colour, right click the second). New section "Pixel colors" under Selection
+    colours: the colours of the selected pixel layers (also inside selected frames); a click opens a
+    picker beside the panel and Replace swaps that colour everywhere in those sprites (one undo).
+  - Checked in the real app on an Untitled document: marquee and wand selection with marching ants,
+    a Move tool drag, the sprite layers and palette in the panel, Pixel colors replacing a colour.
+
 ## Decisions
 - G16 pixel art, details the spec left open (chosen as a pixel artist would expect):
   - New sprites are 32×32 at scale 4 (one art pixel = 4 page units); default colours a near-black
@@ -343,6 +372,14 @@
     "edges" and "tile" are the other choices.
   - The Design panel title of a pixel layer still reads "Rectangle" (upstream); the Pixel art
     section under Position says what it is.
+  - G16.2: a selection tool's Alt subtracts (it no longer holds the eyedropper there). A click
+    without a drag deselects. Moving, flipping and Delete act on the current sprite layer; with
+    nothing selected they act on the whole layer, and the arrows nudge the layer itself as before.
+  - G16.2: Paste puts the pixels back where they were copied from, selected, with the Move tool in
+    hand. Until pixels are copied in this session, a paste of a picture from another app still
+    makes a new image layer.
+  - G16.2: Outline draws outside the art in the first colour by default; Pixel colors lists at most
+    32 colours, most used first.
 - G11.4 movement (recommended option each time):
   - No physics engine: one cylinder against the world's axis-aligned boxes (two passes) plus the
     heightfield; a few hundred boxes per step is cheap at 60 Hz and the same on wasm.
@@ -739,6 +776,10 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     `tool_cell`, `done_button`, `pretty_shortcut` and the size constants became `pub(crate)`.
   - `crates/ui-egui/src/panels/right.rs`: `game::pixel::section` above Layout.
   - `crates/ui-egui/src/icons.rs` and `icons/draw.rs`: `PixelArt`, `PixelPerfect`, `Tiles` (drawn in code).
+  - G16.2: `panels/right.rs`: `game::pixel::colors::section` after Selection colours;
+    `shortcuts.rs`: `game::pixel::paste_events` after the key filter (an image paste while a sprite
+    is edited pastes its copied pixels); `icons.rs` / `icons/draw.rs`: `Marquee`, `MagicWand`,
+    `Outline`, `ReplaceColor`, and the pixel icons moved into `draw_pixel_art` (one arm in `draw`).
 
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.

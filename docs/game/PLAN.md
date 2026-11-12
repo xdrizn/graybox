@@ -208,7 +208,7 @@ Pixel layers edited in place in a Pixel mode, Aseprite-style standard tools, sma
 9-slice, pixel buttons that grow with their text, basic animation, Unity-first export.
 - [x] G16.1 Core and drawing: `crates/pixel`, pixel layer, sharp render, Pixel mode, pencil to ellipse,
   brush, mirror with an axis, grid, undo.
-- [ ] G16.2 Selection, transform and colour: marquee, lasso, wand, move, outline, replace colour,
+- [x] G16.2 Selection, transform and colour: marquee, lasso, wand, move, outline, replace colour,
   palette tied to styles and variables, Selection colours, sprite layers.
 - [ ] G16.3 Smart resize, pixel 9-slice, insets as padding, Pixel text, Pixel button starter, tile mode,
   components and palette-swap variants.

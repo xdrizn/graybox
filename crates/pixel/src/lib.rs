@@ -11,10 +11,14 @@
 
 pub mod canvas;
 pub mod paint;
+pub mod palette;
 pub mod raster;
+pub mod select;
 pub mod sprite;
 pub mod store;
+pub mod transform;
 
 pub use canvas::{CLEAR, Canvas, Rgba};
 pub use paint::{Brush, BrushShape, Ink, Symmetry};
+pub use select::Mask;
 pub use sprite::{Frame, Layer, Sprite, Tag};

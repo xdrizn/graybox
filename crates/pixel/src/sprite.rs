@@ -171,6 +171,39 @@ impl Sprite {
     pub fn tag(&self, name: &str) -> Option<&Tag> {
         self.tags.iter().find(|t| t.name == name)
     }
+    /// A new empty layer named `name` (or "Layer N") at `index` (bottom 0; past the top: on top).
+    /// Its id, or None when the sprite has [`MAX_LAYERS`] already.
+    pub fn add_layer(&mut self, name: Option<&str>, index: usize) -> Option<u32> {
+        if self.layers.len() >= MAX_LAYERS {
+            return None;
+        }
+        let id = self.take_id();
+        let name = name.map_or_else(|| format!("Layer {}", self.layers.len() + 1), clip);
+        self.layers.insert(index.min(self.layers.len()), Layer { id, name, visible: true, opacity: 255 });
+        Some(id)
+    }
+
+    /// Takes layer `id` out (never the last one). Whether it went.
+    pub fn remove_layer(&mut self, id: u32) -> bool {
+        if self.layers.len() <= 1 {
+            return false;
+        }
+        let Some(i) = self.layer_index(id) else { return false };
+        self.layers.remove(i);
+        true
+    }
+
+    /// Moves layer `id` to `index` (bottom 0). Whether it moved.
+    pub fn move_layer(&mut self, id: u32, index: usize) -> bool {
+        let Some(i) = self.layer_index(id) else { return false };
+        let to = index.min(self.layers.len().saturating_sub(1));
+        if i == to {
+            return false;
+        }
+        let l = self.layers.remove(i);
+        self.layers.insert(to, l);
+        true
+    }
 }
 
 /// `s` cut to a name's longest length (at a character boundary).
@@ -211,5 +244,20 @@ mod tests {
         assert_eq!((empty.layers.len(), empty.frames.len()), (1, 1));
         let huge: Sprite = serde_json::from_str(r#"{"width": 99999, "height": 4, "layers": [], "frames": []}"#).unwrap();
         assert!(huge.sanitized().is_none());
+    }
+
+    #[test]
+    fn layers_are_added_moved_and_removed_but_one_always_stays() {
+        let mut s = Sprite::new(4, 4, 1).unwrap();
+        let a = s.add_layer(None, 99).unwrap();
+        let b = s.add_layer(Some("Shadow"), 0).unwrap();
+        let names = |s: &Sprite| s.layers.iter().map(|l| l.name.clone()).collect::<Vec<_>>();
+        assert_eq!(names(&s), ["Shadow", "Layer 1", "Layer 2"]);
+        assert!(s.move_layer(b, 5));
+        assert_eq!(names(&s), ["Layer 1", "Layer 2", "Shadow"]);
+        assert!(!s.move_layer(b, 2), "already there");
+        assert!(s.remove_layer(a) && s.remove_layer(b));
+        assert!(!s.remove_layer(1), "the last layer stays");
+        assert_ne!(a, b);
     }
 }

@@ -125,6 +125,14 @@ icons! {
     PixelPerfect,
     /// Graybox: tile mode (four tiles).
     Tiles,
+    /// Graybox: rectangle selection (a dashed square).
+    Marquee,
+    /// Graybox: select by colour (a wand with a spark).
+    MagicWand,
+    /// Graybox: a one-pixel outline around the art.
+    Outline,
+    /// Graybox: replace a colour (two swatches and an arrow).
+    ReplaceColor,
     Home,
     Bell,
     Panels,

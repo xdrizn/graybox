@@ -170,6 +170,11 @@ fn every_pixel_command_survives_junk_on_a_sprite() {
         json!({"width": 1e308, "height": -1, "scale": 0.4, "background": 5, "parent": "x", "pixels": "yes", "on": [], "name": [1]}),
         json!({"x": 3, "y": 3, "color": "#00000000", "tolerance": 255, "contiguous": false, "tile": true, "pixels": true, "frame": 0}),
         json!({"points": [[0, 0]], "mirror": {"x": 0.25}, "erase": true, "pixelPerfect": "x"}),
+        json!({"kind": "wand", "op": "intersect", "x": 0, "y": 0, "dx": 1e308, "dy": "x", "ids": [1e308, "x", -1], "outside": "no", "everywhere": 2}),
+        json!({"kind": "invert", "op": 5, "png": "not base64 !", "source": -1, "index": -1e308, "opacity": 1e308, "visible": "x", "name": [1]}),
+        json!({"op": "rotateCW", "png": "iVBORw0KGgo=", "source": 1, "index": 4294967296u64, "layer": 1, "colors": [1, "x"], "add": "#zz", "remove": 3}),
+        json!({"op": "move", "dx": -1e308, "dy": 1e308, "text": "GIMP Palette\n999 -1 x\n", "format": "pdf", "from": "#ff0000", "to": [1]}),
+        json!({"kind": "lasso", "points": [[0, 0], [1e9, 1e9], [-1e9, 3]], "op": "add", "x": 1e308, "tolerance": 255}),
     ];
     for spec in crate::cmd::all_commands().iter().filter(|c| c.id.starts_with("pixel.")) {
         for j in &junk {
@@ -201,4 +206,147 @@ fn strokes_do_not_pile_up_old_pictures_and_undo_brings_the_old_one_back() {
     let back = image(&s);
     assert_eq!(back, seen[4]);
     assert!(s.doc().unwrap().images.contains_key(&back), "undo brings the earlier picture back");
+}
+
+// G16.2: selection, transform, colour, sprite layers and the palette.
+
+#[test]
+fn a_rectangle_selection_keeps_strokes_inside_it_until_it_is_cleared() {
+    let (mut s, id) = sprite();
+    assert_eq!(ex(&mut s, "pixel.select", json!({"id": id, "kind": "rect", "from": [2, 0], "to": [4, 7]}))["count"], 24);
+    ex(&mut s, "pixel.stroke", json!({"id": id, "points": [[0, 1], [7, 1]]}));
+    assert_eq!(picture(&mut s, id)[1], "..###...");
+    ex(&mut s, "pixel.select", json!({"id": id, "kind": "none"}));
+    ex(&mut s, "pixel.stroke", json!({"id": id, "points": [[0, 2], [7, 2]]}));
+    assert_eq!(picture(&mut s, id)[2], "########");
+}
+
+#[test]
+fn the_wand_takes_one_colour_region_and_selections_combine() {
+    let (mut s, id) = sprite();
+    ex(&mut s, "pixel.shape", json!({"id": id, "kind": "rect", "from": [0, 0], "to": [3, 3], "filled": true, "color": "#ff0000"}));
+    assert_eq!(ex(&mut s, "pixel.select", json!({"id": id, "kind": "wand", "x": 1, "y": 1}))["count"], 16);
+    assert_eq!(ex(&mut s, "pixel.select", json!({"id": id, "kind": "invert"}))["count"], 48);
+    assert_eq!(ex(&mut s, "pixel.select", json!({"id": id, "kind": "rect", "from": [0, 0], "to": [0, 0], "op": "add"}))["count"], 49);
+    assert_eq!(
+        ex(&mut s, "pixel.select", json!({"id": id, "kind": "rect", "from": [0, 0], "to": [7, 0], "op": "subtract"}))["count"],
+        44,
+        "row 0 held (0, 0) and four more"
+    );
+    assert_eq!(
+        ex(&mut s, "pixel.select", json!({"id": id, "kind": "rect", "from": [0, 0], "to": [7, 4], "op": "intersect"}))["count"],
+        20,
+        "rows 1–3 right of the square, and row 4"
+    );
+}
+
+#[test]
+fn flipping_and_moving_the_selected_pixels_is_one_undo_step_each() {
+    let (mut s, id) = sprite();
+    ex(&mut s, "pixel.stroke", json!({"id": id, "points": [[0, 0], [2, 0]]}));
+    ex(&mut s, "pixel.transform", json!({"id": id, "op": "flipH"}));
+    assert_eq!(picture(&mut s, id)[0], ".....###", "nothing selected: the whole cel flips");
+    ex(&mut s, "pixel.select", json!({"id": id, "kind": "rect", "from": [5, 0], "to": [6, 0]}));
+    ex(&mut s, "pixel.transform", json!({"id": id, "op": "move", "dx": -5, "dy": 1}));
+    assert_eq!(picture(&mut s, id)[..2], [".......#", "##......"]);
+    let sel = ex(&mut s, "pixel.select", json!({"id": id, "kind": "rect", "from": [0, 1], "to": [1, 1], "op": "intersect"}));
+    assert_eq!(sel["count"], 2, "the selection moved with the pixels");
+    ex(&mut s, "edit.undo", json!({}));
+    ex(&mut s, "edit.undo", json!({}));
+    assert_eq!(picture(&mut s, id)[..2], [".....###", "........"]);
+}
+
+#[test]
+fn rotating_a_square_selection_turns_it_a_quarter() {
+    let (mut s, id) = sprite();
+    ex(&mut s, "pixel.stroke", json!({"id": id, "points": [[0, 0], [2, 0]]}));
+    ex(&mut s, "pixel.select", json!({"id": id, "kind": "rect", "from": [0, 0], "to": [2, 2]}));
+    ex(&mut s, "pixel.transform", json!({"id": id, "op": "rotateCW"}));
+    assert_eq!(picture(&mut s, id)[..3], ["..#.....", "..#.....", "..#....."]);
+}
+
+#[test]
+fn an_outline_rings_the_art_outside_its_edge() {
+    let (mut s, id) = sprite();
+    ex(&mut s, "pixel.stroke", json!({"id": id, "points": [[3, 3]], "color": "#ff0000"}));
+    let r = ex(&mut s, "pixel.outline", json!({"id": id, "color": "#000000"}));
+    assert_eq!(r["changed"], 4);
+    assert_eq!(picture(&mut s, id)[2..5], ["...#....", "..###...", "...#...."]);
+    assert_eq!(ex(&mut s, "pixel.pick", json!({"id": id, "x": 3, "y": 2}))["color"], "#000000");
+}
+
+#[test]
+fn replacing_a_colour_changes_every_layer_of_every_sprite_given() {
+    let (mut s, a) = sprite();
+    let b = ex(&mut s, "pixel.create", json!({"x": 100, "y": 20, "width": 4, "height": 4}))["id"].as_u64().unwrap();
+    ex(&mut s, "pixel.stroke", json!({"id": a, "points": [[0, 0]], "color": "#ff0000"}));
+    let top = ex(&mut s, "pixel.layer.add", json!({"id": a}))["layer"].clone();
+    ex(&mut s, "pixel.stroke", json!({"id": a, "points": [[1, 0]], "color": "#ff0000", "layer": top}));
+    ex(&mut s, "pixel.stroke", json!({"id": b, "points": [[2, 2]], "color": "#ff0000"}));
+    let r = ex(&mut s, "pixel.replaceColor", json!({"ids": [a, b], "from": "#ff0000", "to": "#0000ff"}));
+    assert_eq!(r["changed"], 3);
+    for (id, x, y) in [(a, 0, 0), (a, 1, 0), (b, 2, 2)] {
+        assert_eq!(ex(&mut s, "pixel.pick", json!({"id": id, "x": x, "y": y}))["color"], "#0000ff");
+    }
+    ex(&mut s, "edit.undo", json!({}));
+    assert_eq!(ex(&mut s, "pixel.pick", json!({"id": b, "x": 2, "y": 2}))["color"], "#ff0000", "one undo step for all");
+}
+
+#[test]
+fn copied_pixels_paste_elsewhere_and_become_the_selection() {
+    let (mut s, id) = sprite();
+    ex(&mut s, "pixel.stroke", json!({"id": id, "points": [[0, 0], [1, 0]]}));
+    ex(&mut s, "pixel.select", json!({"id": id, "kind": "rect", "from": [0, 0], "to": [1, 0]}));
+    let c = ex(&mut s, "pixel.copy", json!({"id": id}));
+    assert_eq!((c["width"].as_u64(), c["height"].as_u64(), c["x"].as_i64()), (Some(2), Some(1), Some(0)));
+    let r = ex(&mut s, "pixel.paste", json!({"id": id, "png": c["png"], "x": 5, "y": 6}));
+    assert_eq!((r["width"].as_u64(), r["height"].as_u64()), (Some(2), Some(1)));
+    assert_eq!(picture(&mut s, id)[6], ".....##.");
+    assert_eq!(ex(&mut s, "pixel.select", json!({"id": id, "kind": "invert"}))["count"], 62, "the paste is selected");
+}
+
+#[test]
+fn sprite_layers_stack_hide_reorder_merge_and_never_run_out() {
+    let (mut s, id) = sprite();
+    let bottom = ex(&mut s, "pixel.get", json!({"id": id}))["layers"][0]["id"].as_u64().unwrap();
+    ex(&mut s, "pixel.stroke", json!({"id": id, "points": [[0, 0]], "color": "#ff0000"}));
+    let top = ex(&mut s, "pixel.layer.add", json!({"id": id, "name": "Ink"}))["layer"].as_u64().unwrap();
+    ex(&mut s, "pixel.stroke", json!({"id": id, "points": [[0, 0], [1, 0]], "color": "#0000ff", "layer": top}));
+    assert_eq!(ex(&mut s, "pixel.pick", json!({"id": id, "x": 0, "y": 0}))["color"], "#0000ff", "the top layer shows");
+    ex(&mut s, "pixel.layer.set", json!({"id": id, "layer": top, "visible": false}));
+    assert_eq!(picture(&mut s, id)[0], "#.......");
+    ex(&mut s, "pixel.layer.set", json!({"id": id, "layer": top, "visible": true}));
+    ex(&mut s, "pixel.layer.move", json!({"id": id, "layer": top, "index": 0}));
+    assert_eq!(ex(&mut s, "pixel.pick", json!({"id": id, "x": 0, "y": 0}))["color"], "#ff0000", "the red layer is on top now");
+    ex(&mut s, "pixel.layer.merge", json!({"id": id, "layer": bottom}));
+    let got = ex(&mut s, "pixel.get", json!({"id": id}));
+    assert_eq!(got["layers"].as_array().unwrap().len(), 1);
+    assert_eq!(picture(&mut s, id)[0], "##......");
+    let only = got["layers"][0]["id"].clone();
+    assert!(refused(&mut s, "pixel.layer.delete", json!({"id": id, "layer": only})).contains("one layer"));
+}
+
+#[test]
+fn a_palette_loads_from_gpl_and_hex_and_exports_again() {
+    let (mut s, id) = sprite();
+    let gpl = "GIMP Palette\nName: Test\n#\n255   0   0\tRed\n  0 255   0\tGreen\n";
+    let r = ex(&mut s, "pixel.palette.set", json!({"id": id, "text": gpl}));
+    assert_eq!(r["palette"], json!(["#ff0000", "#00ff00"]));
+    ex(&mut s, "pixel.palette.set", json!({"id": id, "add": "#0000ff"}));
+    ex(&mut s, "pixel.palette.set", json!({"id": id, "remove": "#ff0000"}));
+    assert_eq!(ex(&mut s, "pixel.palette.export", json!({"id": id, "format": "hex"}))["text"], "00ff00\n0000ff\n");
+    let back = ex(&mut s, "pixel.palette.export", json!({"id": id}))["text"].as_str().unwrap().to_string();
+    assert!(back.starts_with("GIMP Palette"));
+    assert_eq!(ex(&mut s, "pixel.palette.set", json!({"id": id, "text": "ff00ff\n"}))["palette"], json!(["#ff00ff"]));
+}
+
+#[test]
+fn a_layer_pastes_in_at_the_sprite_scale_and_a_huge_one_is_refused() {
+    let (mut s, id) = sprite();
+    let small = ex(&mut s, "shape.rectangle", json!({"x": 200, "y": 0, "width": 8, "height": 12}))["id"].as_u64().unwrap();
+    let r = ex(&mut s, "pixel.paste", json!({"id": id, "source": small, "x": 1, "y": 1}));
+    assert_eq!((r["width"].as_u64(), r["height"].as_u64()), (Some(2), Some(3)), "8 × 12 page units at scale 4");
+    assert_eq!(picture(&mut s, id)[1..5], [".##.....", ".##.....", ".##.....", "........"]);
+    let huge = ex(&mut s, "shape.rectangle", json!({"x": 0, "y": 500, "width": 60000, "height": 40}))["id"].as_u64().unwrap();
+    assert!(refused(&mut s, "pixel.paste", json!({"id": id, "source": huge})).contains("1024"));
 }

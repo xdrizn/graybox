@@ -8,12 +8,15 @@ use std::collections::BTreeMap;
 use base64::Engine as _;
 
 use crate::canvas::Canvas;
+use crate::select::Mask;
 use crate::sprite::Sprite;
 
 /// The plugin data key of a sprite's description; a layer with it is a pixel layer.
 pub const KEY: &str = "graybox.pixel";
 /// The start of every cel's key.
 pub const CEL_PREFIX: &str = "graybox.pixel.cel.";
+/// The key of the sprite's selection (what the selection tools picked), when there is one.
+pub const SELECTION_KEY: &str = "graybox.pixel.selection";
 
 /// Plugin data, as a layer holds it.
 pub type Data = BTreeMap<String, String>;
@@ -46,7 +49,7 @@ pub fn save(data: &mut Data, sprite: &Sprite) {
 
 /// Removes the sprite and its cels: the layer is no longer a pixel layer.
 pub fn remove(data: &mut Data) {
-    data.retain(|k, _| k != KEY && !k.starts_with(CEL_PREFIX));
+    data.retain(|k, _| k != KEY && k != SELECTION_KEY && !k.starts_with(CEL_PREFIX));
 }
 
 /// The stored text of a cel (or None when transparent).
@@ -79,6 +82,23 @@ pub fn put_cel(data: &mut Data, layer: u32, frame: u32, cel: &Canvas) {
         }
         None => {
             data.remove(&key);
+        }
+    }
+}
+
+/// The sprite's selection (None when nothing is selected, or it no longer fits the sprite).
+pub fn selection(data: &Data, sprite: &Sprite) -> Option<Mask> {
+    data.get(SELECTION_KEY).and_then(|t| Mask::decode(t, sprite.width, sprite.height)).filter(|m| !m.is_empty())
+}
+
+/// Stores the selection (an empty one, or None, removes it).
+pub fn put_selection(data: &mut Data, mask: Option<&Mask>) {
+    match mask.filter(|m| !m.is_empty()) {
+        Some(m) => {
+            data.insert(SELECTION_KEY.to_string(), m.encode());
+        }
+        None => {
+            data.remove(SELECTION_KEY);
         }
     }
 }

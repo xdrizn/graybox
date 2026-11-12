@@ -29,6 +29,10 @@ enum Opt {
     MirrorY,
     Tile,
     Grid,
+    FlipH,
+    FlipV,
+    Rotate,
+    Outline,
 }
 
 impl Opt {
@@ -42,12 +46,15 @@ fn options(tool: Tool) -> Vec<Opt> {
     let mut v = Vec::new();
     match tool {
         Tool::Pencil => v.extend([Opt::Shape, Opt::Size, Opt::Perfect]),
-        Tool::Eraser | Tool::Line => v.extend([Opt::Shape, Opt::Size]),
+        Tool::Eraser | Tool::Line | Tool::Replace => v.extend([Opt::Shape, Opt::Size]),
         Tool::Rect | Tool::Ellipse => v.extend([Opt::Shape, Opt::Size, Opt::Filled]),
-        Tool::Bucket => v.push(Opt::Contiguous),
-        Tool::Eyedropper => {}
+        Tool::Bucket | Tool::Wand => v.push(Opt::Contiguous),
+        Tool::Eyedropper | Tool::Marquee | Tool::Lasso | Tool::Move => {}
     }
-    if !matches!(tool, Tool::Eyedropper | Tool::Bucket) {
+    if tool.selects() {
+        // What turns the selection (or the whole layer when nothing is selected).
+        v.extend([Opt::FlipH, Opt::FlipV, Opt::Rotate, Opt::Outline]);
+    } else if !matches!(tool, Tool::Eyedropper | Tool::Bucket) {
         v.extend([Opt::MirrorX, Opt::MirrorY]);
     }
     v.extend([Opt::Tile, Opt::Grid]);
@@ -73,17 +80,32 @@ pub(crate) fn toolbar(app: &mut FigApp, ui: &mut Ui) -> bool {
 fn edit_pill(app: &mut FigApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let opts = options(app.pixel.tool);
-    let tools_w = Tool::ALL.len() as f32 * (TOOL_CELL + GAP);
+    let tools_w = Tool::SLOTS.len() as f32 * (TOOL_CELL + GAP);
     let opts_w: f32 = opts.iter().map(|o| o.width() + GAP).sum();
     let width = PAD * 2.0 + tools_w + DIVIDER + GAP + TOOL_CELL + GAP + DIVIDER + GAP + opts_w + ZOOM_W + GAP + DIVIDER + GAP + DONE_W;
     let rect = pill(ui, &mut app.ui.nav, app.canvas.rect, width, &t);
     let cy = rect.center().y;
     let mut x = rect.min.x + PAD;
-    for tool in Tool::ALL {
+    for slot in Tool::SLOTS {
         let r = Rect::from_center_size(pos2(x + TOOL_CELL / 2.0, cy), vec2(TOOL_CELL, TOOL_CELL));
-        let tip = format!("{}  {}", tool.label(), pretty_shortcut(tool.key()));
-        if tool_cell(ui, &t, r, ("pixel_tool", tool.label()), tool.icon(), app.pixel.tool == tool, &tip).clicked() {
-            app.pixel.tool = tool;
+        let active = slot.contains(&app.pixel.tool);
+        let shown = if active { app.pixel.tool } else { slot.first().copied().unwrap_or_default() };
+        let tip = slot.iter().map(|t| format!("{}  {}", t.label(), pretty_shortcut(t.key()))).collect::<Vec<_>>().join("\n");
+        if tool_cell(ui, &t, r, ("pixel_tool", shown.label()), shown.icon(), active, &tip).clicked() {
+            // A click on the group in hand takes the next tool of it.
+            app.pixel.tool = match slot.iter().position(|t| *t == app.pixel.tool) {
+                Some(i) if slot.len() > 1 => slot.get((i + 1) % slot.len()).copied().unwrap_or(shown),
+                _ => shown,
+            };
+        }
+        if slot.len() > 1 {
+            // A small corner mark: this button holds more tools.
+            let c = r.right_bottom() - vec2(5.0, 5.0);
+            ui.painter().add(egui::Shape::convex_polygon(
+                vec![c + vec2(2.5, -2.5), c + vec2(2.5, 2.5), c + vec2(-2.5, 2.5)],
+                t.icon_secondary,
+                Stroke::NONE,
+            ));
         }
         x += TOOL_CELL + GAP;
     }
@@ -199,6 +221,18 @@ fn option(app: &mut FigApp, ui: &mut Ui, o: Opt, r: Rect, t: &Tokens) {
             }
             if resp.clicked() {
                 toggle_shape(e);
+            }
+        }
+        Opt::FlipH | Opt::FlipV | Opt::Rotate | Opt::Outline => {
+            let outline = json!({"color": canvas::to_hex(e.colors[0])});
+            let (icon, tip, command, params) = match o {
+                Opt::FlipH => (Icon::FlipH, "Flip left to right (the selection, or the layer)", "pixel.transform", json!({"op": "flipH"})),
+                Opt::FlipV => (Icon::FlipV, "Flip upside down (the selection, or the layer)", "pixel.transform", json!({"op": "flipV"})),
+                Opt::Rotate => (Icon::Rotate, "Turn a quarter clockwise (the selection, or the layer)", "pixel.transform", json!({"op": "rotateCW"})),
+                _ => (Icon::Outline, "Outline round the art in the first colour", "pixel.outline", outline),
+            };
+            if tool_cell(ui, t, r, ("pixel_act", tip), icon, false, tip).clicked() {
+                super::input::on_cel(app, command, params);
             }
         }
         _ => {
