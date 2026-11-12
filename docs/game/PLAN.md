@@ -179,7 +179,7 @@ action game, original, made in code. One session per phase, each ends committed 
   third-person starter HUD. Needs G11.4.
 - [ ] G11.6 Polish and performance: browser at 60 fps, memory and size budgets, feel tuning, installed copy.
 
-### G13 â€” Documents (owner's request, 2026-11-12)
+### G13 — Documents (owner's request, 2026-11-12)
 Spec: [`specs/2026-11-12-documents-design.md`](specs/2026-11-12-documents-design.md) (decisions P1â€“P10).
 Notion-like documents inside the project file, a Documents tab, versions closed by signature.
 - [ ] G13.1 Model, commands and the Documents tab (tree, open a document).
@@ -188,12 +188,12 @@ Notion-like documents inside the project file, a Documents tab, versions closed 
 - [ ] G13.4 Close version (fingerprint, read-only), new version, diff, decision block and log.
 - [ ] G13.5 Templates, Claude reads and writes documents, auto-tables, per-section approval.
 
-### G14 â€” Graybox online (owner's request, 2026-11-12)
+### G14 — Graybox online (owner's request, 2026-11-12)
 - [ ] G14.1 Client links on our own `figcraft-server`: view and play, comment, read and download
   documents; password, expiry, revoke (tested on localhost).
 - [ ] G14.2 Deploy on the owner's server and domain (waiting for his choice, P6).
 
-### G15 â€” Signing through a link (owner's request, 2026-11-12)
+### G15 — Signing through a link (owner's request, 2026-11-12)
 - [ ] G15.1 Signers, email code, drawn or typed signature, audit trail signed by the server,
   certificate page, Verify. Needs G13.4 and G14.1.
 
