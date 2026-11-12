@@ -117,6 +117,8 @@ icons! {
     Play,
     /// Graybox: the Claude chat button.
     Chat,
+    /// Graybox: the Documents tab (a page with lines of text).
+    Document,
     Home,
     Bell,
     Panels,

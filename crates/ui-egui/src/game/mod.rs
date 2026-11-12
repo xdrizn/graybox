@@ -11,6 +11,7 @@ pub mod claude;
 pub(crate) mod color_fold;
 pub mod components;
 pub(crate) mod corner_style_ui;
+pub(crate) mod docs;
 pub mod editor;
 pub(crate) mod font_watch;
 pub mod fonts;

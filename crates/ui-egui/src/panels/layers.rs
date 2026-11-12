@@ -100,8 +100,13 @@ pub fn rail(app: &mut FigApp, ui: &mut Ui) {
     y += 44.0;
     ui.painter().line_segment([pos2(r.min.x + 18.0, y), pos2(r.max.x - 18.0, y)], Stroke::new(1.0, t.border));
     y += 12.0;
-    let items =
-        [(Icon::Page, tr("File"), Some(LeftTab::File)), (Icon::Assets, tr("Assets"), Some(LeftTab::Assets)), (Icon::Styles, tr("Variables"), None)];
+    let items = [
+        (Icon::Page, tr("File"), Some(LeftTab::File)),
+        (Icon::Assets, tr("Assets"), Some(LeftTab::Assets)),
+        // Graybox: the Documents tab (G13).
+        (Icon::Document, tr("Docs"), Some(LeftTab::Documents)),
+        (Icon::Styles, tr("Variables"), None),
+    ];
     for (icon, label, tab) in items {
         let ir = Rect::from_center_size(pos2(r.center().x, y + 18.0), vec2(40.0, 36.0));
         let hit = Rect::from_min_max(pos2(r.min.x, y), pos2(r.max.x, y + 56.0));
@@ -150,8 +155,10 @@ pub fn left_panel(app: &mut FigApp, ui: &mut Ui) {
     let full = ui.max_rect();
     // Header: file name (or "Assets") + drafts + collapse.
     let (head, _) = ui.allocate_exact_size(vec2(full.width(), 64.0), Sense::hover());
-    if app.ui.left_tab == LeftTab::Assets {
-        ui.painter().text(pos2(head.min.x + 16.0, head.min.y + 24.0), Align2::LEFT_CENTER, tr("Assets"), semibold(13.0), t.text);
+    // Graybox: the Documents tab has a plain title like Assets.
+    if matches!(app.ui.left_tab, LeftTab::Assets | LeftTab::Documents) {
+        let title = if app.ui.left_tab == LeftTab::Assets { tr("Assets") } else { tr("Documents") };
+        ui.painter().text(pos2(head.min.x + 16.0, head.min.y + 24.0), Align2::LEFT_CENTER, title, semibold(13.0), t.text);
     } else {
         let name = app.session.doc().map(|d| d.name.clone()).unwrap_or_default();
         let nr = Rect::from_min_max(pos2(head.min.x + 14.0, head.min.y + 14.0), pos2(head.max.x - 48.0, head.min.y + 34.0));
@@ -179,6 +186,8 @@ pub fn left_panel(app: &mut FigApp, ui: &mut Ui) {
             layers(app, ui);
         }
         LeftTab::Assets => crate::assets_panel::show(app, ui),
+        // Graybox: the tree of documents (G13).
+        LeftTab::Documents => crate::game::docs::panel(app, ui),
     }
 }
 

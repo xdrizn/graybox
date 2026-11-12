@@ -14,6 +14,8 @@ impl FigApp {
     /// Run a command, surfacing errors as a toast. Returns the result.
     pub fn run(&mut self, id: &str, params: Value) -> Option<Value> {
         let layers_generation = self.session.clipboard.layers_generation;
+        // Graybox: words typed in a document and not yet sent go first (G13).
+        crate::game::docs::before_run(self, id);
         let r = self.session.execute(id, &params);
         self.clear_comment_draft_after_tool_set(id, r.is_ok());
         // Graybox: a new file asks which game it plays.

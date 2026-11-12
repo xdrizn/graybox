@@ -43,6 +43,8 @@ pub use props::*;
 pub mod crt;
 pub use crt::{Crt, CrtDirection};
 pub mod corner_style;
+// Graybox: documents (G13), see docs.rs.
+pub mod docs;
 pub use corner_style::CornerStyle;
 pub use styles::*;
 pub use text::*;
@@ -215,6 +217,9 @@ pub struct Document {
     /// Gameplay bindings, screen roles and event names saved in this file.
     #[serde(default)]
     pub game: game::GameSettings,
+    /// Graybox: written documents with versions (G13); absent from files that have none.
+    #[serde(default, skip_serializing_if = "docs::Documents::is_empty")]
+    pub docs: docs::Documents,
     /// Embedded sounds and mix levels saved in this file.
     #[serde(default)]
     pub audio: audio::AudioLibrary,
@@ -291,6 +296,7 @@ impl Document {
             styles: Vec::new(),
             variables: Variables::default(),
             game: game::GameSettings::default(),
+            docs: docs::Documents::default(),
             audio: audio::AudioLibrary::default(),
             images: BTreeMap::new(),
             current_page: None,
@@ -1349,6 +1355,9 @@ mod corner_style_tests;
 mod crt_tests;
 #[cfg(test)]
 mod diff_tests;
+// Graybox: documents (G13).
+#[cfg(test)]
+mod docs_tests;
 #[cfg(test)]
 mod effects_tests;
 #[cfg(test)]

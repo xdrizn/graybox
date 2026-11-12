@@ -184,7 +184,7 @@ action game, original, made in code. One session per phase, each ends committed 
 ### G13 — Documents (owner's request, 2026-11-12)
 Spec: [`specs/2026-11-12-documents-design.md`](specs/2026-11-12-documents-design.md) (decisions P1â€“P10).
 Notion-like documents inside the project file, a Documents tab, versions closed by signature.
-- [ ] G13.1 Model, commands and the Documents tab (tree, open a document).
+- [x] G13.1 Model, commands and the Documents tab (tree, open a document).
 - [ ] G13.2 Block editor: left handle (turn into anything), `/` menu, formatting, embeds, tables.
 - [ ] G13.3 Page layout, canvas card that follows the document, PDF and Markdown export.
 - [ ] G13.4 Close version (fingerprint, read-only), new version, diff, decision block and log.

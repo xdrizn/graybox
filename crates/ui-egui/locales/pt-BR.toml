@@ -1872,6 +1872,33 @@ status = "draft — needs native review"
 "{n} text layers" = { one = "{n} camada de texto", other = "{n} camadas de texto" }
 "{percent}%" = "{percent}%"
 
+# Graybox: Documentos (G13).
+"Documents" = "Documentos"
+"Docs" = "Docs"
+"Untitled" = "Sem título"
+"No documents yet" = "Nenhum documento ainda"
+"Decisions, specs and notes live here, in this file." = "Decisões, especificações e anotações ficam aqui, neste arquivo."
+"New document" = "Novo documento"
+"Rename, icon, delete" = "Renomear, ícone, excluir"
+"Add a document inside" = "Adicionar um documento dentro"
+"Move to the top level" = "Mover para o nível principal"
+"Icon" = "Ícone"
+"Remove the icon" = "Remover o ícone"
+"Delete…" = "Excluir…"
+"Delete document" = "Excluir documento"
+"Delete “{title}”?" = "Excluir “{title}”?"
+"It also deletes the {n} document inside it. You can undo this." = { one = "Isso também exclui o {n} documento que está dentro dele. Você pode desfazer.", other = "Isso também exclui os {n} documentos que estão dentro dele. Você pode desfazer." }
+"You can undo this." = "Você pode desfazer."
+"Back to canvas" = "Voltar ao canvas"
+"Version {n} · closed, it can no longer change" = "Versão {n} · fechada, não pode mais mudar"
+"Version {n} · draft" = "Versão {n} · rascunho"
+"Click here and start writing" = "Clique aqui e comece a escrever"
+"Turn into, delete" = "Transformar em, excluir"
+"Turn into" = "Transformar em"
+"Heading 1" = "Título 1"
+"Heading 2" = "Título 2"
+"Heading 3" = "Título 3"
+
 [commands]
 "align.bottom" = "Alinhar embaixo"
 "align.hcenter" = "Alinhar centros horizontalmente"

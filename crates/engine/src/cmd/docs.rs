@@ -1,0 +1,359 @@
+//! Documents (G13): commands that make, name, move and delete documents and edit their blocks.
+//!
+//! Every edit is undoable and goes through the checked store in `figcraft_doc::docs`, so a closed
+//! version refuses all of them. The menus, the Actions palette, the CLI, MCP (Claude) and the control
+//! channel reach documents through these ids.
+
+use figcraft_doc::docs::{Block, BlockId, BlockKind, BlockStyle, DocError, DocId, Place, Run};
+use serde_json::{Map, Value, json};
+
+use super::CommandSpec;
+use crate::{Result, Session, bad, spec};
+
+pub fn specs() -> Vec<CommandSpec> {
+    vec![
+        spec!(
+            "doc.get",
+            "Show documents",
+            "{id? (a document; omit for the tree of every document), version? (a version number; the last by default)} → the tree, or the document with its blocks",
+            false,
+            get
+        ),
+        spec!(
+            "doc.create",
+            "New document",
+            "{title?, parent? (a document id; omit or null for the top level), index? (place among its siblings), icon?} → {id}",
+            true,
+            create
+        ),
+        spec!("doc.rename", "Rename document", "{id, title}", true, rename),
+        spec!(
+            "doc.move",
+            "Move document",
+            "{id, parent? (a document id; omit or null for the top level), index? (place among the siblings left once it is lifted out)}",
+            true,
+            move_doc
+        ),
+        spec!("doc.delete", "Delete document", "{id} (also deletes the documents inside it) → {deleted: [ids]}", true, delete),
+        spec!("doc.set_icon", "Set document icon", "{id, icon (an emoji or short symbol; empty removes it)}", true, set_icon),
+        spec!(
+            "doc.block.insert",
+            "Add block",
+            "{doc, version?, parent? (a block id), index?, kind? (paragraph, heading1-4, bulleted, numbered, checklist, toggle, callout, quote, divider… or an object like {type: embed, node}), text?, runs? ([{text, bold?, italic?, underline?, strike?, code?, color?, highlight?, link?}]), style? ({font?, size?, color?, background?})} → {id}",
+            true,
+            insert_block
+        ),
+        spec!(
+            "doc.block.set",
+            "Edit block",
+            "{doc, id, version?, text? (plain text; keeps the look of a single run), runs?, style? ({font?, size?, color?, background?}; null clears one), data? (the kind's own fields, like {checked: true})}",
+            true,
+            set_block
+        ),
+        spec!(
+            "doc.block.turn_into",
+            "Turn block into",
+            "{doc, id, version?, kind (a name like heading2, or an object like {type: callout, icon})} (the text stays)",
+            true,
+            turn_into
+        ),
+        spec!("doc.block.move", "Move block", "{doc, id, version?, parent? (a block id; omit or null for the top), index?}", true, move_block),
+        spec!("doc.block.delete", "Delete block", "{doc, id, version?} (also deletes the blocks inside it)", true, delete_block),
+    ]
+}
+
+fn refuse(cmd: &str, e: DocError) -> crate::EngineError {
+    bad(cmd, e.to_string())
+}
+
+/// A required whole-number parameter.
+fn uint(cmd: &str, p: &Value, key: &str) -> Result<u64> {
+    p.get(key).and_then(Value::as_u64).ok_or_else(|| bad(cmd, format!("{key} is required (a whole number)")))
+}
+
+/// An optional whole-number parameter: absent or null is `None`; any other type is refused.
+fn opt_uint(cmd: &str, p: &Value, key: &str) -> Result<Option<u64>> {
+    match p.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(v) => v.as_u64().map(Some).ok_or_else(|| bad(cmd, format!("{key} must be a whole number"))),
+    }
+}
+
+fn opt_index(cmd: &str, p: &Value) -> Result<Option<usize>> {
+    Ok(opt_uint(cmd, p, "index")?.map(|i| usize::try_from(i).unwrap_or(usize::MAX)))
+}
+
+fn opt_version(cmd: &str, p: &Value) -> Result<Option<u32>> {
+    opt_uint(cmd, p, "version")?.map(|v| u32::try_from(v).map_err(|_| bad(cmd, "version is out of range"))).transpose()
+}
+
+fn text(cmd: &str, p: &Value, key: &str) -> Result<Option<String>> {
+    match p.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(bad(cmd, format!("{key} must be text"))),
+    }
+}
+
+fn runs(cmd: &str, p: &Value) -> Result<Option<Vec<Run>>> {
+    match p.get("runs") {
+        None | Some(Value::Null) => Ok(None),
+        Some(v) => serde_json::from_value(v.clone()).map(Some).map_err(|e| bad(cmd, format!("runs must be a list of {{text, bold?, …}}: {e}"))),
+    }
+}
+
+fn doc_id(cmd: &str, p: &Value, key: &str) -> Result<DocId> {
+    uint(cmd, p, key).map(DocId)
+}
+
+fn tree_entry(s: &Session, id: DocId) -> Result<Value> {
+    let d = s.doc()?;
+    let doc = d.docs.get(id).ok_or_else(|| bad("doc.get", DocError::NoDoc(id).to_string()))?;
+    let version = doc.current();
+    Ok(json!({
+        "id": id.0,
+        "title": doc.title,
+        "icon": doc.icon,
+        "parent": doc.parent.map(|p| p.0),
+        "children": doc.children.iter().map(|c| c.0).collect::<Vec<_>>(),
+        "version": version.map(|v| v.number),
+        "closed": version.is_some_and(|v| v.is_closed()),
+        "blockCount": version.map_or(0, |v| v.block_count()),
+    }))
+}
+
+fn get(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.get";
+    let Some(id) = opt_uint(cmd, p, "id")? else {
+        let ids = s.doc()?.docs.walk();
+        let docs = ids.into_iter().map(|i| tree_entry(s, i)).collect::<Result<Vec<_>>>()?;
+        return Ok(json!({"documents": docs}));
+    };
+    let id = DocId(id);
+    let want = opt_version(cmd, p)?;
+    let d = s.doc()?;
+    let doc = d.docs.get(id).ok_or_else(|| refuse(cmd, DocError::NoDoc(id)))?;
+    let version = match want {
+        Some(n) => doc.version(n).ok_or_else(|| refuse(cmd, DocError::NoVersion(n)))?,
+        None => doc.current().ok_or_else(|| refuse(cmd, DocError::NoVersion(0)))?,
+    };
+    let mut out = tree_entry(s, id)?;
+    if let Some(o) = out.as_object_mut() {
+        o.insert("blocks".into(), serde_json::to_value(&version.blocks).map_err(|e| bad(cmd, e.to_string()))?);
+        o.insert("viewing".into(), json!(version.number));
+        o.insert("versions".into(), json!(doc.versions.iter().map(|v| v.number).collect::<Vec<_>>()));
+    }
+    Ok(out)
+}
+
+fn create(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.create";
+    let title = text(cmd, p, "title")?.unwrap_or_default();
+    let icon = text(cmd, p, "icon")?;
+    let parent = opt_uint(cmd, p, "parent")?.map(DocId);
+    let index = opt_index(cmd, p)?;
+    let docs = &mut s.doc_mut()?.docs;
+    let id = docs.create(&title, parent, index).map_err(|e| refuse(cmd, e))?;
+    if let Some(icon) = icon {
+        docs.set_icon(id, &icon).map_err(|e| refuse(cmd, e))?;
+    }
+    Ok(json!({"id": id.0}))
+}
+
+fn rename(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.rename";
+    let id = doc_id(cmd, p, "id")?;
+    let title = text(cmd, p, "title")?.ok_or_else(|| bad(cmd, "title is required"))?;
+    s.doc_mut()?.docs.rename(id, &title).map_err(|e| refuse(cmd, e))?;
+    Ok(json!({"ok": true}))
+}
+
+fn move_doc(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.move";
+    let id = doc_id(cmd, p, "id")?;
+    let parent = opt_uint(cmd, p, "parent")?.map(DocId);
+    let index = opt_index(cmd, p)?;
+    s.doc_mut()?.docs.move_to(id, parent, index).map_err(|e| refuse(cmd, e))?;
+    Ok(json!({"ok": true}))
+}
+
+fn delete(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.delete";
+    let id = doc_id(cmd, p, "id")?;
+    let gone = s.doc_mut()?.docs.delete(id).map_err(|e| refuse(cmd, e))?;
+    Ok(json!({"deleted": gone.iter().map(|g| g.0).collect::<Vec<_>>()}))
+}
+
+fn set_icon(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.set_icon";
+    let id = doc_id(cmd, p, "id")?;
+    let icon = text(cmd, p, "icon")?.ok_or_else(|| bad(cmd, "icon is required (empty removes it)"))?;
+    s.doc_mut()?.docs.set_icon(id, &icon).map_err(|e| refuse(cmd, e))?;
+    Ok(json!({"ok": true}))
+}
+
+/// Read a `style` object into `style`: a key set to a value changes it, set to null clears it.
+fn merge_style(cmd: &str, style: &mut BlockStyle, v: &Value) -> Result<()> {
+    let o = v.as_object().ok_or_else(|| bad(cmd, "style must be an object like {font?, size?, color?, background?}"))?;
+    if let Some(unknown) = o.keys().find(|k| !matches!(k.as_str(), "font" | "size" | "color" | "background")) {
+        return Err(bad(cmd, format!("style has no {unknown}")));
+    }
+    let string = |k: &str| -> Result<Option<Option<String>>> {
+        match o.get(k) {
+            None => Ok(None),
+            Some(Value::Null) => Ok(Some(None)),
+            Some(Value::String(s)) => Ok(Some(Some(s.clone()))),
+            Some(_) => Err(bad(cmd, format!("style.{k} must be text"))),
+        }
+    };
+    if let Some(f) = string("font")? {
+        style.font = f;
+    }
+    if let Some(c) = string("color")? {
+        style.color = c;
+    }
+    if let Some(b) = string("background")? {
+        style.background = b;
+    }
+    match o.get("size") {
+        None => {}
+        Some(Value::Null) => style.size = None,
+        Some(n) => {
+            let size = n.as_f64().ok_or_else(|| bad(cmd, "style.size must be a number"))?;
+            style.size = Some(size as f32);
+        }
+    }
+    if style.valid() { Ok(()) } else { Err(bad(cmd, "style has a value out of range (size 6-200, colours like #RRGGBB)")) }
+}
+
+fn insert_block(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.block.insert";
+    let doc = doc_id(cmd, p, "doc")?;
+    let version = opt_version(cmd, p)?;
+    let kind = match p.get("kind") {
+        None | Some(Value::Null) => BlockKind::Paragraph,
+        Some(v) => BlockKind::from_value(v).ok_or_else(|| bad(cmd, "kind is not a block kind (see the doc for names)"))?,
+    };
+    let place = Place { parent: opt_uint(cmd, p, "parent")?.map(BlockId), index: opt_index(cmd, p)? };
+    let body = match (runs(cmd, p)?, text(cmd, p, "text")?) {
+        (Some(_), Some(_)) => return Err(bad(cmd, "give text or runs, not both")),
+        (Some(r), None) => r,
+        (None, Some(t)) if !t.is_empty() => vec![Run::plain(t)],
+        _ => Vec::new(),
+    };
+    let mut style = BlockStyle::default();
+    if let Some(v) = p.get("style").filter(|v| !v.is_null()) {
+        merge_style(cmd, &mut style, v)?;
+    }
+    let docs = &mut s.doc_mut()?.docs;
+    let id = docs.insert_block(doc, version, place, kind, body).map_err(|e| refuse(cmd, e))?;
+    if style != BlockStyle::default() {
+        docs.update_block(doc, version, id, |b| {
+            b.style = style;
+            Ok(())
+        })
+        .map_err(|e| refuse(cmd, e))?;
+    }
+    Ok(json!({"id": id.0}))
+}
+
+/// The block's kind with `data`'s fields written over its own (`{"checked": true}`).
+fn merge_kind(cmd: &str, kind: &BlockKind, data: &Value) -> Result<BlockKind> {
+    let fields = data.as_object().ok_or_else(|| bad(cmd, "data must be an object with the kind's own fields"))?;
+    let mut base: Map<String, Value> = match serde_json::to_value(kind) {
+        Ok(Value::Object(o)) => o,
+        _ => return Err(bad(cmd, "this block's data cannot be edited")),
+    };
+    for (k, v) in fields {
+        if k == "type" {
+            return Err(bad(cmd, "use doc.block.turn_into to change the kind"));
+        }
+        base.insert(k.clone(), v.clone());
+    }
+    serde_json::from_value::<BlockKind>(Value::Object(base)).map_err(|e| bad(cmd, format!("data does not fit a {} block: {e}", kind.name())))
+}
+
+fn set_block(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.block.set";
+    let doc = doc_id(cmd, p, "doc")?;
+    let id = BlockId(uint(cmd, p, "id")?);
+    let version = opt_version(cmd, p)?;
+    let (body, plain) = (runs(cmd, p)?, text(cmd, p, "text")?);
+    if body.is_some() && plain.is_some() {
+        return Err(bad(cmd, "give text or runs, not both"));
+    }
+    let style = p.get("style").filter(|v| !v.is_null());
+    let data = p.get("data").filter(|v| !v.is_null());
+    if body.is_none() && plain.is_none() && style.is_none() && data.is_none() {
+        return Err(bad(cmd, "nothing to change: give text, runs, style or data"));
+    }
+    // Why the style or data was refused, kept to tell the caller (the store only sees "invalid").
+    let mut why = None;
+    let result = s.doc_mut()?.docs.update_block(doc, version, id, |b: &mut Block| {
+        if let Some(r) = body {
+            b.text = r;
+        }
+        if let Some(t) = &plain {
+            b.set_plain_text(t);
+        }
+        if let Some(v) = style
+            && let Err(e) = merge_style(cmd, &mut b.style, v)
+        {
+            why = Some(e);
+            return Err(DocError::Invalid("style is not valid"));
+        }
+        if let Some(d) = data {
+            match merge_kind(cmd, &b.kind, d) {
+                Ok(kind) => b.kind = kind,
+                Err(e) => {
+                    why = Some(e);
+                    return Err(DocError::Invalid("data does not fit this block"));
+                }
+            }
+        }
+        Ok(())
+    });
+    if let Some(e) = why {
+        return Err(e);
+    }
+    result.map_err(|e| refuse(cmd, e))?;
+    Ok(json!({"ok": true}))
+}
+
+fn turn_into(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.block.turn_into";
+    let doc = doc_id(cmd, p, "doc")?;
+    let id = BlockId(uint(cmd, p, "id")?);
+    let version = opt_version(cmd, p)?;
+    let kind = p
+        .get("kind")
+        .and_then(BlockKind::from_value)
+        .ok_or_else(|| bad(cmd, "kind is required: a name like heading2, bulleted, checklist, or an object like {type: callout}"))?;
+    s.doc_mut()?
+        .docs
+        .update_block(doc, version, id, |b| {
+            b.kind = kind;
+            Ok(())
+        })
+        .map_err(|e| refuse(cmd, e))?;
+    Ok(json!({"ok": true}))
+}
+
+fn move_block(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.block.move";
+    let doc = doc_id(cmd, p, "doc")?;
+    let id = BlockId(uint(cmd, p, "id")?);
+    let version = opt_version(cmd, p)?;
+    let place = Place { parent: opt_uint(cmd, p, "parent")?.map(BlockId), index: opt_index(cmd, p)? };
+    s.doc_mut()?.docs.move_block(doc, version, id, place).map_err(|e| refuse(cmd, e))?;
+    Ok(json!({"ok": true}))
+}
+
+fn delete_block(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.block.delete";
+    let doc = doc_id(cmd, p, "doc")?;
+    let id = BlockId(uint(cmd, p, "id")?);
+    let version = opt_version(cmd, p)?;
+    s.doc_mut()?.docs.delete_block(doc, version, id).map_err(|e| refuse(cmd, e))?;
+    Ok(json!({"ok": true}))
+}

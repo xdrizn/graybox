@@ -9,6 +9,8 @@ pub enum RightTab {
 pub enum LeftTab {
     File,
     Assets,
+    /// Graybox: the Documents tab (G13).
+    Documents,
 }
 
 /// The window's title bar.

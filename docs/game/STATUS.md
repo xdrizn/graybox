@@ -3,6 +3,45 @@
 **Current milestone:** G7 — Share (and G0.3, G2.3 leftovers)
 
 ## Done
+- G13.1 (2026-11-12): documents, the model, the commands and the Documents tab (spec
+  [`specs/2026-11-12-documents-design.md`](specs/2026-11-12-documents-design.md), decisions P1-P10 there).
+  Model in `crates/doc/src/docs.rs` (ours): `Documents` is a tree of `Doc`s (id, title, icon, children),
+  each with versions (`number`, `state` draft or closed, room for a `fingerprint` and `closed_at`, the
+  `blocks`). A `Block` has an id, a kind (paragraph, heading 1-4, bulleted, numbered, checklist, toggle,
+  callout, quote, divider, table, link, image, shape, swatch, embed by node id with live or pinned, decision,
+  auto-table, signature), text `Run`s (bold, italic, underline, strike, code, colour, highlight, link,
+  mention), a style (font, size, colour, background) and child blocks. It sits in `Document::docs` and is
+  saved under `docs` only when there is one, so older files are byte for byte what they were and upstream
+  ignores it. Loading repairs a hand-edited file (cycles, duplicate ids, deep nesting, out-of-range data) and
+  caps everything. Closed versions refuse every block edit (the store already honours it; closing itself is
+  G13.4). Commands in `crates/engine/src/cmd/docs.rs` (ours): `doc.create`, `doc.rename`, `doc.move`,
+  `doc.delete`, `doc.set_icon`, `doc.block.insert|set|turn_into|move|delete`, all undoable, plus the
+  read-only `doc.get` (the tree, or one document with its blocks). UI in `crates/ui-egui/src/game/docs/`
+  (ours): a **Documents** tab in the left rail (File, Assets, Documents, Variables) with the tree (New
+  document, click to open, double-click or the row menu to rename, + to nest, drag to reorder or nest, icon
+  picker, delete with a question) and, for an open document, an editor in place of the canvas (editable
+  title; text and heading blocks; Enter adds a block, Backspace on an empty one removes it; a handle on the
+  left turns a block into Text or Heading 1-3, or deletes it; "Back to canvas"). Other kinds show as a dim
+  chip until G13.2. Typing is sent as one command after a pause, on losing focus, or before any other
+  command (hook in `FigApp::run`), so a burst of typing is one undo step and a save never misses the last
+  words. Tests: `docs_tests.rs` (doc), `docs_cmd_tests.rs` (engine, including save and reload and junk
+  parameters), `game/docs/tests.rs` (UI).
+  Not synced in live collaboration (like `game` settings). Typing in a block with several styled runs keeps
+  the styles of what did not change (only the changed characters are cut and put in; words after a mention
+  start a plain run). A block kind this build does not know loads as a dim "unknown" chip instead of
+  refusing the project, but saving from this build drops that block's data (a file from a newer Graybox).
+  Checked in the real app on a scratch file: tab, new document, typing, heading, nesting by drag, save,
+  close and reopen. Not checked: emoji icons in the picker (they come from egui's own font and may show as
+  boxes), controller, the browser build beyond `cargo xtask wasm`. Not virtualised: a document with
+  thousands of blocks lays out every block each frame (G13.2).
+  Code review (high, twice) caught and fixed: Enter in a nested block added the new block at the wrong
+  place (it used the flat position as the top-level index); typing in a block with bold words or links
+  flattened them; dropping a document while the pointer was over the panel header could hit a row scrolled
+  out of view; one unknown block kind, or a document with no id, made the whole project fail to open;
+  `doc.block.set` hid why a style or data was refused; deep blocks were indented wrongly (an `i8` cast);
+  words typed after a mention joined the mention; `doc.get` used `blocks` for a count in the list and for
+  the blocks of one document (the list says `blockCount` now); editor state of closed files was never freed;
+  dead code, and no tests for Enter, drag-and-drop and the delete question (added).
 - G11.5, first part (2026-11-12, with G11.4, same request from Adriel): weapons and strikes.
   - Weapons (`tps/combat.rs`): 1–4 pick sword, spear, club, bow (drawn from the back; the same key again
     puts it away; also in the air; a key pressed mid-strike counts when the strike ends); click strikes
@@ -589,6 +628,18 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     help line now comes from `game::tps::help(play)`.
   - `crates/ui-egui/src/game/mod.rs` (ours): `Play::tps`, hooks in `frame` and `inspect`, the Game picker
     first in `prototype_section`.
+- Documents (G13.1; `crates/doc/src/docs.rs`, `crates/engine/src/cmd/docs.rs`, `crates/ui-egui/src/game/docs/` are ours):
+  - `crates/doc/src/lib.rs`: `pub mod docs;`, `Document::docs` (serde default, skipped when empty), its
+    initialiser in `without_pages`, `mod docs_tests;`.
+  - `crates/engine/src/cmd.rs`: `pub mod docs;` and `list.extend(docs::specs())`; `engine/src/lib.rs`:
+    `mod docs_cmd_tests;`.
+  - `crates/ui-egui/src/state.rs`: `LeftTab::Documents`. `icons.rs` / `icons/draw.rs`: `Icon::Document`.
+  - `crates/ui-egui/src/panels/layers.rs`: the rail item, the header title (like Assets) and the match arm
+    that calls `game::docs::panel`. `app.rs`: the panel's accessible label, and in the central panel
+    `game::docs::show_editor` before `canvas::show`. `app/commands.rs` `run`: `game::docs::before_run`.
+    `control.rs`: `leftTab: "documents"`. `game/mod.rs`: `pub(crate) mod docs;`.
+  - `crates/ui-egui/locales/en.toml` and `pt-BR.toml`: a "Graybox: Documents" block of strings at the end
+    of `[ui]` (the other languages show English until translated).
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.
 

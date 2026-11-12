@@ -680,3 +680,6 @@ mod game_config_tests;
 // Graybox: which game Play runs.
 #[cfg(test)]
 mod game_kind_tests;
+// Graybox: documents (G13).
+#[cfg(test)]
+mod docs_cmd_tests;

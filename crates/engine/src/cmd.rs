@@ -11,6 +11,8 @@ pub mod file;
 pub mod game;
 // Graybox: which game Play runs (`game.kind.set`).
 pub mod game_kind;
+// Graybox: documents (G13), the `doc.*` commands.
+pub mod docs;
 pub mod game_share;
 pub mod image;
 pub mod layout;
@@ -102,6 +104,8 @@ fn registry() -> &'static Registry {
         list.extend(proto_actions::specs());
         list.extend(game::specs());
         list.extend(game_kind::specs());
+        // Graybox: the `doc.*` commands (G13).
+        list.extend(docs::specs());
         list.extend(game_share::specs());
         list.extend(audio::specs());
         list.extend(comment::specs());

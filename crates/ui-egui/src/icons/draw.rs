@@ -640,6 +640,13 @@ fn draw(p: &P, icon: Icon) {
             p.line(5.0, 5.5, 11.0, 5.5);
             p.line(5.0, 7.5, 9.0, 7.5);
         }
+        // Graybox: a page with lines of text (the Documents tab).
+        Document => {
+            p.poly(&[(3.5, 2.5), (9.5, 2.5), (12.5, 5.5), (12.5, 13.5), (3.5, 13.5)], true);
+            p.poly(&[(9.5, 2.5), (9.5, 5.5), (12.5, 5.5)], false);
+            p.line(5.5, 8.0, 10.5, 8.0);
+            p.line(5.5, 10.5, 10.5, 10.5);
+        }
         Home => {
             // Unhinted so the roof's peak stays centred; the floor stops at the door.
             p.path(&[(6.5, 13.5), (3.5, 13.5), (3.5, 7.0), (8.0, 2.8), (12.5, 7.0), (12.5, 13.5), (9.5, 13.5)], false);

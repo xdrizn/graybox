@@ -358,6 +358,7 @@ impl FigApp {
                         _ if self.ui.versions.open => i18n::tr("Version history"),
                         LeftTab::File => i18n::tr("Layers"),
                         LeftTab::Assets => i18n::tr("Assets"),
+                        LeftTab::Documents => i18n::tr("Documents"),
                     };
                     a11y::region(&mut self.ui.nav, ui, a11y::Region::Layers, egui::accesskit::Role::Pane, label);
                     layers::left_panel(self, ui)
@@ -384,7 +385,10 @@ impl FigApp {
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.canvas)).show(ui, |ui| {
             let worker = self.worker.take();
             let mut worker = worker.unwrap_or_else(|| render_worker::Worker::new(ctx.clone()));
-            canvas::show(self, ui, &mut worker);
+            // Graybox: an open document takes the canvas' place (G13).
+            if !crate::game::docs::show_editor(self, ui) {
+                canvas::show(self, ui, &mut worker);
+            }
             self.worker = Some(worker);
             if !hidden && mobile.is_none() {
                 ui.scope_builder(egui::UiBuilder::new().id_salt("toolbar"), |ui| {
