@@ -6,14 +6,18 @@
 //!
 //! Who owns which file (so phases can be built side by side):
 //! - G11.2 world: `world.rs` (and new files for terrain, props, climbable tags).
-//! - G11.3 hero and animation: `hero.rs` (the pose) and new rig/animation files.
+//! - G11.3 hero and animation: `hero.rs` (the pose), `rig.rs`, `clip.rs`, `clips.rs`, `animator.rs`.
 //! - G11.4 movement and camera: `controller.rs`, `camera.rs`.
 //! - G11.5 combat: new files, plus the events and variables of this module.
+mod animator;
 mod camera;
+mod clip;
+mod clips;
 mod controller;
 mod hero;
 mod layout;
 mod props;
+pub mod rig;
 mod terrain;
 mod world;
 
@@ -22,7 +26,10 @@ use crate::clock::FixedClock;
 use crate::state::Input;
 use glam::Vec3;
 
+pub use animator::{Animator, Drive, LOCOMOTION, Look, Weapon, locomotion_weights};
 pub use camera::{OrbitCamera, PITCH_MAX, PITCH_MIN};
+pub use clip::{Clip, ClipId, Ease, Key, Layer, Mode};
+pub use clips::clip;
 pub use hero::{HEIGHT as HERO_HEIGHT, Hero, HeroPose, RADIUS as HERO_RADIUS};
 pub use layout::{ROCK_MAX, TREE_MAX};
 pub use props::{
@@ -32,6 +39,8 @@ pub use props::{
 pub use terrain::{CELL, CELLS, FALL_X, RIVER_END, RIVER_HALF_WIDTH, Terrain, WATER_DEPTH, ZONES, Zone};
 pub use world::{HALF_EXTENT, World};
 
+#[cfg(test)]
+mod animation_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
@@ -104,7 +113,11 @@ impl Tps {
         for _ in 0..steps {
             self.ticks = self.ticks.saturating_add(1);
             let jump = std::mem::take(&mut self.pending_jump);
-            controller::step(&mut self.hero, &self.input, self.camera.yaw, &self.world, jump, DT);
+            // The pose viewer (debug) shows a clip with the hero standing still.
+            let input = if self.hero.animator.previewing().is_some() { Input { forward: 0.0, strafe: 0.0, ..self.input } } else { self.input };
+            let jump = jump && self.hero.animator.previewing().is_none();
+            controller::step(&mut self.hero, &input, self.camera.yaw, &self.world, jump, DT);
+            self.hero.animate(input.crouch, DT);
         }
         steps
     }
@@ -114,6 +127,13 @@ impl Tps {
         let hero = self.hero.pose(self.clock.alpha() as f32);
         let (eye, target) = self.camera.eye_and_target(hero.position, &self.world);
         Frame { hero, eye, target }
+    }
+
+    /// Debug pose viewer: show `clip` over and over on the hero standing still (`None` ends it).
+    pub fn preview_clip(&mut self, clip: Option<ClipId>) {
+        // The camera comes closer while a clip is shown.
+        self.camera.distance = if clip.is_some() { 3.0 } else { OrbitCamera::default().distance };
+        self.hero.animator.preview(clip);
     }
 
     pub fn world(&self) -> &World {

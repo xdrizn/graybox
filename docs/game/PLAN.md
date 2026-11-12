@@ -172,7 +172,7 @@ action game, original, made in code. One session per phase, each ends committed 
   dispatch, a placeholder third-person scene (flat ground, a capsule hero, an orbit camera).
 - [x] G11.2 World: terrain, grass, props, lights, river, waterfall, sky, climbable tags, budgets test
   (parallel with G11.3).
-- [ ] G11.3 Hero and animation: rig, meshes, clips and crossfades, test pose viewer (parallel with G11.2).
+- [x] G11.3 Hero and animation: rig, meshes, clips and crossfades, test pose viewer (parallel with G11.2).
 - [ ] G11.4 Movement and camera: controller (walk to climb), orbit camera with collision, bindings,
   interpolation. Needs G11.2 and G11.3.
 - [ ] G11.5 Combat and the bridge: weapons, bow, dummies and husks, damage, game variables and events,

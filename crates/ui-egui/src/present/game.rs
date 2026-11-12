@@ -82,6 +82,7 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
     if let (Some(play), Some(doc)) = (&mut p.game, &p.design) {
         // Graybox: Play runs the game the file chose.
         game::tps::sync(play, doc.game.kind);
+        game::tps::debug_keys(play, &ctx);
         if !running {
             play.captured = false;
         } else if p.overlays.is_empty() && ctx.input(|i| i.pointer.primary_pressed()) {
@@ -470,7 +471,7 @@ fn help(p: &Presenter, ui: &Ui, rect: Rect) {
     } else if !play.captured {
         "Click to capture cursor  ·  F10 / Del: editor"
     } else if play.tps.is_some() {
-        game::tps::HELP
+        game::tps::help(play)
     } else {
         "WASD: move  ·  mouse: look/shoot  ·  R: reload  ·  H: heal  ·  F10 / Del: editor"
     };

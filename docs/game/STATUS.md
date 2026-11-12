@@ -3,6 +3,29 @@
 **Current milestone:** G7 — Share (and G0.3, G2.3 leftovers)
 
 ## Done
+- G11.3 (2026-11-11): the third-person hero and its animation. An 18-bone rigid-part skeleton
+  (`crates/game/src/tps/rig.rs`: pelvis, spine, chest, head, two cloak bones, arms, legs; `Pose` holds
+  a rotation per bone and a root offset), an original faceted hooded adventurer with a cloak, belt, strap
+  and boots (no emblems; `renderer/tps/hero.rs`, under 3000 triangles) and four weapons (sword, spear,
+  club, bow) held in the hand or worn on the back. A clip format (`tps/clip.rs`: keyed bone angles and
+  root offsets, smooth Catmull-Rom or eased keys, loop / once / hold, full-body or upper-body layers) and
+  all 26 clips of the spec authored in code (`tps/clips.rs`): idle, walk, jog, run, crouch idle and walk,
+  jump up, fall, land, land roll, ladder and wall climb, mantle, three sword strikes, spear thrust, club
+  swing, bow draw and shoot, hit, knockdown, get up, die, weapon draw and sheathe. The animator
+  (`tps/animator.rs`) blends the six locomotion cycles by speed and crouch on one shared phase, goes to
+  jump / fall / land from the controller's grounded state and vertical speed, crossfades every change from
+  the pose on screen (no pops), and adds lean into turns, a pitch on speed changes, head yaw and nod, and
+  a cloak that flares with speed and flutters. It runs in the fixed 60 Hz step and is drawn interpolated.
+  `HeroPose` carries the skeleton, tilt, weapon, bow draw and clip. Debug builds preview clips in Play:
+  F6 / Shift+F6 next / previous clip (name top left, camera closer), F7 ends it.
+  Tests (`tps/animation_tests.rs`, `tps/rig.rs`, `renderer/tps/hero.rs`): blend weights sum to 1 at every
+  speed and crouch; crossfades are continuous step by step; each clip loops or ends as declared; bone
+  count and mesh budget; feet stay on the ground in the cycles; junk input.
+  Checked in the real app on a scratch Third person file: every clip previewed from the front and the
+  side, weapons along the forearm in the strikes, and held W (jog 5 m/s), Shift+W (run 8.5), release
+  (settles to idle), C and C+W (crouch idle and crouched walk 2.4), Space (jump up, fall, land) with
+  bursts of screenshots: legs alternate, the cloak swings, no jumps between frames. Not checked: walk
+  (light stick only), a controller, the browser beyond `cargo xtask wasm`.
 - G11.2 (2026-11-11): the third-person world. `crates/game/src/tps/` gets `terrain.rs` (an 80 x 80 cell
   heightfield, 2 m cells, made from integer-hash noise and smoothstep only, so it is bit-identical on
   wasm: a hill start in the south, a cliff drop, a river valley, plateaus with ruins, a waterfall at x=-44),
@@ -189,6 +212,25 @@
   - Mountain and keep cards sit outside the walkable map and are flagged like the first-person gun: no
     fog and no scene lights, so they stay dark silhouettes. Orange is only emissive: the ring, the beacon,
     the tower windows and the waterfall.
+- G11.3 hero and animation (Adriel was away; the recommended option each time):
+  - Skinning runs on the CPU: each bone has its own rigid mesh, built once; every frame its vertices
+    are moved by the bone matrix into the dynamic vertex buffer the hero already used, so the hero stays
+    one draw call with its shadow and needs no shader change (no clash with G11.2's pipelines; works on
+    wasm). A GPU bone buffer can come in G11.6 if profiling asks for it.
+  - 18 bones (limit 24); keys hold Euler angles in degrees, quaternions at run time.
+  - Only the equipped weapon is drawn (`Weapon` lives in the animator; G11.5 will set it). The bow is
+    held in the left hand, and draw and sheathe are mirrored for it. The weapon moves from back to hand at
+    a time written in the clip (`swap_at`). Weapons are angled along the forearm in the hand.
+  - Crossfades start from the pose on screen and carry on with its own angular speed, which dies out (a
+    light inertialization), so a change mid-swing never pops. The gait speed goes through a spring before
+    it picks the blend.
+  - The clip preview is debug-only (F6/F7, `cfg!(debug_assertions)`); it freezes movement input and
+    brings the camera to 3 m.
+  - Clean look (Adriel's change to the spec): the hero, cloak and weapons are solid flat-shaded parts.
+    Each part only names a grey tone (0-5) of the scene theme, with no colour, texture or emissive of its
+    own, so the third-person theme G11.2 owns (`renderer/tps/mod.rs`: palette, fog, no pixel textures)
+    decides how it looks. An orange or white glow, if one is wanted later, would be a small emissive
+    detail through the same material, not a second palette.
 - G11.1 game kind (Adriel was away; the recommended option each time):
   - Both games take the same `figcraft_game::Input` (filled by `game/input.rs` and the presenter), so
     bindings, gamepad sticks and "the mouse is free" behave the same. The third-person simulation is a
@@ -485,6 +527,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     `crates/ui-egui/src/app.rs` `frame`: `game::kind_ui::show` (the card), after the Claude panel.
   - `crates/ui-egui/src/present/game.rs` `show`: `game::tps::sync` (which game runs), `game::tps::paint`
     (draws it), and the help line for third person.
+  - G11.3, same `show`: `game::tps::debug_keys` after `sync` (clip preview keys, debug builds) and the
+    help line now comes from `game::tps::help(play)`.
   - `crates/ui-egui/src/game/mod.rs` (ours): `Play::tps`, hooks in `frame` and `inspect`, the Game picker
     first in `prototype_section`.
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
@@ -508,8 +552,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 
 ## Next
 - G11 (third-person game; spec [`specs/2026-11-11-third-person-design.md`](specs/2026-11-11-third-person-design.md)).
-  Milestone G11 is in `PLAN.md`. Next: G11.2 (world) is done; G11.3 (hero and animation) runs on its own; then G11.4 (movement, climbing
-  and camera collision), which needs both.
+  Milestone G11 is in `PLAN.md`. G11.2 (world) and G11.3 (hero and animation) are done; next G11.4
+  (movement, climbing and camera collision), which needs both.
 - Navigable menus phase 2: tab bars (LB/RB) switching the menu below; spatial focus for layers
   without auto layout. To check: Tab sent through the control channel did not open the starter
   Inventory in Play (the controller's View did).
