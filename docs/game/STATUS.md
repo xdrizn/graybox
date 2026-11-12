@@ -502,6 +502,17 @@
     name (a copied sheet no longer reloads the font every frame; the panel says it is a copy),
     names avoid installed families, `shade` with `erase` is refused, the palette-less ramp keeps
     the most used colours, the glyph guide shows on the first frame only.
+- G16 "Done when" check (2026-11-12, real app + Unity 2022.3.39f1 batchmode): a 24 × 24 button
+  drawn with the mirror, 9-sliced, hugging a Pixel text label, as a component with Hover and
+  Pressed variants each playing a 2-frame tag, its outline recoloured in every state, then sent to
+  Unity both as a sheet (`pixel.export` unity: 2 sprites, border 8, Point, a "hover" clip) and on a
+  screen (`game.unity.export`). The in-app Claude chat drew a 16 × 16 coin with `pixel.create` +
+  `pixel.paint`. Found and fixed: a 9-sliced pixel layer on a screen went to Unity as one sprite
+  with its layers baked in (the label cropped into the art); now the sprite is the art alone at
+  its own size and the layers follow as children (`unity_export.rs`), checked in Unity (a sliced
+  Image with a "Label" Text child, an Animator playing "hover"). Seen, not changed: "Cuts as
+  padding" applies when the cuts are set, so turning auto layout on after 9-slice keeps padding 0
+  until the cuts are set again or the option toggled.
 
 ## Decisions
 - G16 pixel art, details the spec left open (chosen as a pixel artist would expect):

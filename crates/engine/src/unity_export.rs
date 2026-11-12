@@ -172,7 +172,10 @@ fn node_json(
         }
         _ => {
             if let Some((slice, _)) = figcraft_doc::nine_slice::effective(doc, n.id) {
-                // One sprite at the base size, layers included, its cuts as the border.
+                // One sprite at the base size, layers included, its cuts as the border. Pixel art
+                // is the layer's own look (its base is the sprite's size): its layers, like a
+                // button's label, follow as children (G16).
+                let pixel = figcraft_render::pixel::source(doc, n).is_some();
                 let (bw, bh) = slice.base;
                 let mut base_doc = doc.clone();
                 if let Some(m) = base_doc.node_mut(n.id) {
@@ -181,11 +184,16 @@ fn node_json(
                     m.plugin_data.remove(figcraft_doc::nine_slice::KEY);
                 }
                 let base_box = Rect::new(b.x0, b.y0, b.x0 + bw, b.y0 + bh);
-                if let Some(file) = sprite(&base_doc, n.id, base_box, true, sprites, scale)? {
+                if let Some(file) = sprite(&base_doc, n.id, base_box, !pixel, sprites, scale)? {
                     *written += 1;
                     let [t, r, btm, l] = slice.insets;
                     v["sprite"] = json!(file);
                     v["border"] = json!([l * scale, btm * scale, r * scale, t * scale]);
+                }
+                if pixel {
+                    for c in n.children.iter().filter_map(|c| doc.node(*c)).filter(|c| c.visible && !c.is_mask) {
+                        children.push(node_json(doc, c, b, sprites, scale, count, written, false)?);
+                    }
                 }
             } else {
                 let whole = matches!(n.kind, NodeKind::BooleanOp { .. } | NodeKind::Vector { .. }) || n.children.is_empty();

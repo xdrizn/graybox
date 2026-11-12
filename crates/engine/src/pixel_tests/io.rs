@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 
 use super::{ex, refused, sprite};
 use crate::Session;
+use figcraft_doc::NodeId;
 
 fn b64(bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(bytes)
@@ -118,5 +119,32 @@ fn a_screen_sent_to_unity_marks_pixel_layers_and_writes_a_sheet_for_animated_one
     // Scale 4 on a screen exported at 2: each art pixel is 8 pixels in the sheet.
     assert_eq!(sheet["frames"][0]["sourceSize"], json!({"w": 32, "h": 32}));
     assert!(folder.join("sprites").join(sheet["meta"]["image"].as_str().unwrap()).exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A pixel button on a screen goes to Unity as its 9-sliced art (the sprite's own size, no label
+/// baked in) with the label as a text child, so the button grows in Unity like in Graybox.
+#[test]
+fn a_pixel_button_sent_to_unity_keeps_its_label_out_of_the_9_sliced_art() {
+    let dir = std::env::temp_dir().join(format!("graybox-pixel-button-unity-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut s = Session::new();
+    let screen = ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 400, "height": 200, "name": "Menu"}))["id"].as_u64().unwrap();
+    let set = ex(&mut s, "pixel.button", json!({"x": 600, "y": 0, "text": "Start game"}))["id"].as_u64().unwrap();
+    let main = s.doc().unwrap().node(NodeId(set)).unwrap().children[0];
+    let inst = ex(&mut s, "instance.create", json!({"component": main.0, "x": 20, "y": 20, "parent": screen}))["id"].as_u64().unwrap();
+    let out = ex(&mut s, "game.unity.export", json!({"frame": screen, "dir": dir.to_string_lossy()}));
+    let folder = std::path::PathBuf::from(out["screens"][0]["folder"].as_str().unwrap());
+    let layout: Value = serde_json::from_slice(&std::fs::read(folder.join("layout.json")).unwrap()).unwrap();
+    let button = layout["root"]["children"].as_array().unwrap().iter().find(|k| k["id"] == json!(inst)).unwrap().clone();
+    assert_eq!(button["pixel"], true);
+    assert!(button["border"].is_array(), "9-sliced");
+    let label = button["children"].as_array().expect("the label is a child").iter().find(|c| c["text"].is_object()).expect("a text child");
+    assert_eq!(label["text"]["characters"], "Start game");
+    // The sprite is the art at its own size (the starter's sprite), not the button's wider box.
+    let png = image::open(folder.join(button["sprite"].as_str().unwrap())).unwrap();
+    let doc = s.doc().unwrap();
+    let art = figcraft_render::pixel::source(doc, doc.node(NodeId(inst)).unwrap()).and_then(|n| figcraft_pixel::store::load(&n.plugin_data)).unwrap();
+    assert_eq!((png.width(), png.height()), (art.width * art.scale, art.height * art.scale));
     let _ = std::fs::remove_dir_all(&dir);
 }
