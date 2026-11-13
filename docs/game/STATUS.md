@@ -431,6 +431,26 @@
     pixel.
   - Not yet: embeds in the canvas card, PDF and Markdown exports are still placeholders; a very large
     live layer redraws on the window's own thread; the list does not open upwards near the bottom.
+- G13.2, colour swatches, shapes, mentions and several blocks at once (2026-11-13): `/` "Colour
+  swatch" adds a colour chip with its code and a name; clicking the chip opens the palette and a
+  code field. `/` "Shape" adds a rectangle, ellipse or line with a fill, changed from its menu. Typing
+  `@` opens a list of the file's other documents and frames (search as you type, Enter picks); the
+  pick becomes a blue pill in the words, and Ctrl+click on it opens that document or goes to that
+  frame on the canvas (selected and zoomed). Escape in a block selects it; Shift+Up/Down and
+  Shift+click grow the selection (shown as one blue band), Delete removes the selected blocks in one
+  undo step, Ctrl+C copies them as Markdown and Ctrl+V pastes them back as blocks (in an empty line,
+  in its place). Two new commands: `doc.block.mention {doc, id, from, to, layer | document}` and
+  `doc.block.paste {doc, blocks, parent?, index?}`; `doc.block.delete` also takes `ids` (all in one
+  step).
+  - Code: `crates/doc/src/docs/{mention,clip}.rs`, `crates/engine/src/cmd/docs.rs`,
+    `crates/ui-egui/src/game/docs/{select,slash,inline,blocks}.rs`. Tests: `select_tests.rs`,
+    `mention_tests.rs`, `swatch_tests.rs`, `docs_cmd_tests.rs`.
+  - Checked in the real app: swatches, an ellipse, the `@` list and a frame mention, Ctrl+click going
+    to the frame, Escape + Shift+Down + Delete (one undo). Screenshots sent to Adriel.
+  - Review (high) caught and fixed: copying took the blocks of the last version while an older one
+    was shown; Enter on a selection could give the keyboard to an image.
+  - Not yet: pasting blocks into an empty line is two undo steps; an image pasted while blocks are
+    selected lands on the canvas; the swatch code field keeps an invalid code until reopened.
 - G11.6, the bow (2026-11-13, Adriel's changes): a click shoots from the hip, holding aim goes over the
   shoulder with a crosshair in the middle of the screen, and the shoulder button swaps sides.
   - Hip shot: a left click alone with the bow turns the hero to where the camera looks and shoots after
@@ -1443,6 +1463,7 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   - G13.2 tables: no new hook. Locales: "Header row", "Insert row above", "Insert row below", "Insert column left", "Insert column right", "Delete row", "Delete column".
   - G13.2 images: `crates/ui-egui/src/pending_open.rs`, `pending_opens`: the card title arm also matches `doc.block.image` (pictures dropped on a document). Locales: "or drop one here", "Drop images to add them here".
   - G13.2 embeds: no new hook. Locales: "Live", "Pinned", "This layer was deleted", "Show a frame or component of this file", "Choose a layer", "No frames or components", "Frame or component", "Follow the layer", "Choose another layer".
+  - G13.2 swatches, shapes, mentions, selection: no new hook. Locales: "Colour swatch", "Colour name".
   - G13.2 formatting words: no new hook. Locales: "Bold", "Highlight", "Paste a link".
 - Nested pages (G9; `crates/doc/src/page_tree.rs`, `crates/engine/src/cmd/page_tree.rs`,
   `crates/ui-egui/src/game/tree_list.rs` and `page_list.rs` are ours):

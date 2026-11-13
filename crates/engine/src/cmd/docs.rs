@@ -5,7 +5,7 @@
 //! channel reach documents through these ids.
 
 use figcraft_doc::NodeId;
-use figcraft_doc::docs::{Block, BlockId, BlockKind, BlockStyle, DocError, DocId, Mark, Place, Run, TableOp};
+use figcraft_doc::docs::{Block, BlockId, BlockKind, BlockStyle, DocError, DocId, Mark, Mention, Place, Run, TableOp};
 use serde_json::{Map, Value, json};
 
 use super::CommandSpec;
@@ -87,6 +87,13 @@ pub fn specs() -> Vec<CommandSpec> {
             |s, p| edit(s, p, format_text)
         ),
         spec!(
+            "doc.block.mention",
+            "Mention layer or document",
+            "{doc, id, version?, from, to (the characters it replaces, like the typed @ and letters), layer (a node id) | document (a document id)} → {text (what it reads, @ and the name)}",
+            true,
+            |s, p| edit(s, p, mention_text)
+        ),
+        spec!(
             "doc.table.cell",
             "Write in table cell",
             "{doc, id (a table block), version?, row, col (from 0), text (plain; words that stay keep their looks)}",
@@ -117,7 +124,20 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!("doc.block.move", "Move block", "{doc, id, version?, parent? (a block id; omit or null for the top), index?}", true, |s, p| edit(
             s, p, move_block
         )),
-        spec!("doc.block.delete", "Delete block", "{doc, id, version?} (also deletes the blocks inside it)", true, |s, p| edit(s, p, delete_block)),
+        spec!(
+            "doc.block.delete",
+            "Delete block",
+            "{doc, id | ids (several, in one step), version?} (also deletes the blocks inside them)",
+            true,
+            |s, p| edit(s, p, delete_block)
+        ),
+        spec!(
+            "doc.block.paste",
+            "Paste blocks",
+            "{doc, version?, blocks (as doc.get gives them; pasted as fresh copies), parent?, index?} → {ids}",
+            true,
+            |s, p| edit(s, p, paste_blocks)
+        ),
         spec!(
             "doc.export",
             "Export document",
@@ -544,6 +564,43 @@ fn format_text(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({"ok": true}))
 }
 
+fn mention_text(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.block.mention";
+    let doc = doc_id(cmd, p, "doc")?;
+    let id = BlockId(uint(cmd, p, "id")?);
+    let version = opt_version(cmd, p)?;
+    let at = |key| uint(cmd, p, key).map(|n| usize::try_from(n).unwrap_or(usize::MAX));
+    let (from, to) = (at("from")?, at("to")?);
+    let file = s.doc_mut()?;
+    let (name, what) = match (opt_uint(cmd, p, "layer")?, opt_uint(cmd, p, "document")?) {
+        (Some(n), None) => {
+            let node = NodeId(n);
+            match file.node(node) {
+                Some(n) if n.parent.is_some() => (n.name.clone(), Mention::Layer { node }),
+                Some(_) => return Err(bad(cmd, "mention a layer, not the file")),
+                None => return Err(crate::EngineError::NoNode(node)),
+            }
+        }
+        (None, Some(d)) => {
+            let target = DocId(d);
+            let title = file.docs.get(target).map(|d| d.title.clone()).ok_or_else(|| refuse(cmd, DocError::NoDoc(target)))?;
+            (title, Mention::Document { doc: target })
+        }
+        _ => return Err(bad(cmd, "give either layer or document")),
+    };
+    let name = if name.trim().is_empty() { unnamed(&what) } else { name };
+    file.docs.mention_text(doc, version, id, from, to, &name, what).map_err(|e| refuse(cmd, e))?;
+    Ok(json!({"text": format!("@{}", name.trim())}))
+}
+
+/// What a mention of something without a name reads.
+fn unnamed(what: &Mention) -> String {
+    match what {
+        Mention::Layer { .. } => "Layer".into(),
+        Mention::Document { .. } => "Untitled".into(),
+    }
+}
+
 fn table_cell(s: &mut Session, p: &Value) -> Result<Value> {
     let cmd = "doc.table.cell";
     let doc = doc_id(cmd, p, "doc")?;
@@ -739,8 +796,32 @@ fn move_block(s: &mut Session, p: &Value) -> Result<Value> {
 fn delete_block(s: &mut Session, p: &Value) -> Result<Value> {
     let cmd = "doc.block.delete";
     let doc = doc_id(cmd, p, "doc")?;
-    let id = BlockId(uint(cmd, p, "id")?);
     let version = opt_version(cmd, p)?;
+    // Several at once (a selection of blocks): one step.
+    if let Some(list) = p.get("ids").filter(|v| !v.is_null()) {
+        let ids = list
+            .as_array()
+            .filter(|a| !a.is_empty() && a.len() <= figcraft_doc::docs::MAX_BLOCKS)
+            .and_then(|a| a.iter().map(|v| v.as_u64().map(BlockId)).collect::<Option<Vec<_>>>())
+            .ok_or_else(|| bad(cmd, "ids must be a list of block ids"))?;
+        s.doc_mut()?.docs.delete_blocks(doc, version, &ids).map_err(|e| refuse(cmd, e))?;
+        return Ok(json!({"ok": true}));
+    }
+    let id = BlockId(uint(cmd, p, "id")?);
     s.doc_mut()?.docs.delete_block(doc, version, id).map_err(|e| refuse(cmd, e))?;
     Ok(json!({"ok": true}))
+}
+
+fn paste_blocks(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.block.paste";
+    let doc = doc_id(cmd, p, "doc")?;
+    let version = opt_version(cmd, p)?;
+    let place = Place { parent: opt_uint(cmd, p, "parent")?.map(BlockId), index: opt_index(cmd, p)? };
+    let blocks: Vec<Block> = p
+        .get("blocks")
+        .filter(|v| v.as_array().is_some_and(|a| a.len() <= figcraft_doc::docs::MAX_PASTE))
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .ok_or_else(|| bad(cmd, "blocks must be a list of blocks, as doc.get gives them"))?;
+    let ids = s.doc_mut()?.docs.paste_blocks(doc, version, place, blocks).map_err(|e| refuse(cmd, e))?;
+    Ok(json!({"ids": ids}))
 }

@@ -95,7 +95,7 @@ fn above(blocks: &[Block], id: BlockId) -> Option<BlockId> {
 }
 
 /// A copy of `b` and everything inside it, each with a fresh id from `next`.
-fn renumber(b: &Block, next: &mut u64) -> Block {
+pub(super) fn renumber(b: &Block, next: &mut u64) -> Block {
     *next = (*next).max(1);
     let id = BlockId(*next);
     *next = next.saturating_add(1);

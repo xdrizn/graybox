@@ -4,6 +4,7 @@
 //! An empty block turns into the kind picked; a block with words gets the new block below it.
 
 use egui::{Id, Key, Modifiers, Pos2, Rect, Ui};
+use figcraft_doc::NodeId;
 use figcraft_doc::docs::{BlockId, DocId};
 use serde_json::json;
 
@@ -30,6 +31,43 @@ pub(super) struct Slash {
     /// Where the menu was drawn last frame: a press on it keeps the menu open while the field lets
     /// the keyboard go.
     pub rect: Option<Rect>,
+    /// Opened by `@`: the menu lists documents and layers to mention instead of blocks.
+    pub mention: bool,
+    /// How many things the menu listed last frame (a mention's list comes from the file).
+    pub found: usize,
+}
+
+/// Something `@` can mention.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Named {
+    Document(DocId),
+    Layer(NodeId),
+}
+
+/// The most documents and layers the `@` menu lists, each.
+const MAX_NAMED: usize = 8;
+
+/// What `@` and `query` find in the file: other documents first, then frames and components, as
+/// (heading, name, what).
+fn named(app: &FigApp, doc: DocId, query: &str) -> Vec<(&'static str, String, Named)> {
+    let Ok(file) = app.session.doc() else { return Vec::new() };
+    let q = fold(query.trim());
+    let hit = |name: &str| q.is_empty() || fold(name).contains(&q);
+    let docs = file
+        .docs
+        .walk()
+        .into_iter()
+        .filter(|d| *d != doc)
+        .filter_map(|d| file.docs.get(d).map(|x| (d, x.title.clone())))
+        .filter(|(_, title)| hit(title))
+        .take(MAX_NAMED)
+        .map(|(d, title)| (tr("Documents"), title, Named::Document(d)));
+    let layers = super::embed::layers(file)
+        .into_iter()
+        .filter(|(_, name, _)| hit(name))
+        .take(MAX_NAMED)
+        .map(|(id, name, _)| (tr("Layers"), name, Named::Layer(id)));
+    docs.chain(layers).collect()
 }
 
 /// A key the open menu took from the block.
@@ -42,7 +80,7 @@ pub(super) enum Move {
 }
 
 /// What the menu lists: (label, kind, other words that find it).
-fn items() -> [(&'static str, &'static str, &'static str); 17] {
+fn items() -> [(&'static str, &'static str, &'static str); 19] {
     [
         (tr("Text"), "paragraph", "text paragraph plain"),
         (tr("Heading 1"), "heading1", "h1 heading title"),
@@ -58,6 +96,8 @@ fn items() -> [(&'static str, &'static str, &'static str); 17] {
         (tr("Table"), "table", "table grid tabela"),
         (tr("Image"), "image", "image picture photo imagem foto"),
         (tr("Frame or component"), "embed", "embed frame component variant layer screen quadro componente tela"),
+        (tr("Colour swatch"), "swatch", "swatch colour color palette hex cor paleta amostra"),
+        (tr("Shape"), "shape", "shape rectangle ellipse circle forma retangulo elipse circulo"),
         (tr("Decision"), "decision", "decision decided"),
         (tr("Link"), "link", "link url web"),
         (tr("Signature"), "signature", "signature sign"),
@@ -92,33 +132,32 @@ fn matches(query: &str) -> Vec<usize> {
         .collect()
 }
 
-/// Where a `/` that typing just added sits, when it opens the menu: at the start of the block or
-/// after a space, with the cursor right after it.
-pub(super) fn opened(before: &str, text: &str, caret: Option<usize>) -> Option<usize> {
+/// Where a `/` or `@` that typing just added sits, when it opens the menu: at the start of the
+/// block or after a space, with the cursor right after it; and whether it is `@`.
+pub(super) fn opened(before: &str, text: &str, caret: Option<usize>) -> Option<(usize, bool)> {
     if text.chars().count() != before.chars().count() + 1 {
         return None;
     }
     let at = caret?.checked_sub(1)?;
     let mut back = text.chars().skip(at.saturating_sub(1));
     let starts = at == 0 || back.next().is_some_and(char::is_whitespace);
-    let slash = text.chars().nth(at) == Some('/');
-    (slash && starts).then_some(at)
+    let sign = text.chars().nth(at).filter(|c| matches!(c, '/' | '@'))?;
+    starts.then_some((at, sign == '@'))
 }
 
-/// The letters between the `/` at `at` and the cursor, or `None` when the menu should close (the
-/// `/` is gone, the cursor went before it, a line break or too many letters).
+/// The letters between the `/` or `@` at `at` and the cursor, or `None` when the menu should close
+/// (the sign is gone, the cursor went before it, a line break or too many letters).
 fn query(text: &str, at: usize, caret: usize) -> Option<String> {
-    if caret <= at || text.chars().nth(at) != Some('/') {
+    if caret <= at || !matches!(text.chars().nth(at), Some('/' | '@')) {
         return None;
     }
     let q: String = text.chars().skip(at + 1).take(caret - at - 1).collect();
     (!q.contains('\n') && q.chars().count() <= MAX_QUERY).then_some(q)
 }
 
-/// Whether the menu of a block showing `text`, its `/` at `at` and the cursor at `caret`, lists
-/// something.
-pub(super) fn lists(text: &str, at: usize, caret: Option<usize>) -> bool {
-    caret.and_then(|c| query(text, at, c)).is_some_and(|q| !matches(&q).is_empty())
+/// Whether the menu `s` of a block showing `text`, with the cursor at `caret`, lists something.
+pub(super) fn lists(s: &Slash, text: &str, caret: Option<usize>) -> bool {
+    caret.and_then(|c| query(text, s.at, c)).is_some_and(|q| if s.mention { s.found > 0 } else { !matches(&q).is_empty() })
 }
 
 /// The keys the open menu takes before the block's field sees them: Escape, and the arrows and
@@ -168,6 +207,9 @@ pub(super) fn show(
         st.slash = None;
         return;
     };
+    if s.mention {
+        return show_named(app, ui, st, t, doc, block, (text, &q, end), (focused, galley, galley_pos), key, s);
+    }
     let found = matches(&q);
     let on_menu = s.rect.is_some_and(|r| ui.input(|i| i.pointer.interact_pos()).is_some_and(|p| r.contains(p)));
     // The keyboard went elsewhere, or a space after letters that find nothing: it was just a slash.
@@ -220,10 +262,112 @@ pub(super) fn show(
                 });
             });
         });
-    st.slash = Some(Slash { sel, rect: Some(area.response.rect), ..s });
+    st.slash = Some(Slash { sel, rect: Some(area.response.rect), found: n, ..s });
     if let Some((_, kind, _)) = picked.and_then(|i| all.get(i)) {
         pick(app, st, doc, block, text, s.at, end, kind);
     }
+}
+
+/// The new place of the highlight after an arrow, among `n` things.
+fn step(sel: usize, n: usize, key: Option<Move>) -> usize {
+    match key {
+        Some(Move::Up) => {
+            if sel == 0 {
+                n.saturating_sub(1)
+            } else {
+                sel - 1
+            }
+        }
+        Some(Move::Down) => {
+            if n == 0 {
+                0
+            } else {
+                (sel + 1) % n
+            }
+        }
+        _ => sel.min(n.saturating_sub(1)),
+    }
+}
+
+/// The `@` menu: the documents and layers its letters find, under headings; Enter or a click puts a
+/// mention of the one picked in place of the `@` and its letters.
+#[allow(clippy::too_many_arguments)]
+fn show_named(
+    app: &mut FigApp,
+    ui: &Ui,
+    st: &mut State,
+    t: &Tokens,
+    doc: DocId,
+    block: BlockId,
+    (text, q, end): (&str, &str, usize),
+    (focused, galley, galley_pos): (bool, &egui::Galley, Pos2),
+    key: Option<Move>,
+    s: Slash,
+) {
+    let found = named(app, doc, q);
+    let on_menu = s.rect.is_some_and(|r| ui.input(|i| i.pointer.interact_pos()).is_some_and(|p| r.contains(p)));
+    if (!focused && !on_menu) || (found.is_empty() && q.ends_with(' ')) || matches!(key, Some(Move::Close)) {
+        st.slash = None;
+        return;
+    }
+    let n = found.len();
+    let sel = step(s.sel, n, key);
+    let mut picked = matches!(key, Some(Move::Pick)).then(|| found.get(sel).map(|f| f.2)).flatten();
+    let moved = matches!(key, Some(Move::Up | Move::Down));
+    let under = galley.pos_from_cursor(egui::text::CCursor::new(s.at));
+    let anchor = galley_pos + under.left_bottom().to_vec2() + egui::vec2(-8.0, 6.0);
+    let area = egui::Area::new(Id::unique(("gbx_doc_mention", doc.0, block.0)))
+        .order(egui::Order::Foreground)
+        .fixed_pos(anchor)
+        .constrain(true)
+        .default_width(MENU_W)
+        .show(ui.ctx(), |ui| {
+            crate::right::menu_style(ui.style_mut());
+            egui::Frame::menu(ui.style()).show(ui, |ui| {
+                ui.set_min_width(MENU_W);
+                ui.set_max_width(MENU_W);
+                if found.is_empty() {
+                    ui.label(egui::RichText::new(tr("No results")).font(regular(12.0)).color(t.text_tertiary));
+                }
+                egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+                    let mut heading = "";
+                    for (k, (head, name, what)) in found.iter().enumerate() {
+                        if *head != heading {
+                            heading = head;
+                            ui.label(egui::RichText::new(*head).font(regular(11.0)).color(t.text_secondary));
+                        }
+                        let shown = if name.trim().is_empty() { tr("Untitled") } else { name.as_str() };
+                        let resp = crate::right::menu_row_lit(ui, shown, k == sel);
+                        if k == sel && moved {
+                            resp.scroll_to_me(None);
+                        }
+                        if resp.clicked() {
+                            picked = Some(*what);
+                        }
+                    }
+                });
+            });
+        });
+    st.slash = Some(Slash { sel, rect: Some(area.response.rect), found: n, ..s });
+    let Some(what) = picked else { return };
+    st.slash = None;
+    // The words typed so far go out first, so the range counts in them.
+    if let Some(p) = st.pending.take() {
+        commit(app, &p);
+    }
+    let target = match what {
+        Named::Document(d) => json!({"document": d.0}),
+        Named::Layer(n) => json!({"layer": n.0}),
+    };
+    let mut p = json!({"doc": doc.0, "id": block.0, "from": s.at, "to": end});
+    if let (Some(p), Some(t)) = (p.as_object_mut(), target.as_object()) {
+        p.extend(t.clone());
+    }
+    let said = app.run("doc.block.mention", p);
+    let len = said.as_ref().and_then(|v| v.get("text")).and_then(serde_json::Value::as_str).map_or(0, |s| s.chars().count());
+    st.focus = Some(Target::Block(block));
+    // After the mention and its space.
+    st.caret = Some(if said.is_some() { s.at + len + 1 } else { text.chars().count() });
 }
 
 /// Take the `/` and its letters out of the block and make the kind picked: the block itself when
@@ -265,8 +409,10 @@ mod tests {
 
     #[test]
     fn a_slash_opens_at_the_start_or_after_a_space_only() {
-        assert_eq!(opened("", "/", Some(1)), Some(0));
-        assert_eq!(opened("ab ", "ab /", Some(4)), Some(3));
+        assert_eq!(opened("", "/", Some(1)), Some((0, false)));
+        assert_eq!(opened("x ", "x @", Some(3)), Some((2, true)));
+        assert_eq!(opened("me", "me@", Some(3)), None);
+        assert_eq!(opened("ab ", "ab /", Some(4)), Some((3, false)));
         assert_eq!(opened("and", "and/", Some(4)), None);
         // Pasted, not typed.
         assert_eq!(opened("", "/x", Some(2)), None);

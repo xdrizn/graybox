@@ -22,11 +22,15 @@ use serde_json::{Value, json};
 
 use crate::NodeId;
 
+mod clip;
 mod edit;
 mod format;
+mod mention;
 mod table;
+pub use clip::MAX_PASTE;
 pub use edit::{Merge, Split, split_runs};
 pub use format::{Mark, format_runs, has_mark};
+pub use mention::mention_runs;
 pub use table::TableOp;
 
 /// Most documents a file holds.

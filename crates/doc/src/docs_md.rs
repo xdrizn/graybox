@@ -33,6 +33,11 @@ pub fn to_markdown(title: &str, icon: &str, version: &DocVersion, code: Option<&
     out
 }
 
+/// Some blocks (and what is inside them) as Markdown: what a copy of blocks gives other apps.
+pub fn blocks_markdown(list: &[Block]) -> String {
+    blocks(list, "")
+}
+
 /// Blocks one after the other, each line starting with `indent`.
 fn blocks(list: &[Block], indent: &str) -> String {
     let mut out = String::new();

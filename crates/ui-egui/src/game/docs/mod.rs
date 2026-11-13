@@ -13,6 +13,7 @@ mod embed;
 mod export;
 mod inline;
 mod media;
+mod select;
 mod sign;
 mod slash;
 mod state;
@@ -86,7 +87,13 @@ mod format_tests;
 #[cfg(test)]
 mod media_tests;
 #[cfg(test)]
+mod mention_tests;
+#[cfg(test)]
+mod select_tests;
+#[cfg(test)]
 mod slash_tests;
+#[cfg(test)]
+mod swatch_tests;
 #[cfg(test)]
 mod table_tests;
 #[cfg(test)]

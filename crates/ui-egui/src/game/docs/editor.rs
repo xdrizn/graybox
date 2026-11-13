@@ -91,6 +91,7 @@ fn page(app: &mut FigApp, ui: &mut Ui, st: &mut State, doc: DocId, uid: u64) {
         super::inline::forget();
         let rows: Vec<Rect> = (0..blocks.len()).map(|i| blocks::block_ui(app, &mut c, st, &t, doc, &blocks, i, col, &ver, now)).collect();
         super::drag::drop_ui(app, &c, st, &t, doc, &blocks, &rows, col);
+        super::select::after(app, &mut c, st, &t, doc, &blocks, &rows, col, editable);
         if editable {
             super::media::take_drops(app, ui.ctx(), doc, &blocks, &rows, area);
         }

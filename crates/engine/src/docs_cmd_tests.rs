@@ -239,6 +239,8 @@ fn junk_parameters_are_refused_not_panicked_on() {
         "doc.table.change",
         "doc.block.image",
         "doc.block.embed",
+        "doc.block.mention",
+        "doc.block.paste",
     ] {
         for j in &junk {
             let _ = s.execute(cmd, j);
@@ -462,5 +464,62 @@ fn a_layer_is_embedded_live_pinned_as_it_is_now_and_pinned_when_the_version_clos
         json!({"doc": d2, "node": frame, "live": "no"}),
     ] {
         assert!(s.execute("doc.block.embed", &bad).is_err(), "{bad}");
+    }
+}
+
+#[test]
+fn a_mention_names_a_layer_or_a_document_in_the_words_and_undoes_in_one_step() {
+    let mut s = Session::new();
+    let frame = id_of(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 200, "height": 100, "name": "HUD"})));
+    let other = id_of(&ex(&mut s, "doc.create", json!({"title": "Combat brief"})));
+    let d = id_of(&ex(&mut s, "doc.create", json!({})));
+    let b = id_of(&ex(&mut s, "doc.block.insert", json!({"doc": d, "text": "see @hu"})));
+    let undo = s.ds().unwrap().history.undo.len();
+    let out = ex(&mut s, "doc.block.mention", json!({"doc": d, "id": b, "from": 4, "to": 7, "layer": frame}));
+    assert_eq!(out["text"], "@HUD");
+    assert_eq!(s.ds().unwrap().history.undo.len(), undo + 1);
+    let text = blocks(&mut s, d)[0]["text"].clone();
+    assert_eq!(text[1], json!({"text": "@HUD", "mention": {"type": "layer", "node": frame}}));
+    assert_eq!(text[2]["text"], " ");
+    ex(&mut s, "doc.block.mention", json!({"doc": d, "id": b, "from": 9, "to": 9, "document": other}));
+    let text = blocks(&mut s, d)[0]["text"].clone();
+    assert_eq!(text[3], json!({"text": "@Combat brief", "mention": {"type": "document", "doc": other}}));
+    for bad in [
+        json!({"doc": d, "id": b, "from": 0, "to": 0}),
+        json!({"doc": d, "id": b, "from": 0, "to": 0, "layer": 99_999}),
+        json!({"doc": d, "id": b, "from": 0, "to": 0, "document": 99_999}),
+        json!({"doc": d, "id": b, "from": 0, "to": 0, "layer": frame, "document": other}),
+        json!({"doc": d, "id": b, "from": 3, "to": 1, "layer": frame}),
+    ] {
+        assert!(s.execute("doc.block.mention", &bad).is_err(), "{bad}");
+    }
+}
+
+#[test]
+fn blocks_selected_together_are_deleted_or_pasted_in_one_step() {
+    let mut s = Session::new();
+    let d = id_of(&ex(&mut s, "doc.create", json!({})));
+    let a = id_of(&ex(&mut s, "doc.block.insert", json!({"doc": d, "text": "a"})));
+    let b = id_of(&ex(&mut s, "doc.block.insert", json!({"doc": d, "text": "b"})));
+    let copied = blocks(&mut s, d);
+    let undo = s.ds().unwrap().history.undo.len();
+    let out = ex(&mut s, "doc.block.paste", json!({"doc": d, "blocks": copied, "index": 0}));
+    assert_eq!(out["ids"].as_array().unwrap().len(), 2);
+    assert_eq!(s.ds().unwrap().history.undo.len(), undo + 1, "one step");
+    let words: Vec<String> = blocks(&mut s, d).iter().map(|b| b["text"][0]["text"].as_str().unwrap().to_string()).collect();
+    assert_eq!(words, ["a", "b", "a", "b"]);
+    ex(&mut s, "doc.block.delete", json!({"doc": d, "ids": [a, b]}));
+    assert_eq!(s.ds().unwrap().history.undo.len(), undo + 2, "one step");
+    assert_eq!(blocks(&mut s, d).len(), 2);
+    for bad in [
+        json!({"doc": d, "ids": []}),
+        json!({"doc": d, "ids": ["x"]}),
+        json!({"doc": d, "ids": [a]}),
+        json!({"doc": d, "blocks": "x"}),
+        json!({"doc": d, "blocks": []}),
+        json!({"doc": d, "blocks": [{"id": 1, "kind": {"type": "swatch", "color": "nope"}}]}),
+    ] {
+        let cmd = if bad.get("ids").is_some() { "doc.block.delete" } else { "doc.block.paste" };
+        assert!(s.execute(cmd, &bad).is_err(), "{bad}");
     }
 }

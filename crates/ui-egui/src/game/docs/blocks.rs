@@ -23,6 +23,12 @@ use crate::{FigApp, widgets};
 pub(super) const STEP: f32 = 24.0;
 /// The room on the left of a list item, a task or a toggle for its mark.
 const MARK_W: f32 = 26.0;
+/// How wide the menus of a swatch and a shape are (the colours on one row).
+const POPUP_W: f32 = 264.0;
+/// The colour a new swatch or shape starts with.
+const NEW_COLOUR: &str = "#3A7FD5";
+/// The room on the left of a colour swatch's name: the chip and its code.
+const SWATCH_W: f32 = 118.0;
 
 /// How a block is drawn.
 pub(super) enum Look {
@@ -52,6 +58,13 @@ pub(super) enum Look {
         image: String,
         alt: String,
     },
+    /// A colour chip with its code (`#RRGGBB`); the text is the colour's name.
+    Swatch(String),
+    /// A simple shape (`rectangle`, `ellipse`, `line`) and its fill.
+    Shape {
+        shape: String,
+        fill: Option<String>,
+    },
     /// A layer of the file (none yet: id 0), live or pinned as the picture `snapshot`.
     Embed {
         node: NodeId,
@@ -65,7 +78,10 @@ pub(super) enum Look {
 impl Look {
     /// Whether the block is written in (it has a text field).
     pub(super) fn writable(&self) -> bool {
-        !matches!(self, Self::Divider | Self::Signature(_) | Self::Table(_) | Self::Image { .. } | Self::Embed { .. } | Self::Other(_))
+        !matches!(
+            self,
+            Self::Divider | Self::Signature(_) | Self::Table(_) | Self::Image { .. } | Self::Shape { .. } | Self::Embed { .. } | Self::Other(_)
+        )
     }
 }
 
@@ -106,6 +122,8 @@ pub(super) fn flatten(blocks: &[Block], depth: usize, parent: Option<BlockId>, a
             BlockKind::Signature { role } => Look::Signature(role.clone()),
             BlockKind::Table { table } => Look::Table(table.clone()),
             BlockKind::Image { image, alt } => Look::Image { image: image.clone(), alt: alt.clone() },
+            BlockKind::Swatch { color } => Look::Swatch(color.clone()),
+            BlockKind::Shape { shape, fill } => Look::Shape { shape: shape.clone(), fill: fill.clone() },
             BlockKind::Embed { node, live, snapshot } => Look::Embed { node: *node, live: *live, snapshot: snapshot.clone() },
             k => Look::Other(k.name()),
         };
@@ -234,6 +252,7 @@ pub(super) fn block_ui(
         Look::Signature(role) => versions::signature_block(app, ui, t, doc, ver, v.id, &v.text, role, indent),
         Look::Table(table) => super::table::show(app, ui, st, t, doc, v.id, table, col, indent, editable, now),
         Look::Image { image, alt } => super::media::image(app, ui, t, doc, v.id, image, alt, col, indent, editable),
+        Look::Shape { shape, fill } => shape_block(app, ui, t, doc, v.id, shape, fill.as_deref(), col, indent, editable),
         Look::Embed { node, live, snapshot } => {
             super::embed::show(app, ui, st, t, doc, v.id, (*node, *live, snapshot.as_deref()), col, indent, editable);
         }
@@ -260,6 +279,11 @@ pub(super) fn block_ui(
     row
 }
 
+/// The id of the field of block `id`'s words.
+pub(super) fn field_id(doc: DocId, id: BlockId) -> Id {
+    Id::unique(("gbx_doc_block", doc.0, id.0))
+}
+
 /// A block written in: its mark on the left (bullet, number, box, arrow, icon, bar), its words, and
 /// the keys that edit it.
 #[allow(clippy::too_many_arguments)]
@@ -277,7 +301,7 @@ fn text_block(
     now: f64,
 ) {
     let Some(v) = views.get(index) else { return };
-    let id = Id::unique(("gbx_doc_block", doc.0, v.id.0));
+    let id = field_id(doc, v.id);
     let size = font_size(&v.look, v.size);
     let font = if matches!(v.look, Look::Heading(_)) { semibold(size) } else { regular(size) };
     let (lead, pad) = match v.look {
@@ -285,6 +309,7 @@ fn text_block(
         Look::Callout(_) => (40.0, 10.0),
         Look::Quote => (16.0, 0.0),
         Look::Decision { .. } | Look::Link(_) => (14.0, 8.0),
+        Look::Swatch(_) => (SWATCH_W, 4.0),
         _ => (0.0, 0.0),
     };
     let done = matches!(v.look, Look::Checklist(true));
@@ -312,14 +337,16 @@ fn text_block(
         .map(|r| (r.primary.index.0.min(r.secondary.index.0), r.primary.index.0.max(r.secondary.index.0)));
     let mut act = None;
     // An open `/` menu takes the arrows, Enter and Escape first.
-    let slash_at = st.slash.as_ref().filter(|s| s.block == v.id).map(|s| s.at);
-    let slash_key = match slash_at {
-        Some(at) if focused && editable => slash::keys(ui, slash::lists(&v.text, at, caret.map(|c| c.1))),
+    let slash_at = st.slash.clone().filter(|s| s.block == v.id);
+    let slash_key = match &slash_at {
+        Some(s) if focused && editable => slash::keys(ui, slash::lists(s, &v.text, caret.map(|c| c.1))),
         _ => None,
     };
     // Ctrl+B, I, U, E, K and Ctrl+Shift+X act on the words selected.
     let format_key = if focused && editable { inline::keys(ui) } else { None };
     if focused && editable {
+        // A paste of copied blocks pastes the blocks.
+        super::select::paste_into(app, ui, st, doc, v);
         ui.input_mut(|i| {
             let (from, to) = caret.unwrap_or((len, len));
             // consume_key ignores an extra Shift: Shift+Enter breaks the line and Shift+arrows
@@ -361,6 +388,7 @@ fn text_block(
         Look::Quote => tr("Quote").to_string(),
         Look::Decision { .. } => tr("What was decided").to_string(),
         Look::Link(_) => tr("Link title").to_string(),
+        Look::Swatch(_) => tr("Colour name").to_string(),
         // Where to start: the only line of a new document, or the line being written.
         Look::Paragraph if editable && (focused || views.len() == 1) => tr("Type “/” for blocks").to_string(),
         _ => String::new(),
@@ -390,6 +418,7 @@ fn text_block(
     let first_line = out.galley_pos.y + row_h / 2.0;
     let mark_x = col.min.x + indent;
     mark(app, ui, t, doc, v, pos2(mark_x, first_line), resp.rect, size, ink, editable);
+    super::select::escaped(ui, st, v.id, resp.lost_focus() && slash_at.is_none());
     if st.focus == Some(Target::Block(v.id)) {
         resp.request_focus();
         take_keyboard(ui, st, id, out.state, text.chars().count());
@@ -434,8 +463,8 @@ fn text_block(
             }
             None => {
                 queue(app, st, doc, Target::Block(v.id), text.clone(), now);
-                if marks_apply && let Some(at) = slash::opened(&v.text, &text, caret_now) {
-                    st.slash = Some(slash::Slash { block: v.id, at, sel: 0, rect: None });
+                if marks_apply && let Some((at, mention)) = slash::opened(&v.text, &text, caret_now) {
+                    st.slash = Some(slash::Slash { block: v.id, at, sel: 0, rect: None, mention, found: 0 });
                 }
             }
         }
@@ -560,8 +589,104 @@ fn mark(app: &mut FigApp, ui: &Ui, t: &Tokens, doc: DocId, v: &View, at: egui::P
         Look::Decision { .. } | Look::Link(_) => {
             p.line_segment([pos2(at.x + 1.5, field.min.y - 18.0), pos2(at.x + 1.5, field.max.y + 26.0)], Stroke::new(3.0, t.accent));
         }
+        Look::Swatch(color) => {
+            let chip = Rect::from_min_size(pos2(at.x, at.y - 14.0), vec2(28.0, 28.0));
+            let resp = ui.interact(chip, Id::unique(("gbx_doc_swatch", doc.0, v.id.0)), if editable { Sense::click() } else { Sense::hover() });
+            a11y::color(&resp, tr("Colour"), color);
+            p.rect_filled(chip, CornerRadius::same(5), parse_hex(color).unwrap_or(t.field));
+            let edge = if resp.hovered() && editable { t.text } else { t.border_strong };
+            p.rect_stroke(chip, CornerRadius::same(5), Stroke::new(1.0, edge), egui::StrokeKind::Inside);
+            p.text(pos2(chip.max.x + 10.0, at.y), Align2::LEFT_CENTER, color, semibold(13.0), t.text);
+            if editable {
+                crate::right::menu_popup(&resp).width(POPUP_W).show(|ui| {
+                    let tk = Tokens::get(ui.ctx());
+                    widgets::label(ui, tr("Colour"), tk.text_secondary);
+                    if let Some(Value::String(c)) = colour_dots(ui, &tk, false, false) {
+                        app.run("doc.block.set", json!({"doc": doc.0, "id": v.id.0, "data": {"color": c}}));
+                        ui.close();
+                    }
+                    if let Some(c) = hex_field(ui, &tk, Id::unique(("gbx_doc_swatch_hex", doc.0, v.id.0)), color) {
+                        app.run("doc.block.set", json!({"doc": doc.0, "id": v.id.0, "data": {"color": c}}));
+                        ui.close();
+                    }
+                });
+            }
+        }
         _ => {}
     }
+}
+
+/// A field for a colour code, starting at `color`: the code typed (as `#RRGGBB`) once Enter is pressed
+/// on a valid one.
+fn hex_field(ui: &mut Ui, t: &Tokens, id: Id, color: &str) -> Option<String> {
+    let mut text = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_else(|| color.to_string());
+    let resp = ui.add(egui::TextEdit::singleline(&mut text).id(id).font(regular(12.0)).text_color(t.text).desired_width(120.0));
+    a11y::text(&resp, tr("Colour"), &text);
+    let done = resp.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
+    let code = format!("#{}", text.trim().trim_start_matches('#').to_uppercase());
+    let valid = parse_hex(&code).is_some() && matches!(code.len(), 7 | 9);
+    ui.data_mut(|d| d.insert_temp(id, text));
+    if done && valid {
+        ui.data_mut(|d| d.remove::<String>(id));
+        return Some(code);
+    }
+    None
+}
+
+/// A shape block: a rectangle, an ellipse or a line in its fill, the size the page draws it; a click
+/// on it offers the other shapes and fills.
+#[allow(clippy::too_many_arguments)]
+fn shape_block(
+    app: &mut FigApp,
+    ui: &mut Ui,
+    t: &Tokens,
+    doc: DocId,
+    id: BlockId,
+    shape: &str,
+    fill: Option<&str>,
+    col: Rect,
+    indent: f32,
+    editable: bool,
+) {
+    let line = shape == "line";
+    let size = if line { vec2(160.0, 2.0) } else { vec2(120.0, 60.0) };
+    let (row, _) = ui.allocate_exact_size(vec2(col.width(), size.y + 16.0), Sense::hover());
+    let r = Rect::from_min_size(pos2(row.min.x + indent, row.min.y + 8.0), size);
+    let hit = r.expand2(vec2(0.0, if line { 8.0 } else { 0.0 }));
+    let resp = ui.interact(hit, Id::unique(("gbx_doc_shape", doc.0, id.0)), if editable { Sense::click() } else { Sense::hover() });
+    a11y::image(&resp, tr("Shape"));
+    let color = fill.and_then(parse_hex).unwrap_or(t.border_strong);
+    let p = ui.painter();
+    match shape {
+        "ellipse" => {
+            p.add(egui::epaint::EllipseShape::filled(r.center(), r.size() / 2.0, color));
+        }
+        _ => {
+            p.rect_filled(r, CornerRadius::same(if line { 0 } else { 4 }), color);
+        }
+    }
+    if resp.hovered() && editable {
+        ui.painter().rect_stroke(hit.expand(3.0), CornerRadius::same(5), Stroke::new(1.0, t.border_strong), egui::StrokeKind::Outside);
+    }
+    if !editable {
+        return;
+    }
+    crate::right::menu_popup(&resp).width(POPUP_W).show(|ui| {
+        use crate::right::menu_check;
+        for (name, label) in [("rectangle", tr("Rectangle")), ("ellipse", tr("Ellipse")), ("line", tr("Line"))] {
+            if menu_check(ui, shape == name, label, "") {
+                app.run("doc.block.set", json!({"doc": doc.0, "id": id.0, "data": {"shape": name}}));
+                ui.close();
+            }
+        }
+        ui.separator();
+        let tk = Tokens::get(ui.ctx());
+        widgets::label(ui, tr("Fill"), tk.text_secondary);
+        if let Some(c) = swatches(ui, &tk, false) {
+            app.run("doc.block.set", json!({"doc": doc.0, "id": id.0, "data": {"fill": c}}));
+            ui.close();
+        }
+    });
 }
 
 /// Who, when and why under a decision (the decision log reads them).
@@ -801,6 +926,8 @@ pub(super) fn kind_value(kind: &str) -> Value {
         "table" => json!({"type": "table", "table": {"rows": Table::blank(3, 3).rows, "header": true}}),
         // No layer yet: the block asks for one.
         "embed" => json!({"type": "embed", "node": 0, "live": true}),
+        "swatch" => json!({"type": "swatch", "color": NEW_COLOUR}),
+        "shape" => json!({"type": "shape", "shape": "rectangle", "fill": NEW_COLOUR}),
         k => json!(k),
     }
 }
@@ -820,7 +947,7 @@ pub(super) fn asks_for_content(app: &mut FigApp, st: &mut State, doc: DocId, id:
 pub(super) fn first_field(kind: &str, id: BlockId) -> Option<Target> {
     match kind {
         "table" => Some(Target::Cell(id, 0, 0)),
-        "image" | "embed" => None,
+        "image" | "embed" | "shape" => None,
         _ => Some(Target::Block(id)),
     }
 }
@@ -952,11 +1079,15 @@ fn handle(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, doc: DocId,
 
 /// A row of colour dots (the first one clears): the picked colour, `Value::Null` to clear.
 pub(super) fn swatches(ui: &mut Ui, t: &Tokens, background: bool) -> Option<Value> {
+    colour_dots(ui, t, background, true)
+}
+
+/// The colour dots, with the one that clears first when `clears`.
+fn colour_dots(ui: &mut Ui, t: &Tokens, background: bool, clears: bool) -> Option<Value> {
     let mut picked = None;
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
-        let none = dot(ui, t, None, tr("Default"));
-        if none {
+        if clears && dot(ui, t, None, tr("Default")) {
             picked = Some(Value::Null);
         }
         for (name, words, back) in colours() {

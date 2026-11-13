@@ -1,10 +1,11 @@
 //! Formatting words inside a block (G13.2), as in Notion: a bar over selected words (bold, italic,
 //! underline, strike, code, link, colour), the keys (Ctrl+B, I, U, E, K, Ctrl+Shift+X), and the
-//! words drawn with their looks. Ctrl+click on linked words opens the address.
+//! words drawn with their looks. Ctrl+click on linked words opens the address, on a mention what it
+//! names.
 
 use egui::text::{CCursor, LayoutJob, TextFormat};
 use egui::{Align2, Color32, CornerRadius, FontId, Id, Key, Modifiers, Pos2, Rect, Sense, Stroke, Ui, pos2, vec2};
-use figcraft_doc::docs::{Block, BlockId, BlockKind, DocId, Mark, Run, has_mark};
+use figcraft_doc::docs::{Block, BlockId, BlockKind, DocId, Mark, Mention, Run, has_mark};
 use figcraft_engine::keymap::Platform;
 use serde_json::json;
 
@@ -100,10 +101,16 @@ fn format_of(r: &Run, ink: &Ink) -> TextFormat {
         ink.font.clone()
     };
     // A task done is dim all through, whatever colour its words have.
-    let own = r.color.as_deref().and_then(parse_hex).unwrap_or(if r.link.is_some() { ink.link } else { ink.color });
+    let own = r.color.as_deref().and_then(parse_hex).unwrap_or(if r.link.is_some() || r.mention.is_some() { ink.link } else { ink.color });
     let color = if ink.strike { ink.color } else { own };
     let line = Stroke::new(1.0, color);
-    let background = r.highlight.as_deref().and_then(parse_hex).unwrap_or(if r.code { ink.code } else { Color32::TRANSPARENT });
+    // A mention sits on a faint wash of its colour.
+    let plain_back = match (r.code, r.mention) {
+        (true, _) => ink.code,
+        (_, Some(_)) => ink.link.gamma_multiply(0.16),
+        _ => Color32::TRANSPARENT,
+    };
+    let background = r.highlight.as_deref().and_then(parse_hex).unwrap_or(plain_back);
     TextFormat {
         font_id,
         color,
@@ -277,7 +284,7 @@ pub(super) fn show(app: &mut FigApp, ui: &Ui, st: &mut State, t: &Tokens, doc: D
         act(app, st, doc, block, &runs, sel, what);
     }
     let (sel, focused, galley, galley_pos) = (selected(f.sel), f.focused, f.galley, f.galley_pos);
-    open_link(ui, &runs, galley, galley_pos);
+    open_link(app, ui, st, &runs, galley, galley_pos);
     let link_id = Id::unique(("gbx_doc_link_edit", doc.0, block.0));
     let link_focused = ui.memory(|m| m.has_focus(link_id));
     let pointer_down = ui.input(|i| i.pointer.primary_down());
@@ -410,8 +417,22 @@ fn runs_colour(runs: &[Run], at: usize) -> Option<Color32> {
     None
 }
 
-/// Ctrl+click (⌘ on a Mac) on linked words opens their address; the pointer says so while Ctrl is held.
-fn open_link(ui: &Ui, runs: &[Run], galley: &egui::Galley, galley_pos: Pos2) {
+/// What the run at character `at` mentions, if it is a mention.
+fn mention_at(runs: &[Run], at: usize) -> Option<Mention> {
+    let mut pos = 0;
+    for r in runs {
+        let len = r.text.chars().count();
+        if at >= pos && at < pos + len {
+            return r.mention;
+        }
+        pos += len;
+    }
+    None
+}
+
+/// Ctrl+click (⌘ on a Mac) on linked words opens their address, and on a mention what it names (the
+/// document, or the layer on the canvas); the pointer says so while Ctrl is held.
+fn open_link(app: &mut FigApp, ui: &Ui, st: &mut State, runs: &[Run], galley: &egui::Galley, galley_pos: Pos2) {
     let (pos, command, clicked) = ui.input(|i| (i.pointer.hover_pos(), i.modifiers.command, i.pointer.primary_clicked()));
     let Some(p) = pos.filter(|_| command) else { return };
     let local = p - galley_pos;
@@ -420,11 +441,51 @@ fn open_link(ui: &Ui, runs: &[Run], galley: &egui::Galley, galley_pos: Pos2) {
     }
     let at = galley.cursor_from_pos(local).index.0;
     // The character under the pointer: the one before the cursor when the pointer is past its middle.
+    if let Some(m) = mention_at(runs, at).or_else(|| at.checked_sub(1).and_then(|a| mention_at(runs, a))) {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        if clicked {
+            go_to(app, st, m);
+        }
+        return;
+    }
     let Some(url) = link_at(runs, at).or_else(|| at.checked_sub(1).and_then(|a| link_at(runs, a))).filter(|u| opens(u)) else { return };
     ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     if clicked {
         ui.ctx().open_url(egui::OpenUrl::new_tab(url));
     }
+}
+
+/// Show what a mention names: open the document, or leave the documents for the canvas with the
+/// layer selected and in view (on its page). Something deleted since does nothing.
+fn go_to(app: &mut FigApp, st: &mut State, m: Mention) {
+    match m {
+        Mention::Document { doc } => {
+            if app.session.doc().is_ok_and(|f| f.docs.get(doc).is_some()) {
+                st.open = Some(doc);
+                st.focus = None;
+            }
+        }
+        Mention::Layer { node } => {
+            let Some(page) = app.session.doc().ok().and_then(|f| page_of(f, node)) else { return };
+            st.open = None;
+            app.run("page.select", json!({"id": page.0}));
+            app.run("select.set", json!({"ids": [node.0]}));
+            app.run("view.zoomSelection", json!({}));
+        }
+    }
+}
+
+/// The page layer `node` is on.
+fn page_of(file: &figcraft_doc::Document, node: figcraft_doc::NodeId) -> Option<figcraft_doc::NodeId> {
+    let mut at = file.node(node)?;
+    // Bounded: a broken file cannot loop.
+    for _ in 0..10_000 {
+        if matches!(at.kind, figcraft_doc::NodeKind::Page { .. }) {
+            return Some(at.id);
+        }
+        at = file.node(at.parent?)?;
+    }
+    None
 }
 
 /// Whether an address may be opened: a web page or an e-mail, never a file or a program (a document

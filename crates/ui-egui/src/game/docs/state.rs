@@ -86,6 +86,13 @@ pub(super) struct State {
     pub slash: Option<super::slash::Slash>,
     /// The list of layers for an embed block, while it is open (G13.2).
     pub embed_pick: Option<super::embed::Pick>,
+    /// Blocks selected together (G13.2), and the one the selection started from.
+    pub picked: Vec<BlockId>,
+    pub pick_from: Option<BlockId>,
+    /// The block whose words had the keyboard last frame (where a Shift+click selects from).
+    pub writing: Option<BlockId>,
+    /// A Shift+click is selecting blocks: the field under it does not take the keyboard.
+    pub shift_pick: bool,
     /// The block dragged by its handle, and whether it was let go this frame.
     pub block_drag: Option<BlockId>,
     pub block_drop: bool,
