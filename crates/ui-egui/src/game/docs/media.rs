@@ -121,7 +121,7 @@ fn file_stem(file: &Value) -> Option<String> {
 
 /// The picture `hash` as a texture at most `side` device pixels on its longer side, kept between
 /// frames while that size holds.
-fn texture(app: &FigApp, ctx: &egui::Context, hash: &str, side: f64) -> Option<TextureHandle> {
+pub(super) fn texture(app: &FigApp, ctx: &egui::Context, hash: &str, side: f64) -> Option<TextureHandle> {
     if !side.is_finite() || side <= 0.0 {
         return None;
     }

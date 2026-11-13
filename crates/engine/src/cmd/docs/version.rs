@@ -75,6 +75,8 @@ fn now() -> u64 {
 fn close(s: &mut Session, p: &Value) -> Result<Value> {
     let cmd = "doc.version.close";
     let id = doc_id(cmd, p, "doc")?;
+    // What a live layer shows now is what the closed version keeps.
+    super::pin_live_embeds(s.doc_mut()?, id);
     let docs = &mut s.doc_mut()?.docs;
     let last = docs.get(id).and_then(|d| d.current()).ok_or_else(|| refuse(cmd, DocError::NoDoc(id)))?;
     let hash = docs_render::fingerprint(last);

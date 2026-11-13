@@ -411,6 +411,26 @@
   - Not yet: images in the canvas card, PDF and Markdown exports are still placeholders; a caption
     and resizing by hand; files dropped on a closed version are ignored without a message; the same
     picture shown at two very different widths is decoded again each frame.
+- G13.2, frames and components in documents (2026-11-13): `/` "Frame or component" puts an embed
+  block in the document and opens a searchable list of the file's frames, components, variants and
+  instances (top layers of every page, and those inside sections and component sets). The layer shows
+  fitted to the column (never larger than itself), with "Live" or "Pinned" and its name under it.
+  Live follows the layer as it changes (redrawn only when its layers or the components its instances
+  show change); the handle menu's "Follow the layer" switches to Pinned, a picture of it as it is now,
+  and "Choose another layer" changes it. Closing a version pins every live layer in it, so what was
+  signed keeps showing what it showed. A deleted layer says so and offers the list again. One new
+  command, `doc.block.embed {doc, node, live?, id?, parent?, index?}` (one undo step; also for MCP,
+  the CLI and the control channel).
+  - Code: `crates/engine/src/cmd/docs.rs` (the command, `snapshot`, `pin_live_embeds`, called by
+    `doc.version.close` in `cmd/docs/version.rs`), `crates/ui-egui/src/game/docs/embed.rs` (drawing,
+    the list). Tests: `game/docs/embed_tests.rs`, `docs_cmd_tests.rs`.
+  - Checked in the real app: a live HUD frame, the list with search, Enter picking, pinned. Screenshots
+    sent to Adriel.
+  - Caught by the tests and fixed: a layer picked from the list was pinned instead of live. Review
+    (high) caught and fixed: a live layer's picture could pass the graphics card's size limit by one
+    pixel.
+  - Not yet: embeds in the canvas card, PDF and Markdown exports are still placeholders; a very large
+    live layer redraws on the window's own thread; the list does not open upwards near the bottom.
 - G11.6, the bow (2026-11-13, Adriel's changes): a click shoots from the hip, holding aim goes over the
   shoulder with a crosshair in the middle of the screen, and the shoulder button swaps sides.
   - Hip shot: a left click alone with the bow turns the hero to where the camera looks and shoots after
@@ -1422,6 +1442,7 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     duplicate, colour, delete".
   - G13.2 tables: no new hook. Locales: "Header row", "Insert row above", "Insert row below", "Insert column left", "Insert column right", "Delete row", "Delete column".
   - G13.2 images: `crates/ui-egui/src/pending_open.rs`, `pending_opens`: the card title arm also matches `doc.block.image` (pictures dropped on a document). Locales: "or drop one here", "Drop images to add them here".
+  - G13.2 embeds: no new hook. Locales: "Live", "Pinned", "This layer was deleted", "Show a frame or component of this file", "Choose a layer", "No frames or components", "Frame or component", "Follow the layer", "Choose another layer".
   - G13.2 formatting words: no new hook. Locales: "Bold", "Highlight", "Paste a link".
 - Nested pages (G9; `crates/doc/src/page_tree.rs`, `crates/engine/src/cmd/page_tree.rs`,
   `crates/ui-egui/src/game/tree_list.rs` and `page_list.rs` are ours):

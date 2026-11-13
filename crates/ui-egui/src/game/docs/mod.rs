@@ -9,6 +9,7 @@ mod blocks;
 mod compare;
 mod drag;
 mod editor;
+mod embed;
 mod export;
 mod inline;
 mod media;
@@ -78,6 +79,8 @@ pub(crate) fn open(app: &mut FigApp, id: u64) {
 mod blocks_tests;
 #[cfg(test)]
 mod drag_tests;
+#[cfg(test)]
+mod embed_tests;
 #[cfg(test)]
 mod format_tests;
 #[cfg(test)]

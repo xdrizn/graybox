@@ -6,6 +6,7 @@
 use std::sync::Arc;
 
 use egui::{Align2, Color32, CornerRadius, Id, Key, Modifiers, Rect, Sense, Shape, Stroke, Ui, pos2, vec2};
+use figcraft_doc::NodeId;
 use figcraft_doc::docs::{Block, BlockId, BlockKind, DocId, DocVersion, Run, Table};
 use serde_json::{Value, json};
 
@@ -51,6 +52,12 @@ pub(super) enum Look {
         image: String,
         alt: String,
     },
+    /// A layer of the file (none yet: id 0), live or pinned as the picture `snapshot`.
+    Embed {
+        node: NodeId,
+        live: bool,
+        snapshot: Option<String>,
+    },
     /// A kind this editor cannot draw yet: its name, shown dim.
     Other(String),
 }
@@ -58,7 +65,7 @@ pub(super) enum Look {
 impl Look {
     /// Whether the block is written in (it has a text field).
     pub(super) fn writable(&self) -> bool {
-        !matches!(self, Self::Divider | Self::Signature(_) | Self::Table(_) | Self::Image { .. } | Self::Other(_))
+        !matches!(self, Self::Divider | Self::Signature(_) | Self::Table(_) | Self::Image { .. } | Self::Embed { .. } | Self::Other(_))
     }
 }
 
@@ -99,6 +106,7 @@ pub(super) fn flatten(blocks: &[Block], depth: usize, parent: Option<BlockId>, a
             BlockKind::Signature { role } => Look::Signature(role.clone()),
             BlockKind::Table { table } => Look::Table(table.clone()),
             BlockKind::Image { image, alt } => Look::Image { image: image.clone(), alt: alt.clone() },
+            BlockKind::Embed { node, live, snapshot } => Look::Embed { node: *node, live: *live, snapshot: snapshot.clone() },
             k => Look::Other(k.name()),
         };
         let open = !matches!(look, Look::Toggle(false));
@@ -226,6 +234,9 @@ pub(super) fn block_ui(
         Look::Signature(role) => versions::signature_block(app, ui, t, doc, ver, v.id, &v.text, role, indent),
         Look::Table(table) => super::table::show(app, ui, st, t, doc, v.id, table, col, indent, editable, now),
         Look::Image { image, alt } => super::media::image(app, ui, t, doc, v.id, image, alt, col, indent, editable),
+        Look::Embed { node, live, snapshot } => {
+            super::embed::show(app, ui, st, t, doc, v.id, (*node, *live, snapshot.as_deref()), col, indent, editable);
+        }
         Look::Other(name) => {
             let (r, _) = ui.allocate_exact_size(vec2(col.width() - indent, 30.0), Sense::hover());
             let r = Rect::from_min_max(pos2(r.min.x + indent, r.min.y), r.max);
@@ -779,9 +790,7 @@ pub(super) fn add_block(app: &mut FigApp, st: &mut State, doc: DocId, place: Opt
     let id = BlockId(app.run("doc.block.insert", params).and_then(|r| r.get("id").and_then(Value::as_u64))?);
     st.focus = first_field(kind, id);
     st.caret = None;
-    if kind == "image" {
-        super::media::choose(app, doc, id);
-    }
+    asks_for_content(app, st, doc, id, kind);
     Some(id)
 }
 
@@ -790,7 +799,19 @@ pub(super) fn add_block(app: &mut FigApp, st: &mut State, doc: DocId, place: Opt
 pub(super) fn kind_value(kind: &str) -> Value {
     match kind {
         "table" => json!({"type": "table", "table": {"rows": Table::blank(3, 3).rows, "header": true}}),
+        // No layer yet: the block asks for one.
+        "embed" => json!({"type": "embed", "node": 0, "live": true}),
         k => json!(k),
+    }
+}
+
+/// A new picture or embed block asks for what it shows at once: a picture file, or a layer.
+pub(super) fn asks_for_content(app: &mut FigApp, st: &mut State, doc: DocId, id: BlockId, kind: &str) {
+    match kind {
+        "image" => super::media::choose(app, doc, id),
+        // Placed under the block once it is drawn.
+        "embed" => super::embed::open(st, doc, id, Rect::NOTHING),
+        _ => {}
     }
 }
 
@@ -799,7 +820,7 @@ pub(super) fn kind_value(kind: &str) -> Value {
 pub(super) fn first_field(kind: &str, id: BlockId) -> Option<Target> {
     match kind {
         "table" => Some(Target::Cell(id, 0, 0)),
-        "image" => None,
+        "image" | "embed" => None,
         _ => Some(Target::Block(id)),
     }
 }
@@ -895,6 +916,17 @@ fn handle(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, doc: DocId,
         if menu_item(ui, tr("Delete"), "") {
             app.run("doc.block.delete", json!({"doc": doc.0, "id": v.id.0}));
             ui.close();
+        }
+        if let Look::Embed { node, live, .. } = v.look {
+            ui.separator();
+            if node.0 != 0 && crate::right::menu_check(ui, live, tr("Follow the layer"), "") {
+                app.run("doc.block.embed", json!({"doc": doc.0, "id": v.id.0, "live": !live}));
+                ui.close();
+            }
+            if menu_item(ui, tr("Choose another layer"), "") {
+                super::embed::open(st, doc, v.id, row);
+                ui.close();
+            }
         }
         ui.separator();
         widgets::label(ui, tr("Turn into"), tk.text_secondary);

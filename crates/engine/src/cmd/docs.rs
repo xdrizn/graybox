@@ -4,6 +4,7 @@
 //! version refuses all of them. The menus, the Actions palette, the CLI, MCP (Claude) and the control
 //! channel reach documents through these ids.
 
+use figcraft_doc::NodeId;
 use figcraft_doc::docs::{Block, BlockId, BlockKind, BlockStyle, DocError, DocId, Mark, Place, Run, TableOp};
 use serde_json::{Map, Value, json};
 
@@ -105,6 +106,13 @@ pub fn specs() -> Vec<CommandSpec> {
             "{doc, version?, data (base64) | path, alt? (what it shows, for screen readers), id? (an image block: it shows this picture), parent?, index?} → {id, image, width, height}",
             true,
             |s, p| edit(s, p, block_image)
+        ),
+        spec!(
+            "doc.block.embed",
+            "Embed layer in document",
+            "{doc, version?, node (a frame, component, variant or any layer), live? (default true: follows the layer; false: pinned, a picture of it as it is now), id? (an embed block: change its layer or live), parent?, index?} → {id, snapshot (the pinned picture's key, or null)}",
+            true,
+            |s, p| edit(s, p, block_embed)
         ),
         spec!("doc.block.move", "Move block", "{doc, id, version?, parent? (a block id; omit or null for the top), index?}", true, |s, p| edit(
             s, p, move_block
@@ -604,6 +612,114 @@ fn block_image(s: &mut Session, p: &Value) -> Result<Value> {
         Err(e) => {
             if !known {
                 file.images.remove(&hash);
+            }
+            Err(refuse(cmd, e))
+        }
+    }
+}
+
+/// The longest side, in pixels, of a pinned picture of a layer.
+const SNAPSHOT_SIDE: f64 = 2048.0;
+
+/// A picture of layer `node` as it is now (at twice its size, at most [`SNAPSHOT_SIDE`] pixels
+/// long), added to the file's images: its key, and whether the file had it already.
+pub(crate) fn snapshot(file: &mut figcraft_doc::Document, node: NodeId) -> std::result::Result<(String, bool), String> {
+    let b = figcraft_render::export_bounds(file, node).ok_or("the layer has nothing to draw")?;
+    let side = b.width().max(b.height());
+    if !(side.is_finite() && side > 0.0) {
+        return Err("the layer has nothing to draw".into());
+    }
+    let scale = (SNAPSHOT_SIDE / side).min(2.0);
+    let pix = figcraft_render::render_node(file, node, scale).ok_or("the layer could not be drawn")?;
+    let png = figcraft_render::encode_png(&pix).map_err(|e| e.to_string())?;
+    let known = file.images.contains_key(&figcraft_format::image_hash(&png));
+    let (key, _, _) = figcraft_format::add_image(file, png).map_err(|e| e.to_string())?;
+    Ok((key, known))
+}
+
+/// Pin every live layer shown in the last version of `doc` (a closing version keeps what it showed).
+/// A layer that is gone or draws nothing stays as it is.
+pub(crate) fn pin_live_embeds(file: &mut figcraft_doc::Document, doc: DocId) {
+    fn live(blocks: &[Block], out: &mut Vec<(BlockId, NodeId)>) {
+        for b in blocks {
+            if let BlockKind::Embed { node, live: true, .. } = b.kind {
+                out.push((b.id, node));
+            }
+            live(&b.children, out);
+        }
+    }
+    let mut found = Vec::new();
+    if let Some(v) = file.docs.get(doc).and_then(|d| d.current()) {
+        live(&v.blocks, &mut found);
+    }
+    for (id, node) in found {
+        let Ok((key, known)) = snapshot(file, node) else { continue };
+        let pinned = file.docs.update_block(doc, None, id, |b| {
+            b.kind = BlockKind::Embed { node, live: false, snapshot: Some(key.clone()) };
+            Ok(())
+        });
+        if pinned.is_err() && !known {
+            file.images.remove(&key);
+        }
+    }
+}
+
+/// Show a layer of the file in a document: a new embed block, or block `id` changed (its layer, or
+/// live or pinned).
+fn block_embed(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.block.embed";
+    let doc = doc_id(cmd, p, "doc")?;
+    let version = opt_version(cmd, p)?;
+    let target = opt_uint(cmd, p, "id")?.map(BlockId);
+    let asked = opt_uint(cmd, p, "node")?.map(NodeId);
+    let live = match p.get("live") {
+        None | Some(Value::Null) => None,
+        Some(Value::Bool(b)) => Some(*b),
+        Some(_) => return Err(bad(cmd, "live must be true or false")),
+    };
+    let place = Place { parent: opt_uint(cmd, p, "parent")?.map(BlockId), index: opt_index(cmd, p)? };
+    let file = s.doc_mut()?;
+    // What block `id` shows now.
+    let had = match target {
+        Some(id) => {
+            let d = file.docs.get(doc).ok_or_else(|| refuse(cmd, DocError::NoDoc(doc)))?;
+            let v = match version {
+                Some(n) => d.version(n),
+                None => d.current(),
+            };
+            match v.and_then(|v| v.block(id)).map(|b| &b.kind) {
+                Some(BlockKind::Embed { node, live, .. }) => Some((*node, *live)),
+                Some(_) => return Err(bad(cmd, "that block is not an embed")),
+                None => return Err(refuse(cmd, DocError::NoBlock(id))),
+            }
+        }
+        None => None,
+    };
+    let node = asked.or(had.map(|h| h.0)).ok_or_else(|| bad(cmd, "node is required: the layer to show"))?;
+    match file.node(node) {
+        Some(n) if n.parent.is_some() && !matches!(n.kind, figcraft_doc::NodeKind::Page { .. }) => {}
+        Some(_) => return Err(bad(cmd, "pick a layer on a page, not a page")),
+        None => return Err(crate::EngineError::NoNode(node)),
+    }
+    let live = live.or(had.map(|h| h.1)).unwrap_or(true);
+    let pinned = if live { None } else { Some(snapshot(file, node).map_err(|e| bad(cmd, e))?) };
+    let shot = pinned.as_ref().map(|(k, _)| k.clone());
+    let kind = BlockKind::Embed { node, live, snapshot: shot.clone() };
+    let placed = match target {
+        Some(id) => file
+            .docs
+            .update_block(doc, version, id, |b| {
+                b.kind = kind;
+                Ok(())
+            })
+            .map(|()| id),
+        None => file.docs.insert_block(doc, version, place, kind, Vec::new()),
+    };
+    match placed {
+        Ok(id) => Ok(json!({"id": id.0, "snapshot": shot})),
+        Err(e) => {
+            if let Some((key, false)) = pinned {
+                file.images.remove(&key);
             }
             Err(refuse(cmd, e))
         }

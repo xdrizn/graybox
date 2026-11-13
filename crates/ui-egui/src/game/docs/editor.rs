@@ -109,6 +109,7 @@ fn page(app: &mut FigApp, ui: &mut Ui, st: &mut State, doc: DocId, uid: u64) {
     });
     back_button(ui, st, &t, area);
     export_button(app, ui, st, &t, area, doc);
+    super::embed::picker(app, ui.ctx(), st, doc);
     settle(app, ui.ctx(), st, doc, now);
     versions::confirm_close(app, ui.ctx(), st);
     sign::dialog(app, ui.ctx(), st);

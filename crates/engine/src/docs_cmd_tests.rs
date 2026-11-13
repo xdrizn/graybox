@@ -238,6 +238,7 @@ fn junk_parameters_are_refused_not_panicked_on() {
         "doc.table.cell",
         "doc.table.change",
         "doc.block.image",
+        "doc.block.embed",
     ] {
         for j in &junk {
             let _ = s.execute(cmd, j);
@@ -423,5 +424,43 @@ fn an_image_goes_into_a_document_as_one_step_and_fills_an_empty_image_block() {
         let images = s.doc().unwrap().images.len();
         assert!(s.execute("doc.block.image", &bad).is_err(), "{bad}");
         assert_eq!(s.doc().unwrap().images.len(), images, "a refused image is not kept: {bad}");
+    }
+}
+
+#[test]
+fn a_layer_is_embedded_live_pinned_as_it_is_now_and_pinned_when_the_version_closes() {
+    let mut s = Session::new();
+    let frame = id_of(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 200, "height": 100})));
+    let d = id_of(&ex(&mut s, "doc.create", json!({})));
+    let undo = s.ds().unwrap().history.undo.len();
+    let e = ex(&mut s, "doc.block.embed", json!({"doc": d, "node": frame}));
+    assert_eq!(s.ds().unwrap().history.undo.len(), undo + 1);
+    let b = id_of(&e);
+    assert_eq!(blocks(&mut s, d)[0]["kind"], json!({"type": "embed", "node": frame, "live": true, "snapshot": null}));
+    // Pinned: a picture of the layer as it is now goes into the file's images.
+    let pinned = ex(&mut s, "doc.block.embed", json!({"doc": d, "id": b, "live": false}));
+    let key = pinned["snapshot"].as_str().unwrap().to_string();
+    let image = s.doc().unwrap().images.get(&key).cloned().unwrap();
+    assert_eq!((image.width, image.height), (400, 200), "drawn at twice its size");
+    assert_eq!(blocks(&mut s, d)[0]["kind"]["live"], false);
+    // Live again, then the version closes: live layers are pinned with it.
+    ex(&mut s, "doc.block.embed", json!({"doc": d, "id": b, "live": true}));
+    assert_eq!(blocks(&mut s, d)[0]["kind"]["live"], true);
+    ex(&mut s, "doc.version.close", json!({"doc": d}));
+    let kind = blocks(&mut s, d)[0]["kind"].clone();
+    assert_eq!(kind["live"], false);
+    assert!(s.doc().unwrap().images.contains_key(kind["snapshot"].as_str().unwrap()));
+    // Refusals: no layer, a page, a block that is not an embed.
+    let page = s.page().unwrap().0;
+    let d2 = id_of(&ex(&mut s, "doc.create", json!({})));
+    let para = id_of(&ex(&mut s, "doc.block.insert", json!({"doc": d2, "text": "x"})));
+    for bad in [
+        json!({"doc": d2}),
+        json!({"doc": d2, "node": 99_999}),
+        json!({"doc": d2, "node": page}),
+        json!({"doc": d2, "id": para, "live": false}),
+        json!({"doc": d2, "node": frame, "live": "no"}),
+    ] {
+        assert!(s.execute("doc.block.embed", &bad).is_err(), "{bad}");
     }
 }

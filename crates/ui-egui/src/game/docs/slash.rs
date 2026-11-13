@@ -7,7 +7,7 @@ use egui::{Id, Key, Modifiers, Pos2, Rect, Ui};
 use figcraft_doc::docs::{BlockId, DocId};
 use serde_json::json;
 
-use super::blocks::{add_block, first_field, kind_value, place_after};
+use super::blocks::{add_block, asks_for_content, first_field, kind_value, place_after};
 use super::editor::commit;
 use super::state::{State, Target};
 use crate::FigApp;
@@ -42,7 +42,7 @@ pub(super) enum Move {
 }
 
 /// What the menu lists: (label, kind, other words that find it).
-fn items() -> [(&'static str, &'static str, &'static str); 16] {
+fn items() -> [(&'static str, &'static str, &'static str); 17] {
     [
         (tr("Text"), "paragraph", "text paragraph plain"),
         (tr("Heading 1"), "heading1", "h1 heading title"),
@@ -57,6 +57,7 @@ fn items() -> [(&'static str, &'static str, &'static str); 16] {
         (tr("Divider"), "divider", "divider line rule hr separator"),
         (tr("Table"), "table", "table grid tabela"),
         (tr("Image"), "image", "image picture photo imagem foto"),
+        (tr("Frame or component"), "embed", "embed frame component variant layer screen quadro componente tela"),
         (tr("Decision"), "decision", "decision decided"),
         (tr("Link"), "link", "link url web"),
         (tr("Signature"), "signature", "signature sign"),
@@ -245,9 +246,7 @@ fn pick(app: &mut FigApp, st: &mut State, doc: DocId, block: BlockId, text: &str
             st.focus = first_field(kind, block);
             // A picture has no words to put the cursor in.
             st.caret = st.focus.map(|_| 0);
-            if kind == "image" {
-                super::media::choose(app, doc, block);
-            }
+            asks_for_content(app, st, doc, block, kind);
         }
         return;
     }
