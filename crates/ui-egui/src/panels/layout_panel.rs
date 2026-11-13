@@ -170,6 +170,10 @@ fn dimensions(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[NodeId], has
     let (w, h) = (common(doc, sel, w_of), common(doc, sel, h_of));
     let col = widgets::col_width(ui.available_width());
     widgets::sublabels(ui, tr("Dimensions"), None);
+    // Graybox: a pixel board's W and H are its size in art pixels (G16.7).
+    if crate::game::pixel::board::dims_row(app, ui, doc, sel) {
+        return;
+    }
     row(ui, 32.0, |ui| {
         let e = crate::variable_ui::number_field_mixed(app, ui, &ids, wk, Id::unique("lay_w"), Lead::Text("W"), w, "", col);
         app.field_of(&ids, wk, e, w_of, |v| json!(v.max(0.0)));

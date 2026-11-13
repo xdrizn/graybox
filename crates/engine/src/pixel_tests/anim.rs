@@ -147,7 +147,10 @@ fn the_layer_shows_its_played_tag_at_the_presenters_time_and_its_first_frame_at_
     });
     let png = doc.images.get(&fill.unwrap()).unwrap().bytes.clone();
     let shown = figcraft_pixel::Canvas::from_png(&png).unwrap();
-    assert_eq!(shown.get(1, 0), Some([0xc8, 0x34, 0x47, 255]), "frame 1's dot");
+    // G16.7: the picture is cut round the pixels the frames use (the dots at x 1 and 2).
+    assert_eq!((shown.width(), shown.height()), (2, 1));
+    assert_eq!(shown.get(0, 0), Some([0xc8, 0x34, 0x47, 255]), "frame 1's dot");
+    assert_eq!(shown.get(1, 0), Some([0, 0, 0, 0]), "not frame 2's");
 }
 
 #[test]

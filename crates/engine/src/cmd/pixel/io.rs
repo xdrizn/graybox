@@ -107,7 +107,10 @@ fn options(cmd: &str, s: &Session, id: NodeId, sprite: &Sprite, p: &Value) -> Re
             v.as_f64().filter(|f| f.is_finite() && *f >= 1.0 && *f <= 1000.0).ok_or_else(|| bad(cmd, "`ppu` must be a number from 1 to 1000"))?
         }
     };
-    let slice = slice_of(doc, id, sprite);
+    // G16.7: the cuts are measured on the art the layer shows; this exports the whole board.
+    let [x, y, w, h] = store::shown_box(&n.plugin_data, sprite);
+    let (right, bottom) = (sprite.width.saturating_sub(x + w), sprite.height.saturating_sub(y + h));
+    let slice = slice_of(doc, id, sprite).map(|[t, r, b, l]| [t + y, r + right, b + bottom, l + x]);
     Ok(export::Options {
         name: file_name(&text(cmd, p, "name")?.unwrap_or_else(|| n.name.clone())),
         scale: whole(cmd, p, "scale", 1, export::MAX_SCALE)?.unwrap_or(d.scale),
@@ -258,7 +261,10 @@ pub(crate) fn unity_layer(doc: &Document, n: &Node, sprites: &Path, scale: f64, 
     if sprite.frames.len() < 2 {
         return Ok(());
     }
-    let frames = (0..sprite.frames.len()).filter_map(|i| store::frame_image(&src.plugin_data, &sprite, i)).collect();
+    // G16.7: the frames as the layer shows them, round the pixels it uses.
+    let frames = (0..sprite.frames.len()).filter_map(|i| store::shown_image(&src.plugin_data, &sprite, i)).collect();
+    let [_, _, tw, th] = store::shown_box(&src.plugin_data, &sprite);
+    let sprite = Sprite { width: tw, height: th, ..sprite };
     let size = (f64::from(sprite.scale.max(1)) * scale).round();
     let opts = export::Options {
         name: format!("{}_anim", n.id.0),

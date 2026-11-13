@@ -59,7 +59,7 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[Node
     let t = Tokens::get(ui.ctx());
     let frames = sprite.frames.len();
     let more = if frames > 1 { format!(", {frames} frames") } else { String::new() };
-    widgets::note(ui, &format!("{} × {} art pixels{more}", sprite.width, sprite.height), t.text_secondary);
+    widgets::note(ui, &format!("Board: {} × {} art pixels{more}", sprite.width, sprite.height), t.text_secondary);
     if frames > 1 {
         plays_row(app, ui, *id, &sprite);
     }

@@ -150,6 +150,7 @@ fn draw_edit(app: &mut FigApp, painter: &egui::Painter, id: figcraft_doc::NodeId
     brush_preview(app, painter, xf, &d, zoom);
     selection_outline(app, painter, xf, &d);
     axes(app, painter, xf, w, h, &t);
+    super::edges::draw(app, painter, id, &d.sprite);
 }
 
 /// The onion skin (G16.4): the frame before (red) and after (blue), faint, under the one drawn on.

@@ -537,3 +537,79 @@ fn a_tool_colour_taken_from_a_style_follows_it_when_it_changes() {
     assert_eq!(u.app.pixel.links[0], None, "a deleted style is forgotten");
     assert_eq!(u.app.pixel.colors[0], [0x33, 0x66, 0xff, 255], "the colour stays");
 }
+
+/// Drags from `a` to `b` (screen points) with the primary button, in small steps; the cursor egui
+/// was asked for while over `a` (before the press) and while dragging.
+fn drag_screen(u: &mut Ui, a: Pos2, b: Pos2) -> (egui::CursorIcon, egui::CursorIcon) {
+    let mut over = u.frame_output(vec![Event::PointerMoved(a)]);
+    let hover = over.platform_output.cursor_icon;
+    over.textures_delta.clear();
+    press(u, a, PointerButton::Primary, true);
+    let mut during = egui::CursorIcon::Default;
+    for i in 1..=4 {
+        let mut out = u.frame_output(vec![Event::PointerMoved(a + (b - a) * (i as f32 / 4.0))]);
+        during = out.platform_output.cursor_icon;
+        out.textures_delta.clear();
+    }
+    press(u, b, PointerButton::Primary, false);
+    u.frame(vec![]);
+    (hover, during)
+}
+
+/// The texts painted in the next frame.
+fn painted_texts(u: &mut Ui) -> Vec<String> {
+    fn walk(shape: &egui::Shape, out: &mut Vec<String>) {
+        match shape {
+            egui::Shape::Text(t) => out.push(t.galley.text().to_string()),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+            _ => {}
+        }
+    }
+    let mut frame = u.frame_output(vec![]);
+    let mut out = Vec::new();
+    for c in &frame.shapes {
+        walk(&c.shape, &mut out);
+    }
+    frame.textures_delta.clear();
+    out
+}
+
+#[test]
+fn dragging_a_boards_side_in_pixel_mode_adds_art_pixels_and_the_art_stays() {
+    let (mut u, id) = editing();
+    u.app.session.execute("pixel.stroke", &json!({"id": id, "points": [[0, 0]], "color": "#ff0000"})).unwrap();
+    u.frame(vec![]);
+    let node = |u: &Ui| {
+        let doc = u.app.session.doc().unwrap();
+        let n = doc.node(figcraft_doc::NodeId(id)).unwrap();
+        let t = doc.world_transform(n.id).as_coeffs();
+        (t[4], t[5], n.width, n.height)
+    };
+    assert_eq!(node(&u), (0.0, 0.0, 8.0, 8.0), "the layer hugs its one pixel");
+    let before = undo_labels(&u).len();
+    // Just outside the board's right side (16 art pixels at scale 8), dragged 4 art pixels out.
+    let from = u.app.to_screen(128.0, 64.0) + egui::vec2(4.0, 0.0);
+    let to = u.app.to_screen(160.0, 64.0) + egui::vec2(4.0, 0.0);
+    let (hover, _) = drag_screen(&mut u, from, to);
+    assert_eq!(hover, egui::CursorIcon::ResizeHorizontal);
+    let sprite: figcraft_pixel::Sprite = store::load(&u.app.session.doc().unwrap().node(figcraft_doc::NodeId(id)).unwrap().plugin_data).unwrap();
+    assert_eq!((sprite.width, sprite.height), (20, 16));
+    assert_eq!(node(&u), (0.0, 0.0, 8.0, 8.0), "the art and the layer stay where they were");
+    assert_eq!(pixel(&mut u, id, 0, 0).as_deref(), Some("#ff0000"));
+    assert_eq!(undo_labels(&u).len(), before + 1, "one undo step");
+}
+
+#[test]
+fn the_boards_size_in_art_pixels_shows_in_pixel_mode_only() {
+    let (mut u, id) = editing();
+    u.app.session.execute("select.set", &json!({"ids": [id]})).unwrap();
+    u.frame(vec![]);
+    let texts = painted_texts(&mut u);
+    assert!(texts.iter().any(|t| t == "art px"), "W and H in art pixels while editing: {texts:?}");
+    key(&mut u, Key::Escape, false);
+    u.frame(vec![]);
+    assert_eq!(u.app.pixel.mode, Mode::Off);
+    let texts = painted_texts(&mut u);
+    assert!(!texts.iter().any(|t| t == "art px"), "a layer's W and H in Design");
+    assert!(texts.iter().any(|t| t.starts_with("Board: 16 × 16 art pixels")), "{texts:?}");
+}

@@ -19,6 +19,7 @@ use crate::automation::params::{boolean, color_of, get, num, opt_id, req_id};
 use crate::{Result, Session, bad, spec};
 
 mod anim;
+pub mod board;
 mod edit;
 pub mod font;
 pub(crate) mod io;
@@ -105,6 +106,7 @@ pub fn specs() -> Vec<CommandSpec> {
     list.extend(font::specs());
     list.extend(paint::specs());
     list.extend(tools::specs());
+    list.extend(board::specs());
     list
 }
 
@@ -258,8 +260,10 @@ fn edit_cel(s: &mut Session, id: NodeId, sprite: &Sprite, (layer, frame): (u32, 
 /// (exports, older FigCraft). The picture it
 /// replaces leaves the document when nothing else shows it (undo brings back the document that had it).
 pub fn show(doc: &mut Document, id: NodeId, sprite: &Sprite) {
+    // Graybox G16.7: outside Pixel mode the layer hugs its used pixels.
+    board::retrim(doc, id, sprite);
     let Some(n) = doc.node(id) else { return };
-    let Some(png) = store::frame_image(&n.plugin_data, sprite, figcraft_pixel::anim::frame_at(sprite, 0.0).0).and_then(|c| c.to_png()) else {
+    let Some(png) = store::shown_image(&n.plugin_data, sprite, figcraft_pixel::anim::frame_at(sprite, 0.0).0).and_then(|c| c.to_png()) else {
         return;
     };
     let Ok((hash, _, _)) = figcraft_format::add_image(doc, png) else { return };

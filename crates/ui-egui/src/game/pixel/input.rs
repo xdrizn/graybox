@@ -18,6 +18,7 @@ const AXIS_GRAB: f32 = 7.0;
 /// own tools then leave it alone). Off, it only listens for a double-click on a pixel layer.
 pub(crate) fn input(app: &mut FigApp, ui: &egui::Ui, resp: &egui::Response, pos: Pos2) -> bool {
     settle(app);
+    app.pixel.cursor = None;
     app.pixel.pointer = Some(pos);
     match app.pixel.mode {
         Mode::Off => {
@@ -83,6 +84,10 @@ fn edit(app: &mut FigApp, ui: &egui::Ui, resp: &egui::Response, pos: Pos2, id: f
     };
     let (pressed2, pressed, down, mods) =
         ui.input(|i| (i.pointer.secondary_pressed(), i.pointer.primary_pressed(), i.pointer.any_down(), i.modifiers));
+    // A board's sides (G16.7): just outside its edge they drag to add or cut art pixels.
+    if app.ui.picker.is_none() && super::edges::pointer(app, ui, resp, pos, id, &d.sprite, pressed, down) {
+        return true;
+    }
     let at = art_at(app, id, &d.sprite, pos);
     app.pixel.hover = at.filter(|_| resp.hovered());
     let Some(at) = at else { return resp.hovered() };
@@ -159,7 +164,7 @@ fn edit(app: &mut FigApp, ui: &egui::Ui, resp: &egui::Response, pos: Pos2, id: f
                 }
             }
         }
-        Some(Gesture::NewSprite { .. }) | None => {}
+        Some(Gesture::NewSprite { .. } | Gesture::Board { .. }) | None => {}
     }
     resp.hovered() || app.pixel.gesture.is_some()
 }

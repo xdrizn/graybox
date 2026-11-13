@@ -17,6 +17,8 @@ pub const KEY: &str = "graybox.pixel";
 pub const CEL_PREFIX: &str = "graybox.pixel.cel.";
 /// The key of the sprite's selection (what the selection tools picked), when there is one.
 pub const SELECTION_KEY: &str = "graybox.pixel.selection";
+/// The box the layer shows outside Pixel mode (G16.7): `x,y,w,h` in art pixels of the board.
+pub const TRIM_KEY: &str = "graybox.pixel.trim";
 
 /// Plugin data, as a layer holds it.
 pub type Data = BTreeMap<String, String>;
@@ -49,7 +51,7 @@ pub fn save(data: &mut Data, sprite: &Sprite) {
 
 /// Removes the sprite and its cels: the layer is no longer a pixel layer.
 pub fn remove(data: &mut Data) {
-    data.retain(|k, _| k != KEY && k != SELECTION_KEY && !k.starts_with(CEL_PREFIX));
+    data.retain(|k, _| k != KEY && k != SELECTION_KEY && k != TRIM_KEY && !k.starts_with(CEL_PREFIX));
 }
 
 /// The stored text of a cel (or None when transparent).
@@ -125,12 +127,99 @@ pub fn frame_image_of(data: &Data, sprite: &Sprite, index: usize, only: Option<&
     Some(out)
 }
 
+/// The box `[x, y, w, h]` round every pixel the sprite shows in any frame (its visible layers), in
+/// art pixels of the board (G16.7). None when nothing is drawn.
+pub fn used_box(data: &Data, sprite: &Sprite) -> Option<[u32; 4]> {
+    let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0u32, 0u32);
+    for l in sprite.layers.iter().filter(|l| l.visible && l.opacity > 0) {
+        for f in &sprite.frames {
+            let Some(text) = data.get(&cel_key(l.id, f.id)) else { continue };
+            let Some([x, y, w, h]) = cel_box(text, sprite.width, sprite.height) else { continue };
+            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x + w), y1.max(y + h));
+        }
+    }
+    (x1 > x0 && y1 > y0).then(|| [x0, y0, x1 - x0, y1 - y0])
+}
+
+/// The box round the pixels of the cel stored as `text` on a `width` × `height` board (None when
+/// it has none). Kept by the text's hash, so an edit decodes only the cel it changed.
+fn cel_box(text: &str, width: u32, height: u32) -> Option<[u32; 4]> {
+    use std::hash::{Hash, Hasher};
+    /// How many cels' boxes are kept.
+    const KEPT: usize = 4096;
+    static BOXES: std::sync::Mutex<BTreeMap<u64, Option<[u32; 4]>>> = std::sync::Mutex::new(BTreeMap::new());
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (text, width, height).hash(&mut h);
+    let key = h.finish();
+    if let Ok(boxes) = BOXES.lock()
+        && let Some(b) = boxes.get(&key)
+    {
+        return *b;
+    }
+    let found = decode_cel(text, width, height).and_then(|c| {
+        let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0u32, 0u32);
+        let w = c.width().max(1) as usize;
+        for (at, p) in c.pixels().iter().enumerate() {
+            if p[3] > 0 {
+                let (x, y) = ((at % w) as u32, (at / w) as u32);
+                (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1));
+            }
+        }
+        (x1 > x0 && y1 > y0).then(|| [x0, y0, x1 - x0, y1 - y0])
+    });
+    if let Ok(mut boxes) = BOXES.lock() {
+        if boxes.len() >= KEPT {
+            boxes.clear();
+        }
+        boxes.insert(key, found);
+    }
+    found
+}
+
+/// The box `[x, y, w, h]` (art pixels of the board) the layer shows outside Pixel mode: the one
+/// stored round its used pixels, or the whole board (empty, or never trimmed).
+pub fn shown_box(data: &Data, sprite: &Sprite) -> [u32; 4] {
+    let stored = data.get(TRIM_KEY).and_then(|t| {
+        let v: Vec<u32> = t.split(',').filter_map(|p| p.trim().parse().ok()).collect();
+        match v.as_slice() {
+            [x, y, w, h] => Some([*x, *y, *w, *h]),
+            _ => None,
+        }
+    });
+    match stored {
+        Some([x, y, w, h]) if w > 0 && h > 0 && x.saturating_add(w) <= sprite.width && y.saturating_add(h) <= sprite.height => [x, y, w, h],
+        _ => [0, 0, sprite.width, sprite.height],
+    }
+}
+
+/// Stores the box the layer shows (None: the whole board).
+pub fn put_trim(data: &mut Data, trim: Option<[u32; 4]>) {
+    match trim {
+        Some([x, y, w, h]) => {
+            data.insert(TRIM_KEY.into(), format!("{x},{y},{w},{h}"));
+        }
+        None => {
+            data.remove(TRIM_KEY);
+        }
+    }
+}
+
+/// Frame `index` as the layer shows it outside Pixel mode: cut to the sprite's shown box.
+pub fn shown_image(data: &Data, sprite: &Sprite, index: usize) -> Option<Canvas> {
+    let full = frame_image(data, sprite, index)?;
+    let [x, y, w, h] = shown_box(data, sprite);
+    if [x, y, w, h] == [0, 0, sprite.width, sprite.height] {
+        return Some(full);
+    }
+    full.resized(w, h, -i64::from(x), -i64::from(y))
+}
+
 /// A content hash of what frame `index` shows (its description and the cels of its visible
 /// layers), so a picture made from it can be kept while nothing it is made of changed.
 pub fn frame_hash(data: &Data, sprite: &Sprite, index: usize) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
-    (sprite.width, sprite.height, index).hash(&mut h);
+    (sprite.width, sprite.height, index, data.get(TRIM_KEY)).hash(&mut h);
     if let Some(frame) = sprite.frames.get(index) {
         for l in sprite.layers.iter().filter(|l| l.visible && l.opacity > 0) {
             (l.id, l.opacity).hash(&mut h);

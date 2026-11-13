@@ -29,7 +29,8 @@ fn json_file(files: &[(String, Vec<u8>)]) -> Value {
 fn a_sprite_exports_a_sheet_with_its_frames_tags_and_9_slice() {
     let (mut s, id) = sprite();
     s.execute("node.set", &json!({"id": id, "name": "Coin/Spin"})).unwrap();
-    ex(&mut s, "pixel.stroke", json!({"id": id, "points": [[0, 0]], "color": "#c83447"}));
+    // Art over the whole board (the layer, and what it exports, hug the pixels it uses).
+    ex(&mut s, "pixel.shape", json!({"id": id, "kind": "rect", "from": [0, 0], "to": [7, 7], "filled": true, "color": "#c83447"}));
     ex(&mut s, "pixel.frame.add", json!({"id": id, "copy": 0}));
     ex(&mut s, "pixel.frame.add", json!({"id": id}));
     ex(&mut s, "pixel.tag.add", json!({"id": id, "from": 0, "to": 1, "name": "spin"}));
@@ -44,6 +45,19 @@ fn a_sprite_exports_a_sheet_with_its_frames_tags_and_9_slice() {
     assert_eq!(j["meta"]["frameTags"][0]["name"], "spin");
     assert_eq!(j["frames"][0]["border"], json!({"left": 4, "bottom": 4, "right": 4, "top": 4}));
     assert_eq!(j["meta"]["unity"]["filterMode"], "Point");
+}
+
+#[test]
+fn the_whole_board_exports_with_the_cuts_of_the_art_the_layer_shows() {
+    let (mut s, id) = sprite();
+    // A 4 × 4 block at (2, 2) on the 8 × 8 board; 9-slice cuts of one art pixel (4 page units).
+    ex(&mut s, "pixel.shape", json!({"id": id, "kind": "rect", "from": [2, 2], "to": [5, 5], "filled": true, "color": "#c83447"}));
+    ex(&mut s, "game.nineSlice.set", json!({"ids": [id], "insets": [4, 4, 4, 4]}));
+    let whole = json_file(&exported(&mut s, json!({"id": id, "format": "unity"})));
+    assert_eq!(whole["frames"][0]["sourceSize"], json!({"w": 8, "h": 8}), "the whole board");
+    assert_eq!(whole["frames"][0]["border"], json!({"left": 3, "bottom": 3, "right": 3, "top": 3}), "the cuts, 2 art pixels further out");
+    let trimmed = json_file(&exported(&mut s, json!({"id": id, "format": "unity", "trim": true})));
+    assert_eq!(trimmed["frames"][0]["border"], json!({"left": 1, "bottom": 1, "right": 1, "top": 1}));
 }
 
 #[test]
@@ -116,8 +130,9 @@ fn a_screen_sent_to_unity_marks_pixel_layers_and_writes_a_sheet_for_animated_one
     let anim = node(coin)["animation"].as_str().unwrap();
     let sheet: Value = serde_json::from_slice(&std::fs::read(folder.join(anim)).unwrap()).unwrap();
     assert_eq!(sheet["meta"]["unity"]["play"], "spin");
-    // Scale 4 on a screen exported at 2: each art pixel is 8 pixels in the sheet.
-    assert_eq!(sheet["frames"][0]["sourceSize"], json!({"w": 32, "h": 32}));
+    // Scale 4 on a screen exported at 2: each art pixel is 8 pixels in the sheet, and the sheet's
+    // frames are cut round the one art pixel the coin uses (G16.7).
+    assert_eq!(sheet["frames"][0]["sourceSize"], json!({"w": 8, "h": 8}));
     assert!(folder.join("sprites").join(sheet["meta"]["image"].as_str().unwrap()).exists());
     let _ = std::fs::remove_dir_all(&dir);
 }

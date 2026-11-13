@@ -14,8 +14,10 @@ use figcraft_pixel::{Brush, Canvas, Mask, Rgba, Sprite, store};
 use crate::FigApp;
 use crate::icons::Icon;
 
+pub(crate) mod board;
 pub(crate) mod colors;
 mod draw;
+mod edges;
 mod export;
 mod font;
 mod input;
@@ -145,6 +147,9 @@ pub(crate) enum Gesture {
     Select { tool: Tool, points: Vec<Pt>, op: Op },
     /// Moving the selected pixels (or the whole cel) from `from` to `to`.
     Move { from: Pt, to: Pt },
+    /// Dragging a board's side or corner (G16.7): which sides (x, y: -1, 0 or 1), from and to on
+    /// screen, and Alt (both sides).
+    Board { sides: (i8, i8), from: Pos2, to: Pos2, alt: bool },
 }
 
 /// The sprite being edited, decoded: the current layer's cel and what lies below and above it.
@@ -188,6 +193,9 @@ pub struct Editor {
     pub(crate) mirror: [bool; 2],
     /// The mirror axes, doubled (half pixels); set to the middle when a sprite is entered.
     pub(crate) axis: [i64; 2],
+    /// The pointer Pixel mode asked for this frame (over a mirror axis handle or a board side), so
+    /// the canvas leaves it instead of showing the tool's (G16.7).
+    pub(crate) cursor: Option<egui::CursorIcon>,
     pub(crate) tile: bool,
     pub(crate) filled: bool,
     pub(crate) contiguous: bool,
@@ -251,6 +259,7 @@ impl Default for Editor {
             shade: false,
             mirror: [false, false],
             axis: [0, 0],
+            cursor: None,
             tile: false,
             filled: false,
             contiguous: true,
@@ -449,12 +458,25 @@ pub(crate) fn decode(app: &mut FigApp, id: NodeId) -> Option<std::sync::Arc<Deco
     Some(d)
 }
 
+/// Asks for pointer `icon` this frame: the canvas then leaves it instead of showing the tool's.
+pub(crate) fn set_cursor(app: &mut FigApp, ctx: &egui::Context, icon: egui::CursorIcon) {
+    app.pixel.cursor = Some(icon);
+    ctx.set_cursor_icon(icon);
+}
+
+/// Whether Pixel mode asked for its own pointer this frame ([`set_cursor`]).
+pub(crate) fn has_cursor(app: &FigApp) -> bool {
+    app.pixel.cursor.is_some()
+}
+
 /// Layer `id`'s art-pixel space to page space: (its world transform, page units per art pixel).
 pub(crate) fn art_to_page(app: &FigApp, id: NodeId, sprite: &Sprite) -> Option<Affine> {
     let doc = app.session.doc().ok()?;
-    doc.node(id)?;
+    let n = doc.node(id)?;
     let s = f64::from(sprite.scale.max(1));
-    Some(doc.world_transform(id) * Affine::scale(s))
+    // G16.7: the layer hugs its used pixels, so the board starts that far up and left of it.
+    let [x, y, ..] = figcraft_pixel::store::shown_box(&n.plugin_data, sprite);
+    Some(doc.world_transform(id) * Affine::scale(s) * Affine::translate((-f64::from(x), -f64::from(y))))
 }
 
 /// The art pixel under screen point `pos` (may be outside the sprite).

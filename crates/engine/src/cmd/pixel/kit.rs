@@ -64,10 +64,12 @@ pub(crate) fn slice(doc: &mut Document, id: NodeId, enabled: Option<bool>, inset
         return Ok(false);
     }
     let k = f64::from(sprite.scale.max(1));
-    let quarter = f64::from((sprite.width.min(sprite.height) / 4).max(1)) * k;
+    // G16.7: measured on the art the layer shows (round its used pixels).
+    let [_, _, aw, ah] = store::shown_box(&n.plugin_data, &sprite);
+    let quarter = f64::from((aw.min(ah) / 4).max(1)) * k;
     let raw = insets.or(current.map(|c| c.insets)).unwrap_or([quarter; 4]);
     let snapped = raw.map(|v| (v / k).round().max(0.0) * k);
-    let base = (f64::from(sprite.width) * k, f64::from(sprite.height) * k);
+    let base = (f64::from(aw) * k, f64::from(ah) * k);
     put_slice(doc, id, &sprite, NineSlice { insets: snapped, base }.clamped(), Pad::Keep(1.0))?;
     Ok(true)
 }
@@ -107,10 +109,12 @@ fn put_slice(doc: &mut Document, id: NodeId, sprite: &Sprite, s: NineSlice, pad:
 /// After pixel layer `id`'s scale changed from `old` to `sprite.scale`: its 9-slice keeps its cuts
 /// in art pixels.
 pub(crate) fn rescale(doc: &mut Document, id: NodeId, sprite: &Sprite, old: u32) -> Result<()> {
-    let Some(s) = NineSlice::of(doc.get(id)?) else { return Ok(()) };
+    let n = doc.get(id)?;
+    let Some(s) = NineSlice::of(n) else { return Ok(()) };
+    let [_, _, aw, ah] = store::shown_box(&n.plugin_data, sprite);
     let (old, k) = (f64::from(old.max(1)), f64::from(sprite.scale.max(1)));
     let insets = s.insets.map(|v| (v / old).round() * k);
-    let base = (f64::from(sprite.width) * k, f64::from(sprite.height) * k);
+    let base = (f64::from(aw) * k, f64::from(ah) * k);
     put_slice(doc, id, sprite, NineSlice { insets, base }.clamped(), Pad::Keep(k / old))
 }
 

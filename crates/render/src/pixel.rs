@@ -91,7 +91,8 @@ pub fn picture(src: &Node, shown: &Shown) -> Option<Arc<Pixmap>> {
     {
         return Some(p.clone());
     }
-    let frame = store::frame_image(&src.plugin_data, &shown.sprite, shown.frame)?;
+    // Graybox G16.7: the art round its used pixels (the layer hugs them outside Pixel mode).
+    let frame = store::shown_image(&src.plugin_data, &shown.sprite, shown.frame)?;
     let fitted = resize::fit(&frame, shown.size, shown.sprite.resize, shown.slice)?;
     let pm = Arc::new(to_pixmap(&fitted)?);
     if let Ok(mut c) = cache().lock() {

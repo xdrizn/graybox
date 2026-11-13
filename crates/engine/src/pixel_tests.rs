@@ -9,11 +9,13 @@ use crate::Session;
 use crate::cmd::file::{file_bytes, load_bytes};
 
 mod anim;
+mod board;
 mod font;
 mod io;
 mod kit;
 mod perf;
 mod tools;
+mod trim;
 
 fn ex(s: &mut Session, command: &str, params: Value) -> Value {
     s.execute(command, &params).unwrap()
@@ -108,8 +110,9 @@ fn the_image_fill_follows_the_art() {
     assert_ne!(before, after);
     let bytes = s.doc().unwrap().images[&after].bytes.clone();
     let c = figcraft_pixel::Canvas::from_png(&bytes).unwrap();
-    assert_eq!((c.width(), c.height()), (8, 8), "one image pixel per art pixel");
-    assert_eq!(c.get(2, 2), Some([0x12, 0x34, 0x56, 255]));
+    // One image pixel per art pixel, round the pixels drawn (G16.7: the layer hugs them).
+    assert_eq!((c.width(), c.height()), (1, 1));
+    assert_eq!(c.get(0, 0), Some([0x12, 0x34, 0x56, 255]));
 }
 
 #[test]

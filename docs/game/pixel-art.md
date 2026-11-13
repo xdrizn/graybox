@@ -21,6 +21,9 @@ Graybox desenha pixel art direto no canvas, para UI de jogo:
   sprites, clips e Animator). Importa PNG ou sheet cortada em frames.
 - **Fontes pixel**: desenhe as letras numa "folha de glifos" e use como fonte em qualquer texto.
 - **Claude**: peça no chat "desenha um ícone 16×16 de moeda" — ele usa `pixel.paint`.
+- **Quadro (board)**: no modo Pixel o W/H do painel é o tamanho do quadro em pixels de arte;
+  digite ou arraste as bordas para crescer ou cortar (Alt: pelo centro). Fora do modo Pixel a camada
+  abraça só os pixels desenhados, e W/H são de camada normal.
 
 The rest of this guide is in English, like the other docs in the repository.
 
@@ -37,6 +40,14 @@ a sprite: a grid of art pixels with its own layers, frames, tags and palette. Ea
   Import. While a sprite is edited it also lists the sprite's layers and Palette (Import… makes
   colour styles from a `.gpl` or `.hex` file; Save… writes the sprite's colours as `.gpl`). The
   section comes last, after Effects, and folds away with its arrow.
+- **The board and the layer.** In Pixel mode the layer is a board: the Design panel's W and H are
+  its size in art pixels. Type a size, or drag the board's sides or corners, to add or cut art
+  pixels on that side (Alt: on both sides, from the centre); the art stays where it is and the scale
+  stays. Outside Pixel mode the layer hugs the pixels it uses (all frames, visible layers): its box
+  is the box round them, where they are on the page, so leaving Pixel mode never moves the art. An
+  empty board keeps the board's size. In Design its W and H are a layer's, and resizing it grows
+  the trimmed art the way the section says (9-slice, Edges, Tile, Middle). The Pixel art section
+  shows the board's size ("Board: 32 × 32 art pixels").
 - The layer's image fill is the frame at rest, so files opened elsewhere still show the art.
 
 ## Pixel mode
@@ -74,7 +85,7 @@ with **Done**, `Esc` or `Enter`.
 
 - **9-slice** on a pixel layer cuts on whole art pixels; the corners stay and the edges and middle
   repeat (or stretch) by whole pixels, so a button frame grows without blurring. On a frame with
-  auto layout the cuts can be its padding.
+  auto layout the cuts can be its padding. The cuts are measured on the trimmed art.
 - **Pixel text**: any text layer, drawn sharp on the art-pixel grid of the pixel art around it.
 - **Pixel button**: a component set with Default, Hover and Pressed states that grows with its label.
 - **Palette swap**: in Pixel colors, pick a colour, then **As variant** makes a new variant
