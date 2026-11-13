@@ -437,6 +437,9 @@ fn every_command_survives_junk_params() {
         json!({"id": 1, "parent": "x", "index": -1, "subpages": [], "collapsed": {"x": 1}}),
         json!({"id": 1, "parent": 1, "index": 1e308, "subpages": "yes", "collapsed": null}),
         json!({"id": u64::MAX, "parent": u64::MAX, "index": u64::MAX, "subpages": true}),
+        // Graybox: page icons (page.set_icon) as junk.
+        json!({"icon": {"x": 1}}),
+        json!({"id": 1, "icon": "\u{0}".repeat(5000)}),
         // Prototype expressions and gamepad keys as junk.
         json!({"id": -5, "expression": "x[\u{0}", "expr": {"op": {"op": "add", "args": [1]}}, "trigger": {"type": "keyPress", "key": "Gamepad \u{0}"}}),
         json!({"id": 1, "expr": {"inMode": {"variable": [], "mode": 1e308}}, "trigger": {"type": "keyPress", "key": 7}}),

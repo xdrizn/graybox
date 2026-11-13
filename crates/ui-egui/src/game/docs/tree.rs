@@ -9,15 +9,12 @@ use serde_json::{Value, json};
 
 use super::state::{self, State, Target};
 use crate::a11y;
+use crate::game::emoji_picker;
 use crate::game::tree_list::{self, DragEnd};
 use crate::i18n::{tr, trf, trn};
 use crate::icons::{self, Icon};
 use crate::theme::{Tokens, regular, semibold};
 use crate::{FigApp, widgets};
-
-/// The icons a document can wear: simple symbols and emoji (the person can pick any of them).
-pub(super) const ICONS: [&str; 24] =
-    ["📄", "📝", "📋", "📌", "📎", "⭐", "✅", "⚠", "💡", "🎮", "🎨", "🧩", "🔒", "📦", "🗂", "🎯", "🚀", "❤", "🔥", "👥", "📅", "🔧", "📈", "❓"];
 
 /// What a title shows when it is empty.
 pub(super) fn shown_title(title: &str) -> &str {
@@ -141,12 +138,17 @@ fn row_ui(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, row: &Row, 
     if row.has_children && tree_list::chevron(ui, t, &f, row.expanded) && !st.expanded.remove(&row.id) {
         st.expanded.insert(row.id);
     }
-    // The icon.
+    // The icon: lit under the pointer, a double-click on it opens the emoji picker.
+    // Keyed by the document, not the row's place (see the Pages list).
+    let picker = egui::Id::unique(("doc_emoji", row.id.0));
+    let centre = tree_list::icon_centre(&f);
+    let busy = st.drag.is_some() || st.renaming == Some(row.id);
+    let icon_resp = emoji_picker::hot_icon(ui, resp.id.with("icon"), centre, busy);
     let ink = if dragging { t.text_tertiary } else { t.icon };
-    if row.icon.is_empty() {
-        tree_list::paint_icon(ui, &f, Icon::Document, ink);
-    } else {
-        tree_list::paint_glyph(ui, &f, &row.icon, ink);
+    tree_list::paint_glyph_or(ui, &f, &row.icon, Icon::Document, ink);
+    let on_icon = !busy && emoji_picker::double_clicked_icon(ui, &resp, centre);
+    if let Some(icon) = emoji_picker::popup(ui, &icon_resp, picker, on_icon, &row.icon) {
+        app.run("doc.set_icon", json!({"id": row.id.0, "icon": icon}));
     }
     // The buttons at the right end, while the pointer is on the row (or its menu is open).
     let menu_id = resp.id.with("menu");
@@ -178,7 +180,7 @@ fn row_ui(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, row: &Row, 
     if st.renaming != Some(row.id) && resp.clicked() && !on_buttons {
         st.open = Some(row.id);
     }
-    if st.renaming != Some(row.id) && resp.double_clicked() && !on_buttons {
+    if st.renaming != Some(row.id) && resp.double_clicked() && !on_buttons && !on_icon {
         st.renaming = Some(row.id);
         st.rename_start = true;
     }
@@ -187,13 +189,13 @@ fn row_ui(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, row: &Row, 
     }
     // The menu: from the dots button or a secondary click on the row.
     if let Some(dots) = more {
-        crate::right::menu_popup(&dots).id(menu_id).show(|ui| menu_content(app, ui, st, row));
+        crate::right::menu_popup(&dots).id(menu_id).show(|ui| menu_content(app, ui, st, row, picker));
     }
-    crate::right::context_popup(&resp).id(menu_id.with("ctx")).show(|ui| menu_content(app, ui, st, row));
+    crate::right::context_popup(&resp).id(menu_id.with("ctx")).show(|ui| menu_content(app, ui, st, row, picker));
     rect
 }
 
-fn menu_content(app: &mut FigApp, ui: &mut Ui, st: &mut State, row: &Row) {
+fn menu_content(app: &mut FigApp, ui: &mut Ui, st: &mut State, row: &Row, picker: egui::Id) {
     use crate::right::menu_item;
     ui.set_min_width(220.0);
     if menu_item(ui, tr("Rename"), "") {
@@ -223,9 +225,8 @@ fn menu_content(app: &mut FigApp, ui: &mut Ui, st: &mut State, row: &Row) {
         ui.close();
     }
     ui.add_space(4.0);
-    widgets::label(ui, tr("Icon"), Tokens::get(ui.ctx()).text_secondary);
-    if let Some(icon) = icon_grid(ui, &row.icon) {
-        app.run("doc.set_icon", json!({"id": row.id.0, "icon": icon}));
+    if menu_item(ui, tr("Change the icon…"), "") {
+        emoji_picker::request(ui.ctx(), picker);
         ui.close();
     }
     ui.add_space(4.0);
@@ -240,35 +241,6 @@ impl Row {
     fn parent_known(&self) -> bool {
         self.depth > 0
     }
-}
-
-/// The icons to pick from; returns the picked one (empty text: none).
-fn icon_grid(ui: &mut Ui, current: &str) -> Option<String> {
-    let t = Tokens::get(ui.ctx());
-    let mut picked = None;
-    const COLS: usize = 8;
-    for line in ICONS.chunks(COLS) {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
-            for icon in line {
-                let (r, resp) = ui.allocate_exact_size(vec2(26.0, 26.0), Sense::click());
-                a11y::button(&resp, icon);
-                if resp.hovered() {
-                    ui.painter().rect_filled(r, CornerRadius::same(4), t.menu_hover);
-                } else if *icon == current {
-                    ui.painter().rect_filled(r, CornerRadius::same(4), t.selected_row);
-                }
-                ui.painter().text(r.center(), Align2::CENTER_CENTER, *icon, regular(14.0), if resp.hovered() { t.menu_text } else { t.text });
-                if resp.clicked() {
-                    picked = Some((*icon).to_string());
-                }
-            }
-        });
-    }
-    if !current.is_empty() && crate::right::menu_item(ui, tr("Remove the icon"), "") {
-        picked = Some(String::new());
-    }
-    picked
 }
 
 /// While a row is dragged: show where it would land, and move it when the pointer is let go.

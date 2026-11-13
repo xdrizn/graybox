@@ -194,3 +194,40 @@ fn nesting_and_collapsing_survive_a_save_and_load_and_an_old_file_opens_flat() {
     assert!(old.page_tree.is_empty());
     assert_eq!(old.pages, d.pages);
 }
+
+#[test]
+fn a_page_icon_is_kept_apart_from_its_name_and_survives_a_save() {
+    let (mut d, ids) = five();
+    let a = ids[0];
+    let name = d.node(a).unwrap().name.clone();
+    assert!(d.set_page_icon(a, "\u{1F3AE}"));
+    assert_eq!(d.page_icon(a), Some("\u{1F3AE}"));
+    assert_eq!(d.node(a).unwrap().name, name, "the name is untouched");
+    assert!(!d.set_page_icon(a, "\u{1F3AE}"), "the same icon again changes nothing");
+    let json = serde_json::to_string(&d).unwrap();
+    let mut back: Document = serde_json::from_str(&json).unwrap();
+    back.repair();
+    assert_eq!(back.page_icon(a), Some("\u{1F3AE}"));
+    // Empty text clears it, and a file with no nesting and no icon writes no key.
+    assert!(d.set_page_icon(a, "  "));
+    assert_eq!(d.page_icon(a), None);
+    assert!(!serde_json::to_string(&d).unwrap().contains("page_tree"));
+    // Not a page: nothing happens.
+    assert!(!d.set_page_icon(NodeId(999_999), "x"));
+}
+
+#[test]
+fn icons_from_a_hand_edited_file_are_cleaned() {
+    let (mut d, ids) = five();
+    d.page_tree.icons.insert(ids[0], "a\u{0}b".into());
+    d.page_tree.icons.insert(ids[1], "\u{1F600}".repeat(40));
+    d.page_tree.icons.insert(ids[2], "   ".into());
+    d.page_tree.icons.insert(NodeId(999_999), "x".into());
+    assert!(!d.page_tree_is_settled());
+    d.settle_pages();
+    assert_eq!(d.page_icon(ids[0]), Some("ab"));
+    assert_eq!(d.page_icon(ids[1]).map(|s| s.chars().count()), Some(crate::page_tree::MAX_PAGE_ICON));
+    assert_eq!(d.page_icon(ids[2]), None);
+    assert!(!d.page_tree.icons.contains_key(&NodeId(999_999)), "an icon of a page that is gone is forgotten");
+    assert!(d.page_tree_is_settled());
+}

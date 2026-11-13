@@ -15,6 +15,7 @@ use figcraft_doc::{Document, NodeId};
 use serde_json::json;
 
 use crate::a11y;
+use crate::game::emoji_picker;
 use crate::game::tree_list::{self, DragEnd};
 use crate::i18n::{tr, trf, trn};
 use crate::icons::Icon;
@@ -28,6 +29,8 @@ struct Row {
     id: NodeId,
     depth: usize,
     name: String,
+    /// The emoji the page wears in place of the page icon (empty: none).
+    icon: String,
     divider: bool,
     has_children: bool,
     expanded: bool,
@@ -45,6 +48,7 @@ fn rows(doc: &Document, filter: &str) -> Vec<Row> {
     for &id in &doc.pages {
         let Some(node) = doc.node(id) else { continue };
         let divider = doc.is_divider(id);
+        let icon = doc.page_icon(id).unwrap_or_default().to_string();
         // The list is the tree in order, so a page's parent comes before it; if a file says otherwise
         // the page is shown at the top level.
         let up = parent_of(id).filter(|p| depth.contains_key(p));
@@ -57,12 +61,12 @@ fn rows(doc: &Document, filter: &str) -> Vec<Row> {
         }
         if !filter.is_empty() {
             if !divider && node.name.to_lowercase().contains(filter) {
-                out.push(Row { id, depth: 0, name: node.name.clone(), divider, has_children: false, expanded: false });
+                out.push(Row { id, depth: 0, name: node.name.clone(), icon, divider, has_children: false, expanded: false });
             }
         } else if !hidden.contains(&id) {
             let has_children = with_children.contains(&id);
             let expanded = has_children && !doc.page_tree.collapsed.contains(&id);
-            out.push(Row { id, depth: d, name: node.name.clone(), divider, has_children, expanded });
+            out.push(Row { id, depth: d, name: node.name.clone(), icon, divider, has_children, expanded });
         }
     }
     out
@@ -237,9 +241,20 @@ fn row_ui(app: &mut FigApp, ui: &mut Ui, c: &RowCtx, row: &Row, out: &mut Out) -
     if row.has_children && tree_list::chevron(ui, t, &f, row.expanded) {
         app.run("page.collapse", json!({"id": id, "collapsed": row.expanded}));
     }
+    // The icon: lit under the pointer, a double-click on it opens the emoji picker.
+    let mut on_icon = false;
+    // Keyed by the page, not the row's place: a list that changes while the picker is open never sends the pick to another page.
+    let picker = Id::unique(("page_emoji", id));
     if !divider {
+        let centre = tree_list::icon_centre(&f);
+        let busy = c.dev || c.drag.is_some() || renaming;
+        let icon_resp = emoji_picker::hot_icon(ui, resp.id.with("icon"), centre, busy);
         let ink = if c.drag == Some(id) { t.text_tertiary } else { t.icon };
-        tree_list::paint_icon(ui, &f, Icon::Page, ink);
+        tree_list::paint_glyph_or(ui, &f, &row.icon, Icon::Page, ink);
+        on_icon = !busy && emoji_picker::double_clicked_icon(ui, &resp, centre);
+        if let Some(icon) = emoji_picker::popup(ui, &icon_resp, picker, on_icon, &row.icon) {
+            app.run("page.set_icon", json!({"id": id, "icon": icon}));
+        }
     }
     // The buttons at the end, while the pointer is on the row (or its menu is open).
     let menu_id = resp.id.with("menu");
@@ -273,7 +288,7 @@ fn row_ui(app: &mut FigApp, ui: &mut Ui, c: &RowCtx, row: &Row, out: &mut Out) -
         app.ui.pages_focus = Some(c.uid);
         app.ui.layers_focus = false;
     }
-    if resp.double_clicked() && !on_buttons && !crate::menus::dev_mode_refuses(app, "page.rename") {
+    if resp.double_clicked() && !on_buttons && !on_icon && !crate::menus::dev_mode_refuses(app, "page.rename") {
         app.ui.rename_page = Some((id, row.name.clone()));
         // The field takes the focus next frame, once it's drawn: focusing it now would put a node
         // that isn't there yet in the screen reader tree, which AccessKit aborts on.
@@ -281,13 +296,13 @@ fn row_ui(app: &mut FigApp, ui: &mut Ui, c: &RowCtx, row: &Row, out: &mut Out) -
     }
     // The menu: from the dots button or a secondary click on the row.
     if let Some(dots) = buttons.dots {
-        crate::right::menu_popup(&dots).id(menu_id).show(|ui| menu_content(app, ui, c, row));
+        crate::right::menu_popup(&dots).id(menu_id).show(|ui| menu_content(app, ui, c, row, picker));
     }
-    crate::right::context_popup(&resp).id(menu_id.with("ctx")).show(|ui| menu_content(app, ui, c, row));
+    crate::right::context_popup(&resp).id(menu_id.with("ctx")).show(|ui| menu_content(app, ui, c, row, picker));
     f.rect
 }
 
-fn menu_content(app: &mut FigApp, ui: &mut Ui, c: &RowCtx, row: &Row) {
+fn menu_content(app: &mut FigApp, ui: &mut Ui, c: &RowCtx, row: &Row, picker: Id) {
     use crate::right::menu_item;
     let id = row.id;
     ui.set_min_width(220.0);
@@ -300,6 +315,12 @@ fn menu_content(app: &mut FigApp, ui: &mut Ui, c: &RowCtx, row: &Row) {
     }
     if !row.divider && menu_item(ui, tr("Add subpage"), "") {
         add_subpage(app, c.uid, id);
+        ui.close();
+    }
+    if !row.divider && menu_item(ui, tr("Change the icon…"), "") {
+        if !crate::menus::dev_mode_refuses(app, "page.set_icon") {
+            emoji_picker::request(ui.ctx(), picker);
+        }
         ui.close();
     }
     if row.depth > 0 && !c.filtering && menu_item(ui, tr("Move out"), "") {

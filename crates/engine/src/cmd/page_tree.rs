@@ -2,6 +2,7 @@
 //! canvas. The list order (`doc.pages`) is the tree walked top to bottom, so the next/previous page
 //! shortcuts, the page menus and the exports follow it. The data lives in `figcraft_doc::page_tree`.
 
+use figcraft_doc::page_tree::MAX_PAGE_ICON;
 use figcraft_doc::{Document, NodeId};
 use serde_json::{Value, json};
 
@@ -54,6 +55,9 @@ pub(super) fn before_delete(doc: &mut Document, page: NodeId, with_subpages: boo
 /// `page.duplicate`: the copy sits in the page its source is in, and shows.
 pub(super) fn place_copy(doc: &mut Document, src: NodeId, copy: NodeId) {
     doc.nest_like(copy, src);
+    if let Some(icon) = doc.page_icon(src).map(str::to_string) {
+        doc.set_page_icon(copy, &icon);
+    }
     doc.reveal_page(copy);
 }
 
@@ -111,14 +115,31 @@ pub fn specs() -> Vec<CommandSpec> {
             reveal(s, page)?;
             ok()
         }),
-        spec!("page.tree", "List pages as a tree", "{} → [{id, name, parent, depth, collapsed, divider}] in list order", false, |s, _| {
+        spec!(
+            "page.set_icon",
+            "Set page icon",
+            "{id? (default: the open page), icon (an emoji or short symbol shown in the Pages list; empty removes it)}",
+            true,
+            |s, p| {
+                let page = target(s, "page.set_icon", p)?;
+                let Some(icon) = p.get("icon").and_then(Value::as_str) else {
+                    return Err(bad("page.set_icon", "icon must be text (empty removes it)"));
+                };
+                if icon.chars().count() > MAX_PAGE_ICON || icon.chars().any(char::is_control) {
+                    return Err(bad("page.set_icon", "an icon is one emoji or a short symbol"));
+                }
+                s.doc_mut()?.set_page_icon(page, icon);
+                ok()
+            }
+        ),
+        spec!("page.tree", "List pages as a tree", "{} → [{id, name, icon, parent, depth, collapsed, divider}] in list order", false, |s, _| {
             let doc = s.doc()?;
             Ok(Value::Array(
                 doc.pages
                     .iter()
                     .filter_map(|pid| doc.node(*pid))
                     .map(|n| {
-                        json!({"id": n.id, "name": n.name, "parent": doc.page_parent(n.id), "depth": doc.page_depth(n.id),
+                        json!({"id": n.id, "name": n.name, "icon": doc.page_icon(n.id), "parent": doc.page_parent(n.id), "depth": doc.page_depth(n.id),
                                "collapsed": doc.page_tree.collapsed.contains(&n.id), "divider": doc.is_divider(n.id)})
                     })
                     .collect(),

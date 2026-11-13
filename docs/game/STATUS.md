@@ -113,6 +113,24 @@
   hand; the widow fix could leave an orphan; the PDF was laid out twice; list numbers of 10 and more
   wrapped onto two lines; the Markdown result reported `pages: null`. Skipped: a card pasted into another
   file follows a document of the same id there.
+- G13.6 (2026-11-13): emoji on page and document icons. A double-click on the small icon at the left
+  of a row in the Pages list or the Documents tree (lit under the pointer, with a tip) opens an emoji
+  picker; the row menu's "Change the icon…" opens it too. The picked emoji replaces the icon; "Remove
+  the icon" brings the built-in one back. One picker for both (`crates/ui-egui/src/game/emoji_picker.rs`,
+  ours): 96 emoji and symbols in six groups (Pages, Game, Work, People, Nature, Shapes), drawn with
+  egui's monochrome emoji font. Only emoji the app's fonts can draw are offered, and a row whose icon
+  the fonts cannot draw (a hand-edited file, Claude) shows the built-in icon, so never a box; a test
+  checks every emoji on offer. Nine of the first choices, and the document icon list of G13.1 (its
+  🗂), were boxes and were replaced. A page's icon is Graybox data saved in the file under
+  `page_tree.icons`, not in the page name (`Document::page_icon`, `set_page_icon`; cleaned and capped at
+  16 characters when a file loads, forgotten when its page is deleted, kept by Duplicate page). Command
+  `page.set_icon {id?, icon}` (undoable; empty removes); `page.tree` lists `icon`. Tests:
+  `page_tree_tests.rs` (doc and engine), `game/page_icon_tests.rs` (UI).
+  Checked in the real app on a scratch file: the hover state and tip, the picker from a double-click
+  on a page icon and from a document's menu, the emoji in both lists; screenshots sent to Adriel.
+  Not checked: colour emoji (egui's font is monochrome), emoji in a document card or PDF title (G13.4).
+  Code review (high) caught and fixed: the picker was keyed by the row's place, so a list that changed
+  while it was open could send the pick to another page (now keyed by the page or document).
 - G11.5, rest (2026-11-13, "continue todos os trabalhos"): foes, damage, arrows, and the variables
   and events the designed UI uses.
   - Foes (`tps/foes.rs`): three training dummies in a row 8 m in front of the start and five husks
@@ -1040,6 +1058,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     `mod docs_page; mod docs_render;` and the test mods `docs_export_tests`, `docs_page_tests`.
     `crates/engine/src/tests.rs`: `"doc.export"` in the junk sweep's skip list (it writes files). Locales:
     "Put on the canvas", "Export as PDF…", "Export as Markdown…", "Document put on the canvas".
+  - G13.6: `crates/ui-egui/src/game/mod.rs`: `pub(crate) mod emoji_picker;` and `mod page_icon_tests;`.
+    `crates/engine/src/tests.rs`: two page-icon junk entries. Locales: "Change the icon…", "Double-click
+    to change the icon", "Game", "Work", "People", "Nature" (the unused "Icon" removed).
 - Nested pages (G9; `crates/doc/src/page_tree.rs`, `crates/engine/src/cmd/page_tree.rs`,
   `crates/ui-egui/src/game/tree_list.rs` and `page_list.rs` are ours):
   - `crates/doc/src/lib.rs`: `pub mod page_tree;`, `Document::page_tree` (serde default, skipped when

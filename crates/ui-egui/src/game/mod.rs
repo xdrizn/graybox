@@ -44,6 +44,10 @@ pub(crate) mod pixel;
 pub(crate) mod tree_list;
 
 /// Platform hosts read these markers inside the browser's trusted input event, before egui's
+// Graybox: the emoji picker of page and document icons (G9, G13).
+pub(crate) mod emoji_picker;
+#[cfg(test)]
+mod page_icon_tests;
 /// next frame. Fullscreen and pointer lock cannot reliably be requested from that later frame.
 pub const PLAY_BUTTON_RECT: &str = "greybox.play.gesture.rect";
 pub const PLAY_KEY_ENABLED: &str = "greybox.play.gesture.enabled";

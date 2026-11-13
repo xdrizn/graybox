@@ -20,6 +20,8 @@ use crate::{Document, NodeId};
 
 /// Deepest a page can be nested (a top-level page is 0).
 pub const MAX_PAGE_DEPTH: usize = 32;
+/// Longest page icon, in characters (one emoji can be several, joined).
+pub const MAX_PAGE_ICON: usize = 16;
 
 /// The nesting of the pages list.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -31,12 +33,20 @@ pub struct PageTree {
     /// Pages whose subpages are hidden in the list.
     #[serde(skip_serializing_if = "BTreeSet::is_empty")]
     pub collapsed: BTreeSet<NodeId>,
+    /// The emoji or symbol shown in place of a page's icon in the list (the name stays as it is).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub icons: BTreeMap<NodeId, String>,
+}
+
+/// An icon as it is kept: no control characters, trimmed, at most [`MAX_PAGE_ICON`] characters.
+fn clean_icon(icon: &str) -> String {
+    icon.chars().filter(|c| !c.is_control()).take(MAX_PAGE_ICON).collect::<String>().trim().to_string()
 }
 
 impl PageTree {
     /// Whether nothing is nested or collapsed (the file then has no `page_tree` key).
     pub fn is_empty(&self) -> bool {
-        self.parents.is_empty() && self.collapsed.is_empty()
+        self.parents.is_empty() && self.collapsed.is_empty() && self.icons.is_empty()
     }
 }
 
@@ -137,6 +147,23 @@ impl Document {
             return false;
         }
         if collapsed { self.page_tree.collapsed.insert(id) } else { self.page_tree.collapsed.remove(&id) }
+    }
+
+    /// The emoji or symbol page `id` wears in the list, if any.
+    pub fn page_icon(&self, id: NodeId) -> Option<&str> {
+        self.page_tree.icons.get(&id).map(String::as_str).filter(|s| !s.is_empty())
+    }
+
+    /// Give page `id` an icon (blank text removes it). True when that changed anything.
+    pub fn set_page_icon(&mut self, id: NodeId, icon: &str) -> bool {
+        if !self.pages.contains(&id) {
+            return false;
+        }
+        let icon = clean_icon(icon);
+        if icon.is_empty() {
+            return self.page_tree.icons.remove(&id).is_some();
+        }
+        self.page_tree.icons.insert(id, icon.clone()) != Some(icon)
     }
 
     /// Expand every page above `id`, so that `id` shows in the list. True when that changed anything.
@@ -257,6 +284,11 @@ impl Document {
         let listed: BTreeSet<NodeId> = self.pages.iter().copied().collect();
         tree.parents.retain(|c, p| c != p && listed.contains(c) && listed.contains(p));
         tree.collapsed.retain(|p| listed.contains(p));
+        tree.icons.retain(|p, _| listed.contains(p));
+        for icon in tree.icons.values_mut() {
+            *icon = clean_icon(icon);
+        }
+        tree.icons.retain(|_, icon| !icon.is_empty());
         // A parent chain that comes back to its start is a cycle: the page that starts it goes to the top.
         for id in self.pages.iter().copied() {
             let mut cur = id;

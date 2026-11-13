@@ -243,3 +243,37 @@ fn nest_commands_survive_junk() {
         }
     }
 }
+
+#[test]
+fn a_page_wears_an_emoji_that_undo_takes_back_and_a_save_keeps() {
+    let (mut s, ids) = five();
+    let a = ids[0];
+    ex(&mut s, "page.set_icon", json!({"id": a, "icon": "\u{1F3AE}"}));
+    assert_eq!(s.doc().unwrap().page_icon(figcraft_doc::NodeId(a)), Some("\u{1F3AE}"));
+    assert_eq!(names(&s)[0], "A", "the name is untouched");
+    let tree = ex(&mut s, "page.tree", json!({}));
+    assert_eq!(tree[0]["icon"].as_str(), Some("\u{1F3AE}"));
+    assert!(tree[1]["icon"].is_null());
+    // Saved and opened again.
+    let bytes = file_bytes(s.ds().unwrap()).unwrap();
+    let (back, _) = load_bytes(&bytes, "icons.figcraft").unwrap();
+    assert_eq!(back.page_icon(figcraft_doc::NodeId(a)), Some("\u{1F3AE}"));
+    // One undo takes it back; an empty icon removes it.
+    s.undo().unwrap();
+    assert_eq!(s.doc().unwrap().page_icon(figcraft_doc::NodeId(a)), None);
+    ex(&mut s, "page.set_icon", json!({"icon": "\u{2B50}"}));
+    assert_eq!(s.doc().unwrap().page_icon(s.page().unwrap()), Some("\u{2B50}"), "the open page by default");
+    ex(&mut s, "page.set_icon", json!({"icon": ""}));
+    assert_eq!(s.doc().unwrap().page_icon(s.page().unwrap()), None);
+}
+
+#[test]
+fn a_duplicated_page_keeps_its_icon_and_bad_icons_are_refused() {
+    let (mut s, ids) = five();
+    ex(&mut s, "page.set_icon", json!({"id": ids[1], "icon": "\u{1F4D6}"}));
+    let copy = ex(&mut s, "page.duplicate", json!({"id": ids[1]}))["id"].as_u64().unwrap();
+    assert_eq!(s.doc().unwrap().page_icon(figcraft_doc::NodeId(copy)), Some("\u{1F4D6}"));
+    assert!(refused(&mut s, "page.set_icon", json!({"id": ids[0]})).contains("icon"));
+    assert!(refused(&mut s, "page.set_icon", json!({"id": ids[0], "icon": "x".repeat(40)})).contains("icon"));
+    assert!(refused(&mut s, "page.set_icon", json!({"id": 999_999, "icon": "x"})).contains("not a page"));
+}

@@ -104,9 +104,14 @@ pub(crate) fn paint_icon(ui: &Ui, f: &Frame, icon: Icon, ink: Color32) {
     icons::paint(ui.painter(), Rect::from_center_size(icon_centre(f), vec2(16.0, 16.0)), icon, ink);
 }
 
-/// An emoji or symbol in the icon column.
-pub(crate) fn paint_glyph(ui: &Ui, f: &Frame, glyph: &str, ink: Color32) {
-    ui.painter().text(icon_centre(f), Align2::CENTER_CENTER, glyph, regular(14.0), ink);
+/// The row's emoji or symbol in the icon column, or the built-in `fallback` when there is none or the
+/// fonts cannot draw it (never a box).
+pub(crate) fn paint_glyph_or(ui: &Ui, f: &Frame, glyph: &str, fallback: Icon, ink: Color32) {
+    if crate::game::emoji_picker::can_draw(ui.ctx(), glyph) {
+        ui.painter().text(icon_centre(f), Align2::CENTER_CENTER, glyph, regular(crate::game::emoji_picker::SIZE), ink);
+    } else {
+        paint_icon(ui, f, fallback, ink);
+    }
 }
 
 /// A button the size of the row's `+` and `…`.
