@@ -13,6 +13,8 @@ use crate::FigApp;
 pub(super) enum Target {
     Title,
     Block(BlockId),
+    /// A cell of a table block: row and column.
+    Cell(BlockId, usize, usize),
 }
 
 /// Text typed but not yet sent as a command: it is sent when the field loses focus, after a short

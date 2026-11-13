@@ -4,7 +4,7 @@
 //! version refuses all of them. The menus, the Actions palette, the CLI, MCP (Claude) and the control
 //! channel reach documents through these ids.
 
-use figcraft_doc::docs::{Block, BlockId, BlockKind, BlockStyle, DocError, DocId, Mark, Place, Run};
+use figcraft_doc::docs::{Block, BlockId, BlockKind, BlockStyle, DocError, DocId, Mark, Place, Run, TableOp};
 use serde_json::{Map, Value, json};
 
 use super::CommandSpec;
@@ -84,6 +84,20 @@ pub fn specs() -> Vec<CommandSpec> {
             "{doc, id, version?, from, to (a range of characters), mark (bold, italic, underline, strike, code, color, highlight, link), value? (#RRGGBB or #RRGGBBAA for color and highlight, a web address for link; omit to take it off), on? (bold…code: true or false; omit to toggle)}",
             true,
             |s, p| edit(s, p, format_text)
+        ),
+        spec!(
+            "doc.table.cell",
+            "Write in table cell",
+            "{doc, id (a table block), version?, row, col (from 0), text (plain; words that stay keep their looks)}",
+            true,
+            |s, p| edit(s, p, table_cell)
+        ),
+        spec!(
+            "doc.table.change",
+            "Change table",
+            "{doc, id (a table block), version?, op (insertRow, insertColumn, deleteRow, deleteColumn, header), at (a row or column from 0; required to delete; inserting past the end adds at the end, at the start when omitted), on? (header: true or false)}",
+            true,
+            |s, p| edit(s, p, table_change)
         ),
         spec!("doc.block.move", "Move block", "{doc, id, version?, parent? (a block id; omit or null for the top), index?}", true, |s, p| edit(
             s, p, move_block
@@ -512,6 +526,39 @@ fn format_text(s: &mut Session, p: &Value) -> Result<Value> {
         Some(_) => return Err(bad(cmd, "on must be true or false")),
     };
     s.doc_mut()?.docs.format_text(doc, version, id, from, to, &mark, on).map_err(|e| refuse(cmd, e))?;
+    Ok(json!({"ok": true}))
+}
+
+fn table_cell(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.table.cell";
+    let doc = doc_id(cmd, p, "doc")?;
+    let id = BlockId(uint(cmd, p, "id")?);
+    let version = opt_version(cmd, p)?;
+    let at = |key| uint(cmd, p, key).map(|n| usize::try_from(n).unwrap_or(usize::MAX));
+    let (row, col) = (at("row")?, at("col")?);
+    let words = text(cmd, p, "text")?.ok_or_else(|| bad(cmd, "text is required"))?;
+    s.doc_mut()?.docs.set_cell(doc, version, id, row, col, &words).map_err(|e| refuse(cmd, e))?;
+    Ok(json!({"ok": true}))
+}
+
+fn table_change(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.table.change";
+    let doc = doc_id(cmd, p, "doc")?;
+    let id = BlockId(uint(cmd, p, "id")?);
+    let version = opt_version(cmd, p)?;
+    let name = text(cmd, p, "op")?.ok_or_else(|| bad(cmd, "op is required: insertRow, insertColumn, deleteRow, deleteColumn or header"))?;
+    let at = opt_uint(cmd, p, "at")?.map(|n| usize::try_from(n).unwrap_or(usize::MAX));
+    if at.is_none() && name.starts_with("delete") {
+        return Err(bad(cmd, "at is required to delete a row or a column"));
+    }
+    let at = at.unwrap_or(0);
+    let on = match p.get("on") {
+        None | Some(Value::Null) => true,
+        Some(Value::Bool(b)) => *b,
+        Some(_) => return Err(bad(cmd, "on must be true or false")),
+    };
+    let op = TableOp::from_name(&name, at, on).ok_or_else(|| bad(cmd, format!("unknown op {name:?}")))?;
+    s.doc_mut()?.docs.change_table(doc, version, id, op).map_err(|e| refuse(cmd, e))?;
     Ok(json!({"ok": true}))
 }
 

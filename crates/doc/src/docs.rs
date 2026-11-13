@@ -24,8 +24,10 @@ use crate::NodeId;
 
 mod edit;
 mod format;
+mod table;
 pub use edit::{Merge, Split, split_runs};
 pub use format::{Mark, format_runs, has_mark};
+pub use table::TableOp;
 
 /// Most documents a file holds.
 pub const MAX_DOCS: usize = 5_000;

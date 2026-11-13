@@ -235,6 +235,8 @@ fn junk_parameters_are_refused_not_panicked_on() {
         "doc.block.merge",
         "doc.block.duplicate",
         "doc.block.format",
+        "doc.table.cell",
+        "doc.table.change",
     ] {
         for j in &junk {
             let _ = s.execute(cmd, j);
@@ -336,5 +338,45 @@ fn format_puts_bold_on_some_words_in_one_step_and_toggles_it_back() {
         json!({"doc": d, "id": b, "to": 3, "mark": "bold"}),
     ] {
         assert!(s.execute("doc.block.format", &bad).is_err(), "{bad}");
+    }
+}
+
+#[test]
+fn table_cells_rows_and_columns_change_one_undo_step_at_a_time() {
+    let mut s = Session::new();
+    let d = id_of(&ex(&mut s, "doc.create", json!({})));
+    let rows = json!([[[], []], [[], []]]);
+    let t = id_of(&ex(&mut s, "doc.block.insert", json!({"doc": d, "kind": {"type": "table", "table": {"rows": rows, "header": true}}})));
+    let undo = s.ds().unwrap().history.undo.len();
+    ex(&mut s, "doc.table.cell", json!({"doc": d, "id": t, "row": 0, "col": 1, "text": "Speed"}));
+    assert_eq!(s.ds().unwrap().history.undo.len(), undo + 1);
+    assert_eq!(blocks(&mut s, d)[0]["kind"]["table"]["rows"][0][1], json!([{"text": "Speed"}]));
+    ex(&mut s, "doc.table.change", json!({"doc": d, "id": t, "op": "insertRow", "at": 0}));
+    ex(&mut s, "doc.table.change", json!({"doc": d, "id": t, "op": "insertColumn", "at": 99}));
+    let table = blocks(&mut s, d)[0]["kind"]["table"].clone();
+    assert_eq!(table["rows"].as_array().unwrap().len(), 3);
+    assert_eq!(table["rows"][1][1], json!([{"text": "Speed"}]));
+    assert_eq!(table["rows"][1].as_array().unwrap().len(), 3);
+    ex(&mut s, "doc.table.change", json!({"doc": d, "id": t, "op": "header", "on": false}));
+    assert!(blocks(&mut s, d)[0]["kind"]["table"].get("header").is_none());
+    ex(&mut s, "edit.undo", json!({}));
+    assert_eq!(blocks(&mut s, d)[0]["kind"]["table"]["header"], true);
+    for bad in [
+        json!({"doc": d, "id": t, "row": 9, "col": 0, "text": "x"}),
+        json!({"doc": d, "id": t, "row": 0, "col": 0}),
+        json!({"doc": d, "id": t, "row": -1, "col": 0, "text": "x"}),
+    ] {
+        assert!(s.execute("doc.table.cell", &bad).is_err(), "{bad}");
+    }
+    for bad in [
+        json!({"doc": d, "id": t, "op": "explode"}),
+        json!({"doc": d, "id": t}),
+        json!({"doc": d, "id": t, "op": "deleteRow", "at": 50}),
+        // A delete names its row or column: none never means the first.
+        json!({"doc": d, "id": t, "op": "deleteRow"}),
+        json!({"doc": d, "id": t, "op": "deleteColumn"}),
+        json!({"doc": d, "id": t, "op": "header", "on": "yes"}),
+    ] {
+        assert!(s.execute("doc.table.change", &bad).is_err(), "{bad}");
     }
 }

@@ -370,6 +370,27 @@
     and lost the selection (a field given the keyboard reports no selection in that frame).
   - Not yet: Ctrl+B with nothing selected does not "type bold"; the per-frame copy of the runs could be
     shared (small cost in long documents).
+- G13.2, tables (2026-11-13): `/table` puts a table of three rows by three cells in the document, the
+  first row a header (semibold on a tinted row), and writing starts in its first cell. Tab and
+  Shift+Tab go to the next and previous cell, Enter to the cell below; past the last cell they add a
+  row. With the pointer near the table, a + bar under it adds a row and one on its right adds a column.
+  Right-click a cell: insert a row above or below, a column left or right, delete the row or the
+  column (never the last one), switch the header row. Words in cells keep their looks when edited.
+  Each change is one undo step through the new commands `doc.table.cell {doc, id, row, col, text}` and
+  `doc.table.change {doc, id, op, at, on?}` (also for MCP, the CLI and the control channel; a delete
+  must name its row or column).
+  - Code: `crates/doc/src/docs/table.rs` (the table edits, pure, with tests), the commands in
+    `crates/engine/src/cmd/docs.rs` (in the junk sweep), `crates/ui-egui/src/game/docs/table.rs` (the
+    grid, the cells, the + bars, the cell menu). Tests: `game/docs/table_tests.rs`.
+  - Checked in the real app: the table, padding in the cells, typing, Tab from the last cell adding a
+    row, the cell menu. Screenshots sent to Adriel.
+  - Review (high) caught and fixed: Ctrl+U and Ctrl+K in a cell deleted its words (egui's own keys);
+    Tab past a full table sent the keyboard to a row that was never added; `doc.table.change` with no
+    `at` deleted the first row. Found while checking in the app: the cells had no room around their
+    words (a field without its own frame ignores its margin).
+  - Not yet: bold and the other looks cannot be set inside a cell (the bar is for blocks only); arrow
+    keys do not move between cells; columns all share the width; the table is copied every frame
+    (small cost in big tables).
 - G11.6, the bow (2026-11-13, Adriel's changes): a click shoots from the hip, holding aim goes over the
   shoulder with a crosshair in the middle of the screen, and the shoulder button swaps sides.
   - Hip shot: a left click alone with the bow turns the hero to where the camera looks and shoots after
@@ -1379,6 +1400,7 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   - G13.2 `/` menu: no new hook. Locales: "Type “/” for blocks", "Blocks", "No results", "Toggle list".
   - G13.2 moving blocks: no new hook. Locales: "Click for the menu, drag to move" replaces "Turn into,
     duplicate, colour, delete".
+  - G13.2 tables: no new hook. Locales: "Header row", "Insert row above", "Insert row below", "Insert column left", "Insert column right", "Delete row", "Delete column".
   - G13.2 formatting words: no new hook. Locales: "Bold", "Highlight", "Paste a link".
 - Nested pages (G9; `crates/doc/src/page_tree.rs`, `crates/engine/src/cmd/page_tree.rs`,
   `crates/ui-egui/src/game/tree_list.rs` and `page_list.rs` are ours):

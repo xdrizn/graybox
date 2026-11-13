@@ -14,6 +14,7 @@ mod inline;
 mod sign;
 mod slash;
 mod state;
+mod table;
 mod tree;
 mod versions;
 
@@ -80,6 +81,8 @@ mod drag_tests;
 mod format_tests;
 #[cfg(test)]
 mod slash_tests;
+#[cfg(test)]
+mod table_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

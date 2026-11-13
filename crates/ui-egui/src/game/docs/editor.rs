@@ -3,7 +3,7 @@
 //! after a pause, so a burst of typing is one undo step.
 
 use egui::{Align, Align2, CornerRadius, Id, Key, Layout, Modifiers, Rect, Sense, Ui, UiBuilder, pos2, vec2};
-use figcraft_doc::docs::{Block, DocId};
+use figcraft_doc::docs::{Block, BlockKind, DocId};
 use serde_json::json;
 
 use super::blocks::{self, Look, View};
@@ -218,6 +218,15 @@ pub(super) fn commit(app: &mut FigApp, p: &Pending) {
                 app.run("doc.block.set", json!({"doc": p.doc.0, "id": b.0, "text": p.text}));
             }
         }
+        Target::Cell(b, row, col) => {
+            let current = doc.current().and_then(|v| v.block(b)).and_then(|blk| match &blk.kind {
+                BlockKind::Table { table } => Some(table.cell_text(row, col)),
+                _ => None,
+            });
+            if current.is_some_and(|c| c != p.text) {
+                app.run("doc.table.cell", json!({"doc": p.doc.0, "id": b.0, "row": row, "col": col, "text": p.text}));
+            }
+        }
     }
 }
 
@@ -227,6 +236,7 @@ fn settle(app: &mut FigApp, ctx: &egui::Context, st: &mut State, doc: DocId, now
     let field = match p.target {
         Target::Title => Id::unique(("gbx_doc_title", p.doc.0)),
         Target::Block(b) => Id::unique(("gbx_doc_block", p.doc.0, b.0)),
+        Target::Cell(b, row, col) => super::table::cell_id(p.doc, b, row, col),
     };
     let focused = ctx.memory(|m| m.has_focus(field));
     let idle = now - p.at;

@@ -7,7 +7,7 @@ use egui::{Id, Key, Modifiers, Pos2, Rect, Ui};
 use figcraft_doc::docs::{BlockId, DocId};
 use serde_json::json;
 
-use super::blocks::{add_block, place_after};
+use super::blocks::{add_block, first_field, kind_value, place_after};
 use super::editor::commit;
 use super::state::{State, Target};
 use crate::FigApp;
@@ -42,7 +42,7 @@ pub(super) enum Move {
 }
 
 /// What the menu lists: (label, kind, other words that find it).
-fn items() -> [(&'static str, &'static str, &'static str); 14] {
+fn items() -> [(&'static str, &'static str, &'static str); 15] {
     [
         (tr("Text"), "paragraph", "text paragraph plain"),
         (tr("Heading 1"), "heading1", "h1 heading title"),
@@ -55,6 +55,7 @@ fn items() -> [(&'static str, &'static str, &'static str); 14] {
         (tr("Callout"), "callout", "callout note tip"),
         (tr("Quote"), "quote", "quote citation"),
         (tr("Divider"), "divider", "divider line rule hr separator"),
+        (tr("Table"), "table", "table grid tabela"),
         (tr("Decision"), "decision", "decision decided"),
         (tr("Link"), "link", "link url web"),
         (tr("Signature"), "signature", "signature sign"),
@@ -234,13 +235,13 @@ fn pick(app: &mut FigApp, st: &mut State, doc: DocId, block: BlockId, text: &str
     }
     let rest: String = text.chars().take(at).chain(text.chars().skip(end)).collect();
     if rest.trim().is_empty() {
-        app.run("doc.block.turn_into", json!({"doc": doc.0, "id": block.0, "kind": kind, "text": ""}));
+        app.run("doc.block.turn_into", json!({"doc": doc.0, "id": block.0, "kind": kind_value(kind), "text": ""}));
         if kind == "divider" {
             // A line, and writing goes on below it.
             let place = place_after(app, doc, block);
             add_block(app, st, doc, place, "paragraph");
         } else {
-            st.focus = Some(Target::Block(block));
+            st.focus = Some(first_field(kind, block));
             st.caret = Some(0);
         }
         return;

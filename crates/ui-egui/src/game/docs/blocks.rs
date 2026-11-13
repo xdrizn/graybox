@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use egui::{Align2, Color32, CornerRadius, Id, Key, Modifiers, Rect, Sense, Shape, Stroke, Ui, pos2, vec2};
-use figcraft_doc::docs::{Block, BlockId, BlockKind, DocId, DocVersion, Run};
+use figcraft_doc::docs::{Block, BlockId, BlockKind, DocId, DocVersion, Run, Table};
 use serde_json::{Value, json};
 
 use super::editor::{commit, queue};
@@ -44,6 +44,8 @@ pub(super) enum Look {
     Divider,
     /// A signature slot (G13.7): the role it is for; the text is the name.
     Signature(String),
+    /// A table: its cells as the file has them.
+    Table(Table),
     /// A kind this editor cannot draw yet: its name, shown dim.
     Other(String),
 }
@@ -51,7 +53,7 @@ pub(super) enum Look {
 impl Look {
     /// Whether the block is written in (it has a text field).
     pub(super) fn writable(&self) -> bool {
-        !matches!(self, Self::Divider | Self::Signature(_) | Self::Other(_))
+        !matches!(self, Self::Divider | Self::Signature(_) | Self::Table(_) | Self::Other(_))
     }
 }
 
@@ -90,6 +92,7 @@ pub(super) fn flatten(blocks: &[Block], depth: usize, parent: Option<BlockId>, a
             BlockKind::Link { url } => Look::Link(url.clone()),
             BlockKind::Divider => Look::Divider,
             BlockKind::Signature { role } => Look::Signature(role.clone()),
+            BlockKind::Table { table } => Look::Table(table.clone()),
             k => Look::Other(k.name()),
         };
         let open = !matches!(look, Look::Toggle(false));
@@ -215,6 +218,7 @@ pub(super) fn block_ui(
             ui.painter().line_segment([pos2(r.min.x + indent, r.center().y), pos2(r.max.x, r.center().y)], Stroke::new(1.0, t.border_strong));
         }
         Look::Signature(role) => versions::signature_block(app, ui, t, doc, ver, v.id, &v.text, role, indent),
+        Look::Table(table) => super::table::show(app, ui, st, t, doc, v.id, table, col, indent, editable, now),
         Look::Other(name) => {
             let (r, _) = ui.allocate_exact_size(vec2(col.width() - indent, 30.0), Sense::hover());
             let r = Rect::from_min_max(pos2(r.min.x + indent, r.min.y), r.max);
@@ -758,7 +762,7 @@ fn act_on(app: &mut FigApp, st: &mut State, doc: DocId, views: &[View], index: u
 /// Add a block of `kind` at `place` (inside which block, at which index; the end of the top when
 /// `None`) and give it the keyboard.
 pub(super) fn add_block(app: &mut FigApp, st: &mut State, doc: DocId, place: Option<(Option<BlockId>, usize)>, kind: &str) {
-    let mut params = json!({"doc": doc.0, "kind": kind});
+    let mut params = json!({"doc": doc.0, "kind": kind_value(kind)});
     if let Some((parent, index)) = place {
         params["index"] = json!(index);
         if let Some(p) = parent {
@@ -766,9 +770,23 @@ pub(super) fn add_block(app: &mut FigApp, st: &mut State, doc: DocId, place: Opt
         }
     }
     if let Some(id) = app.run("doc.block.insert", params).and_then(|r| r.get("id").and_then(Value::as_u64)) {
-        st.focus = Some(Target::Block(BlockId(id)));
+        st.focus = Some(first_field(kind, BlockId(id)));
         st.caret = None;
     }
+}
+
+/// A kind named in a menu as the commands take it: a new table comes with three rows of three cells,
+/// the first a header.
+pub(super) fn kind_value(kind: &str) -> Value {
+    match kind {
+        "table" => json!({"type": "table", "table": {"rows": Table::blank(3, 3).rows, "header": true}}),
+        k => json!(k),
+    }
+}
+
+/// Where writing starts in a new block of `kind`: its words, or the first cell of a table.
+pub(super) fn first_field(kind: &str, id: BlockId) -> Target {
+    if kind == "table" { Target::Cell(id, 0, 0) } else { Target::Block(id) }
 }
 
 /// The kinds a block can be turned into, as the handle menu lists them.
