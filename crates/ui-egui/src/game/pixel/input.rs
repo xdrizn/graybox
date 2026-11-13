@@ -88,6 +88,12 @@ fn edit(app: &mut FigApp, ui: &egui::Ui, resp: &egui::Response, pos: Pos2, id: f
     };
     let (pressed2, pressed, down, mods) =
         ui.input(|i| (i.pointer.secondary_pressed(), i.pointer.primary_pressed(), i.pointer.any_down(), i.modifiers));
+    // The sprite's title above the board (G16.8): the canvas takes the press, finds the name label
+    // the title registered and selects or drags the layer, like a frame's own label.
+    if app.pixel.gesture.is_none() && super::title::hits(app, ui, id, &d.sprite, pos) {
+        app.pixel.hover = None;
+        return false;
+    }
     // A board's sides (G16.7): just outside its edge they drag to add or cut art pixels.
     if app.ui.picker.is_none() && super::edges::pointer(app, ui, resp, pos, id, &d.sprite, pressed, down) {
         return true;

@@ -47,6 +47,9 @@ a sprite: a grid of art pixels with its own layers, frames, tags and palette. Ea
   empty board keeps the board's size. In Design its W and H are a layer's, and resizing it grows
   the trimmed art the way the section says (9-slice, Edges, Tile, Middle). The Pixel art section
   shows the board's size ("Board: 32 × 32 art pixels").
+- **The sprite's title.** While a sprite is open its name sits just above the board's top-left
+  corner, like a frame's name on the canvas. Click it to select the layer, drag it to move the whole
+  sprite around the canvas. Closed, there is no title: the layer goes on hugging its pixels.
 - The layer's image fill is the frame at rest, so files opened elsewhere still show the art.
 
 ## Pixel mode

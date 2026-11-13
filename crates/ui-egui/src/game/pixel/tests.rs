@@ -615,6 +615,47 @@ fn dragging_a_boards_side_in_pixel_mode_adds_art_pixels_and_the_art_stays() {
     assert_eq!(undo_labels(&u).len(), before + 1, "one undo step");
 }
 
+/// The middle of the open sprite's title, from the name label it registered (G16.8).
+fn title_point(u: &Ui, id: u64) -> Option<Pos2> {
+    let (_, quad) = u.app.session.tool.labels.iter().find(|(i, _)| i.0 == id)?;
+    let screen: Vec<Pos2> = quad.iter().map(|p| u.app.to_screen(p.x, p.y)).collect();
+    Some(egui::Rect::from_points(&screen).center())
+}
+
+/// The open sprite is titled above the board's top-left corner, like a frame: the title is a name
+/// label, so pressing it selects the layer and dragging it moves the whole sprite (G16.8).
+#[test]
+fn the_open_sprites_title_selects_and_drags_the_layer() {
+    let (mut u, id) = editing();
+    u.app.session.execute("object.rename", &json!({"ids": [id], "name": "Coin"})).unwrap();
+    u.frame(vec![]);
+    let node = |u: &Ui| {
+        let doc = u.app.session.doc().unwrap();
+        let t = doc.world_transform(figcraft_doc::NodeId(id)).as_coeffs();
+        (t[4], t[5])
+    };
+    assert_eq!(node(&u), (0.0, 0.0));
+    let texts = painted_texts(&mut u);
+    assert!(texts.iter().any(|t| t == "Coin"), "the sprite's name is drawn above the board: {texts:?}");
+    let p = title_point(&u, id).expect("the open sprite has a name label");
+    // It sits above the board's top edge, over its left part.
+    let tl = u.app.to_screen(0.0, 0.0);
+    assert!(p.y < tl.y, "the title is above the board: {p:?} vs {tl:?}");
+    // A click on it leaves the layer selected and the sprite open.
+    press(&mut u, p, PointerButton::Primary, true);
+    press(&mut u, p, PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert_eq!(u.app.session.selection(), vec![figcraft_doc::NodeId(id)]);
+    assert_eq!(u.app.pixel.mode, Mode::Edit(figcraft_doc::NodeId(id)));
+    assert_eq!(node(&u), (0.0, 0.0), "a click moves nothing");
+    // A drag on it moves the whole sprite, and nothing is drawn on it.
+    let p = title_point(&u, id).expect("the label is still there");
+    drag_screen(&mut u, p, p + egui::vec2(40.0, 24.0));
+    assert_eq!(node(&u), (40.0, 24.0), "the title dragged the layer");
+    assert_eq!(u.app.pixel.mode, Mode::Edit(figcraft_doc::NodeId(id)), "the sprite stays open");
+    assert_eq!(pixel(&mut u, id, 0, 0), None, "no pixel was painted");
+}
+
 #[test]
 fn the_boards_size_in_art_pixels_shows_in_pixel_mode_only() {
     let (mut u, id) = editing();

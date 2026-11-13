@@ -25,6 +25,7 @@ mod pill;
 #[cfg(test)]
 mod tests;
 pub(crate) mod timeline;
+mod title;
 
 pub(crate) use draw::draw;
 pub(crate) use input::{input, key, off_canvas, paste_events};
