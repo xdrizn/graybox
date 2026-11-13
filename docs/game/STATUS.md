@@ -3,6 +3,53 @@
 **Current milestone:** G7 — Share (and G0.3, G2.3 leftovers)
 
 ## Done
+- G9 owner's batch (2026-11-13): nine reports from the owner.
+  - **Pen**: with Shift held, the Pen never curves. Every segment is straight and snapped to 45°, both
+    when drawing and in vector edit mode. The 8 px click wobble is now measured from where the press
+    landed, not from the snapped anchor, so a horizontal Shift-click no longer counts as a drag.
+    Tests: `crates/engine/src/pen_tests.rs`.
+  - **Pencil strokes with spikes** (the "broken brush strokes"): fixed by taking upstream's
+    #1741 fix (`figcraft_geom::simplify_path`, upstream 0aba3f76 and 61389cdd) on its own,
+    without a full merge. A stroke that turns back on itself, or that runs almost straight, no
+    longer gets a curve that shoots off it. Upstream's tests came with it. The Brush and Width
+    profile menus do open (an earlier probe had injected the press and the release in the same frame).
+  - **Organic brushes and Taper**: four new stretch brushes made in code: Brush pen (ink with
+    varying width), Dry brush (strands with gaps), Chalk (rough edges with grain), and Marker
+    (chisel ends). They live in `crates/pathops/src/organic.rs`. The taper, ink, bristle and
+    organic brushes are now built per subpath from a unit outline. `Brush` gained
+    `taper` (on by default), `taperStart` and `taperEnd` (0..1 of the length; unset means the
+    preset's own), with the controls Taper the ends, Taper start and Taper end under Brush. Taper
+    also shrinks a scatter brush's ends. A closed path's brush starts and ends in the middle of its
+    longest side, so a rectangle no longer gets a thin corner.
+  - **Boolean corner radius**: upstream #2222 taken on its own (c48d844d, 4c91f908, 529134b8,
+    bae366ba, ec105d0f). A boolean group has a Corner radius field that rounds the corners of its
+    result. Layers inside keep their own radius.
+  - **Eraser in design files**: the Eraser works on any page, not only on boards. On a board it
+    still erases ink. In a design file it removes open, stroked, unfilled vectors under it, such
+    as Pencil strokes; frames, shapes and filled paths are left alone. `tool.set {tool: eraser}`
+    and `tool.eraser` no longer ask for a board. The Pen tool group now holds Pen, Pencil, Eraser
+    and Shape builder. Draw mode is lit for both the Pencil and the Eraser.
+    Logic: `crates/engine/src/design_eraser.rs`.
+  - **Bottom bar**: the mode switcher shows only Draw · Pixel · Design. Prototype is a tab of the
+    right panel. Inspect is a new small button left of Play at the top of the right panel
+    (`crates/ui-egui/src/game/inspect_button.rs`), and Shift+D still works.
+  - **No spacing handles on the canvas**: no gap handles either (the padding ones were already
+    gone). Gaps and padding are set in the right panel.
+  - **9-slice crossings**: a small square marks each of the four places where the cuts cross.
+    Dragging one moves both of its cuts. With Shift, the opposite cuts follow, so the slice stays
+    symmetric; Shift does the same when dragging a single cut. Code:
+    `crates/ui-egui/src/game/nine_slice_nodes.rs`.
+  - **Claude chat**: the guide now covers nested pages, Documents, 9-slice, the game kinds, the
+    third-person game's variables and events, and Unity export. It also names what is planned
+    (closing a document version with a signature, signing through a link, client links), so
+    Claude says these are not there yet. A test checks that every command the guide names exists.
+    The panel's title, close box, input and Send button now line up (Send moved to the input's
+    right edge).
+  - Checked in the real app on a scratch file: the brushes, Taper on and off on rectangles, the
+    eraser, the Union radius, the absence of gap handles, the 9-slice crossings (the Shift case is
+    covered by tests; the control channel does not hold Shift during a drag), and the chat panel.
+    Limits: the design-file Eraser hit-tests top-level layers, so a stroke inside a frame is not
+    erased; a boolean group's radius always rounds, whatever its Graybox corner style is.
 - G17.1 3D rotation of layers (2026-11-13, owner's request; spec
   [`specs/2026-11-13-frames-3d-design.md`](specs/2026-11-13-frames-3d-design.md)): a frame, component,
   instance or group gets **X, Y and Perspective** in a "3D" section of the Design panel (under Position;
@@ -1238,6 +1285,26 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   `layers_at` and `crates/ui-egui/src/menus/select_layer.rs` (inside `tilt::with_flat`, edit flat);
   `xtask/src/layers.rs` `same_layer_ok` (`figcraft-tilt` → `figcraft-geom` within L0).
 
+- G9 owner's batch (2026-11-13): `crates/engine/src/canvas/tools.rs` (`Gesture::PenDrag.press`,
+  `pen_wobble`), `tools/pen.rs` `pen_down` (Shift: no out handle, 45°), `tools/drag.rs` (pen drag:
+  Shift or wobble makes no curve), `vectoredit/pointer.rs` (the same in vector edit; `pen_tests`);
+  `crates/pathops/src/brush.rs` (four presets; stretch shapes from `organic::stretch_unit` per
+  subpath after `seam_on_a_side`; scatter size × `organic::envelope`), `pathops/src/lib.rs`
+  (`pub mod organic`); `crates/doc/src/props.rs` `Brush` (`taper`, `taper_start`, `taper_end`,
+  sanitized); `crates/render/src/draw.rs` `cached_stroke_outline` (hashes the taper settings);
+  `crates/engine/src/cmd/props.rs` `BRUSH_HELP` and `cmd/edit.rs` `stroke.brush` doc (new presets,
+  taper keys); `crates/ui-egui/src/panels/right/stroke.rs` `brush_row` (`game::brush_taper::rows`);
+  locales (Brush pen, Dry brush, Chalk); `crates/engine/src/lib.rs` (`mod design_eraser`, tests),
+  `cmd/view.rs` `tool.set` and `boards/board.rs` `tool.eraser` (the Eraser needs no board),
+  `boards/board/tools.rs` `board_down` (Eraser in design files) and `erase_at`
+  (`design_eraser::erasable`, no document clone); `crates/ui-egui/src/toolbar.rs` (`GROUPS` pen group
+  with the Eraser, `MODES` = Draw · Pixel · Design, `mode_switcher`, `pick_mode`, widths),
+  `pen_mode_tests.rs` (Draw instead of Prototype/Inspect, no-Prototype test),
+  `panels/right.rs` `right_panel` (`game::inspect_button::show` left of Play);
+  `crates/ui-egui/src/canvas/handles.rs` `al_zones` (`gaps.clear()`), `gap_handle_tests.rs` (both
+  ignored). Upstream fixes taken on their own, no merge: #1741 (0aba3f76, 61389cdd) and #2222
+  (c48d844d, 4c91f908, 529134b8, bae366ba, ec105d0f; plus `..Default::default()` for
+  `Corners::style` in `format/src/fig/export_tests.rs`).
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.
 

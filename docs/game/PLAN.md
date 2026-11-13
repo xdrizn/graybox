@@ -164,6 +164,11 @@ Death are only *examples* in the starter kit, never required.
 - [x] Pseudo-localization preview (Prototype tab switch, canvas only).
 - [x] Unity export (layout.json + sprites per screen, again on save) and the Graybox Live Link
   package (run in Unity 2022.3.39 with a test screen: the Canvas matches Graybox's render).
+- [x] Owner's batch (2026-11-13): the Pen with Shift never curves; Pencil strokes without spikes
+  (upstream #1741); organic brushes (Brush pen, Dry brush, Chalk, Marker) and Taper on/off with start
+  and end; a Union keeps a corner radius (upstream #2222); the Eraser in design files; the bottom bar
+  is Draw · Pixel · Design with Inspect by Play; no spacing handles on the canvas; 9-slice crossings
+  dragged (Shift: symmetric); the Claude guide brought up to date and its panel lined up.
 
 ### G10 — Claude inside Graybox (owner's request, 2026-11-10)
 Spec: [`specs/2026-11-10-claude-chat-design.md`](specs/2026-11-10-claude-chat-design.md).
