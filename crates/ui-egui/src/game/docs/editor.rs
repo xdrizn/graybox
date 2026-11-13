@@ -91,13 +91,18 @@ fn page(app: &mut FigApp, ui: &mut Ui, st: &mut State, doc: DocId, uid: u64) {
         super::inline::forget();
         let rows: Vec<Rect> = (0..blocks.len()).map(|i| blocks::block_ui(app, &mut c, st, &t, doc, &blocks, i, col, &ver, now)).collect();
         super::drag::drop_ui(app, &c, st, &t, doc, &blocks, &rows, col);
+        if editable {
+            super::media::take_drops(app, ui.ctx(), doc, &blocks, &rows, area);
+        }
         versions::signatures(app, &mut c, st, &t, doc, &ver);
         tail_ui(app, &mut c, st, &t, doc, &blocks, editable);
         if at_end {
             // Enter in the title: the first block takes the keyboard, made first if there is none.
             match blocks.first() {
                 Some(first) => st.focus = Some(Target::Block(first.id)),
-                None => blocks::add_block(app, st, doc, None, "paragraph"),
+                None => {
+                    blocks::add_block(app, st, doc, None, "paragraph");
+                }
             }
         }
         ui.allocate_rect(Rect::from_min_max(col.min, pos2(col.max.x, c.min_rect().max.y + 120.0)), Sense::hover());
@@ -264,7 +269,9 @@ fn tail_ui(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, doc: DocId
     if resp.clicked() {
         match blocks.last() {
             Some(last) if matches!(last.look, Look::Paragraph) && last.text.is_empty() => st.focus = Some(Target::Block(last.id)),
-            _ => blocks::add_block(app, st, doc, None, "paragraph"),
+            _ => {
+                blocks::add_block(app, st, doc, None, "paragraph");
+            }
         }
     }
 }

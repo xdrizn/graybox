@@ -11,6 +11,7 @@ mod drag;
 mod editor;
 mod export;
 mod inline;
+mod media;
 mod sign;
 mod slash;
 mod state;
@@ -79,6 +80,8 @@ mod blocks_tests;
 mod drag_tests;
 #[cfg(test)]
 mod format_tests;
+#[cfg(test)]
+mod media_tests;
 #[cfg(test)]
 mod slash_tests;
 #[cfg(test)]

@@ -99,6 +99,13 @@ pub fn specs() -> Vec<CommandSpec> {
             true,
             |s, p| edit(s, p, table_change)
         ),
+        spec!(
+            "doc.block.image",
+            "Add image to document",
+            "{doc, version?, data (base64) | path, alt? (what it shows, for screen readers), id? (an image block: it shows this picture), parent?, index?} → {id, image, width, height}",
+            true,
+            |s, p| edit(s, p, block_image)
+        ),
         spec!("doc.block.move", "Move block", "{doc, id, version?, parent? (a block id; omit or null for the top), index?}", true, |s, p| edit(
             s, p, move_block
         )),
@@ -560,6 +567,47 @@ fn table_change(s: &mut Session, p: &Value) -> Result<Value> {
     let op = TableOp::from_name(&name, at, on).ok_or_else(|| bad(cmd, format!("unknown op {name:?}")))?;
     s.doc_mut()?.docs.change_table(doc, version, id, op).map_err(|e| refuse(cmd, e))?;
     Ok(json!({"ok": true}))
+}
+
+/// Put a picture in a document: a new image block, or the picture of image block `id`. The bytes go
+/// with the file's images; a refused block leaves none behind.
+fn block_image(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.block.image";
+    let doc = doc_id(cmd, p, "doc")?;
+    let version = opt_version(cmd, p)?;
+    let alt = text(cmd, p, "alt")?;
+    let target = opt_uint(cmd, p, "id")?.map(BlockId);
+    let place = Place { parent: opt_uint(cmd, p, "parent")?.map(BlockId), index: opt_index(cmd, p)? };
+    let bytes = super::create::image_bytes(cmd, p)?;
+    let file = s.doc_mut()?;
+    let known = file.images.contains_key(&figcraft_format::image_hash(&bytes));
+    let (hash, w, h) = super::create::add_readable_image(file, bytes).map_err(|e| bad(cmd, e))?;
+    let image = hash.clone();
+    let placed = match target {
+        Some(id) => file
+            .docs
+            .update_block(doc, version, id, |b| match &mut b.kind {
+                BlockKind::Image { image: shown, alt: said } => {
+                    *shown = image;
+                    if let Some(a) = alt {
+                        *said = a;
+                    }
+                    Ok(())
+                }
+                _ => Err(DocError::Invalid("that block is not an image")),
+            })
+            .map(|()| id),
+        None => file.docs.insert_block(doc, version, place, BlockKind::Image { image, alt: alt.unwrap_or_default() }, Vec::new()),
+    };
+    match placed {
+        Ok(id) => Ok(json!({"id": id.0, "image": hash, "width": w, "height": h})),
+        Err(e) => {
+            if !known {
+                file.images.remove(&hash);
+            }
+            Err(refuse(cmd, e))
+        }
+    }
 }
 
 fn move_block(s: &mut Session, p: &Value) -> Result<Value> {

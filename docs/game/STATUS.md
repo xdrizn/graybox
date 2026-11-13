@@ -391,6 +391,26 @@
   - Not yet: bold and the other looks cannot be set inside a cell (the bar is for blocks only); arrow
     keys do not move between cells; columns all share the width; the table is copied every frame
     (small cost in big tables).
+- G13.2, images (2026-11-13): `/image` puts an empty image block in the document and asks for a
+  picture file ("Choose image" on the block does it again); image files dragged onto an open document
+  go in where they are dropped, one after the other, each named after its file. A picture shows as
+  wide as the column allows but never wider than itself, and at most 560 points tall. The picture goes
+  into the file's images (as on the canvas), through the new command `doc.block.image {doc, data |
+  path, alt?, id? (an empty image block), parent?, index?}` (one undo step; also for MCP, the CLI and
+  the control channel).
+  - Code: the command in `crates/engine/src/cmd/docs.rs` (in the junk sweep; a refused block leaves no
+    picture behind), `crates/ui-egui/src/game/docs/media.rs` (drawing, the empty block, drops).
+    Tests: `game/docs/media_tests.rs`.
+  - Hook: `crates/ui-egui/src/pending_open.rs` (the "Adding to…" card also names `doc.block.image`).
+  - Checked in the real app: a 1200×600 picture and an empty image block. Screenshot sent to Adriel.
+    Not clicked in the app: "Choose image" (it opens the system's file window); it uses the same
+    picker as the colour picker's "Upload from computer".
+  - Found by the tests and fixed: a picture wider than 2048 pixels crashed the window (the graphics
+    card refuses such textures); pictures are now made no bigger than they show.
+  - Review (high) caught and fixed: `/image` left a cursor position behind for the next field.
+  - Not yet: images in the canvas card, PDF and Markdown exports are still placeholders; a caption
+    and resizing by hand; files dropped on a closed version are ignored without a message; the same
+    picture shown at two very different widths is decoded again each frame.
 - G11.6, the bow (2026-11-13, Adriel's changes): a click shoots from the hip, holding aim goes over the
   shoulder with a crosshair in the middle of the screen, and the shoulder button swaps sides.
   - Hip shot: a left click alone with the bow turns the hero to where the camera looks and shoots after
@@ -1401,6 +1421,7 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   - G13.2 moving blocks: no new hook. Locales: "Click for the menu, drag to move" replaces "Turn into,
     duplicate, colour, delete".
   - G13.2 tables: no new hook. Locales: "Header row", "Insert row above", "Insert row below", "Insert column left", "Insert column right", "Delete row", "Delete column".
+  - G13.2 images: `crates/ui-egui/src/pending_open.rs`, `pending_opens`: the card title arm also matches `doc.block.image` (pictures dropped on a document). Locales: "or drop one here", "Drop images to add them here".
   - G13.2 formatting words: no new hook. Locales: "Bold", "Highlight", "Paste a link".
 - Nested pages (G9; `crates/doc/src/page_tree.rs`, `crates/engine/src/cmd/page_tree.rs`,
   `crates/ui-egui/src/game/tree_list.rs` and `page_list.rs` are ours):

@@ -237,6 +237,7 @@ fn junk_parameters_are_refused_not_panicked_on() {
         "doc.block.format",
         "doc.table.cell",
         "doc.table.change",
+        "doc.block.image",
     ] {
         for j in &junk {
             let _ = s.execute(cmd, j);
@@ -378,5 +379,49 @@ fn table_cells_rows_and_columns_change_one_undo_step_at_a_time() {
         json!({"doc": d, "id": t, "op": "header", "on": "yes"}),
     ] {
         assert!(s.execute("doc.table.change", &bad).is_err(), "{bad}");
+    }
+}
+
+fn png_data(w: u32, h: u32) -> String {
+    use base64::Engine as _;
+    let png = figcraft_render::encode_png(&figcraft_render::Pixmap::new(w, h).unwrap()).unwrap();
+    base64::engine::general_purpose::STANDARD.encode(png)
+}
+
+#[test]
+fn an_image_goes_into_a_document_as_one_step_and_fills_an_empty_image_block() {
+    let mut s = Session::new();
+    let d = id_of(&ex(&mut s, "doc.create", json!({})));
+    ex(&mut s, "doc.block.insert", json!({"doc": d, "text": "Before"}));
+    let undo = s.ds().unwrap().history.undo.len();
+    let out = ex(&mut s, "doc.block.image", json!({"doc": d, "data": png_data(40, 20), "alt": "Mock-up", "index": 0}));
+    assert_eq!((out["width"].as_u64(), out["height"].as_u64()), (Some(40), Some(20)));
+    let hash = out["image"].as_str().unwrap().to_string();
+    assert!(s.doc().unwrap().images.contains_key(&hash));
+    assert_eq!(s.ds().unwrap().history.undo.len(), undo + 1);
+    let b = blocks(&mut s, d);
+    assert_eq!(b[0]["kind"], json!({"type": "image", "image": hash, "alt": "Mock-up"}));
+    assert_eq!(b[0]["id"].as_u64(), out["id"].as_u64());
+    // An empty image block (from the `/` menu) takes its picture in place; its words stay.
+    let empty = id_of(&ex(&mut s, "doc.block.insert", json!({"doc": d, "kind": "image"})));
+    let filled = ex(&mut s, "doc.block.image", json!({"doc": d, "id": empty, "data": png_data(8, 8)}));
+    assert_eq!(filled["id"].as_u64(), Some(empty));
+    let b = blocks(&mut s, d);
+    assert_eq!(b.len(), 3);
+    assert_eq!(b[2]["kind"]["image"], filled["image"]);
+    ex(&mut s, "edit.undo", json!({}));
+    assert_eq!(blocks(&mut s, d)[2]["kind"]["image"], "");
+    // Refusals: no picture, an unreadable one, a block that is not an image.
+    let para = blocks(&mut s, d)[1]["id"].as_u64().unwrap();
+    for bad in [
+        json!({"doc": d}),
+        json!({"doc": d, "data": "bm90IGFuIGltYWdl"}),
+        json!({"doc": d, "data": png_data(4, 4), "id": para}),
+        json!({"doc": d, "data": png_data(4, 4), "id": 999}),
+        json!({"doc": d, "data": png_data(4, 4), "alt": 3}),
+    ] {
+        let images = s.doc().unwrap().images.len();
+        assert!(s.execute("doc.block.image", &bad).is_err(), "{bad}");
+        assert_eq!(s.doc().unwrap().images.len(), images, "a refused image is not kept: {bad}");
     }
 }

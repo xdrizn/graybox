@@ -42,7 +42,7 @@ pub(super) enum Move {
 }
 
 /// What the menu lists: (label, kind, other words that find it).
-fn items() -> [(&'static str, &'static str, &'static str); 15] {
+fn items() -> [(&'static str, &'static str, &'static str); 16] {
     [
         (tr("Text"), "paragraph", "text paragraph plain"),
         (tr("Heading 1"), "heading1", "h1 heading title"),
@@ -56,6 +56,7 @@ fn items() -> [(&'static str, &'static str, &'static str); 15] {
         (tr("Quote"), "quote", "quote citation"),
         (tr("Divider"), "divider", "divider line rule hr separator"),
         (tr("Table"), "table", "table grid tabela"),
+        (tr("Image"), "image", "image picture photo imagem foto"),
         (tr("Decision"), "decision", "decision decided"),
         (tr("Link"), "link", "link url web"),
         (tr("Signature"), "signature", "signature sign"),
@@ -241,8 +242,12 @@ fn pick(app: &mut FigApp, st: &mut State, doc: DocId, block: BlockId, text: &str
             let place = place_after(app, doc, block);
             add_block(app, st, doc, place, "paragraph");
         } else {
-            st.focus = Some(first_field(kind, block));
-            st.caret = Some(0);
+            st.focus = first_field(kind, block);
+            // A picture has no words to put the cursor in.
+            st.caret = st.focus.map(|_| 0);
+            if kind == "image" {
+                super::media::choose(app, doc, block);
+            }
         }
         return;
     }

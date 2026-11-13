@@ -160,7 +160,8 @@ pub fn pending_opens(app: &mut FigApp, ctx: &egui::Context) {
     }
     app.ui.pending_open_frames = app.ui.pending_open_frames.saturating_add(1);
     let title = match app.ui.pending_opens.first().map(|p| p.command) {
-        Some("file.import" | "image.replace") => {
+        // Graybox: pictures dropped on an open document are added to the file too (G13.2).
+        Some("file.import" | "image.replace" | "doc.block.image") => {
             let name = app
                 .ui
                 .pending_opens
