@@ -78,9 +78,10 @@ fn contents(ui: &mut Ui, t: &Tokens, conv: &mut Conversation, close: &mut bool, 
 fn header(ui: &mut Ui, t: &Tokens, conv: &mut Conversation, close: &mut bool) {
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), HEADER_H), Sense::hover());
     let mid = rect.center().y;
-    ui.painter().text(pos2(rect.min.x + 22.0, mid), Align2::LEFT_CENTER, "Claude", semibold(13.0), t.text);
+    // The title and the close box line up with the messages and the input below (PAD in).
+    ui.painter().text(pos2(rect.min.x + PAD, mid), Align2::LEFT_CENTER, "Claude", semibold(13.0), t.text);
     // Close ×
-    let x = egui::Rect::from_center_size(pos2(rect.max.x - 20.0, mid), vec2(24.0, 24.0));
+    let x = egui::Rect::from_center_size(pos2(rect.max.x - PAD - 12.0, mid), vec2(24.0, 24.0));
     let xr = ui.interact(x, Id::unique("claude_close"), Sense::click());
     crate::a11y::button(&xr, "Close Claude chat");
     if xr.hovered() {
@@ -228,7 +229,8 @@ fn footer(ui: &mut Ui, t: &Tokens, conv: &mut Conversation, focus: bool) {
             }
         });
         ui.add_space(6.0);
-        ui.horizontal(|ui| {
+        // Send at the input's right edge, Stop left of it.
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), widgets::FIELD_H), egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let ready = !conv.input.trim().is_empty() && !conv.busy;
             if widgets::button(ui, "Send", true, ready).clicked() {
                 send = true;

@@ -100,3 +100,18 @@ fn each_file_has_its_own_conversation() {
     });
     u.frame(vec![]);
 }
+
+/// Graybox (G9): the panel lines up: the close box's right edge, the input's and Send's are one
+/// column, and New chat sits left of the close box on the title's line.
+#[test]
+fn the_panel_lines_up_its_header_input_and_send() {
+    let mut u = app();
+    u.app.run("game.claude.toggle", json!({}));
+    let all = nodes(&mut u);
+    let find = |role: Role, label: &str| all.iter().find(|n| n.role() == role && n.label() == Some(label)).and_then(Node::bounds);
+    let close = find(Role::Button, "Close Claude chat").expect("close");
+    let send = find(Role::Button, "Send").expect("send");
+    let new = find(Role::Button, "New chat").expect("new chat");
+    assert!((close.x1 - send.x1).abs() <= 1.0, "close {close:?} and Send {send:?} share a right edge");
+    assert!(new.x1 < close.x0 && (new.y0 + new.y1 - close.y0 - close.y1).abs() <= 1.0, "New chat {new:?} beside close {close:?}");
+}
