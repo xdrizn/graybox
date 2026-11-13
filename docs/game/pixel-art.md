@@ -13,13 +13,11 @@ Graybox desenha pixel art direto no canvas, para UI de jogo:
   variáveis do arquivo; a cor lembra de que estilo veio, e se o estilo mudar o painel oferece
   "Update from styles". Paletas `.gpl`/`.hex` viram estilos de cor (Palette > Import…).
 - **UI de jogo**: 9-slice em pixels de arte, camada que cresce sem esticar a arte, Pixel text
-  (texto nítido na grade), o componente pronto "Pixel button" (Default/Hover/Pressed) e troca de
-  paleta como variante.
+  (texto nítido na grade) e troca de paleta como variante.
 - **Animação**: timeline (botão na barra ou Alt+T) com frames, duração, tags (idle, hover…), onion skin; a tag toca no
   Prototype e no Play.
 - **Export/Import**: PNG, PNG por frame, sprite sheet + JSON, GIF e Unity (com o Live Link criando
   sprites, clips e Animator). Importa PNG ou sheet cortada em frames.
-- **Fontes pixel**: desenhe as letras numa "folha de glifos" e use como fonte em qualquer texto.
 - **Claude**: peça no chat "desenha um ícone 16×16 de moeda" — ele usa `pixel.paint`.
 - **Quadro (board)**: no modo Pixel o W/H do painel é o tamanho do quadro em pixels de arte;
   digite ou arraste as bordas para crescer ou cortar (Alt: pelo centro). Fora do modo Pixel a camada
@@ -35,10 +33,9 @@ A pixel layer is an ordinary layer (it can sit in frames, auto layout, component
 a sprite: a grid of art pixels with its own layers, frames, tags and palette. Each art pixel is drawn
 `scale` page units big, with no smoothing at any zoom.
 
-- Make one: Pixel mode with nothing selected (drag a box, or Create with the size in the pill), or
-  the "Pixel button" and "Pixel font" starters in the same pill.
+- Make one: Pixel mode with nothing selected (drag a box, or Create with the size in the pill).
 - The **Pixel art** section of the Design panel: scale, size, what plays, how it grows when resized
-  (Middle, Edges, Tile; with 9-slice: Repeat or Stretch, Cuts as padding), Pixel font, Export and
+  (Middle, Edges, Tile; with 9-slice: Repeat or Stretch, Cuts as padding), Export and
   Import. While a sprite is edited it also lists the sprite's layers and Palette (Import… makes
   colour styles from a `.gpl` or `.hex` file; Save… writes the sprite's colours as `.gpl`). The
   section comes last, after Effects, and folds away with its arrow.
@@ -95,7 +92,6 @@ with **Done**, `Esc` or `Enter`.
   pixel layer before making it a component: instances resized keep the corners, and the section says
   so ("Applies to this layer; instances of the component resize with it").
 - **Pixel text**: any text layer, drawn sharp on the art-pixel grid of the pixel art around it.
-- **Pixel button**: a component set with Default, Hover and Pressed states that grows with its label.
 - **Palette swap**: in Pixel colors, pick a colour, then **As variant** makes a new variant
   ("Palette=Red") with the colours swapped.
 
@@ -120,23 +116,6 @@ Unity: the screen export (`game.unity.export`) marks pixel layers so they import
 animated layer as a sheet; the Live Link package slices sheets, sets borders and pivots, and makes a
 clip per tag and an Animator.
 
-## Pixel fonts
-
-A pixel layer can be a font: a **glyph sheet**, a grid of cells with one character drawn in each.
-
-1. Pixel mode with nothing selected → **Pixel font** (or Pixel art panel → Pixel font `+` on any
-   pixel layer). A new sheet has 6 × 8 cells for printable ASCII, a faint cell grid and baseline,
-   and each cell's character in its corner while you draw.
-2. Draw the letters on the first frame. Pixels at least half opaque are the glyph. Each glyph is as
-   wide as its drawn columns plus the gap (1 pixel); an empty cell is a space.
-3. Set any text in it: select a text layer → Pixel text → **Font**. One glyph pixel becomes one art
-   pixel at the text's pixel scale. Text in a pixel font lays out, wraps and hugs like any font.
-4. Drawing on the sheet updates every text that uses it. The Pixel font section sets the font's name,
-   cell size, baseline, gap and the characters (cell by cell).
-
-Names stay unique: a second font with the same name, or a name of a font installed on the computer,
-gets a number. A copied sheet keeps the name but isn't the font until it's renamed.
-
 ## Claude
 
 Claude reaches every pixel command through the `graybox` MCP tools (`run_command`). The useful ones:
@@ -146,12 +125,11 @@ Claude reaches every pixel command through the `graybox` MCP tools (`run_command
   pixel, e.g. `{"rows": ["..kk..", ".kffk."], "palette": {"k": "#1b1b2a", "f": "#e8b830"}}`.
 - `pixel.get {id, pixels: true}` reads the pixels back.
 - `pixel.stroke`, `pixel.shape`, `pixel.fill`, `pixel.replaceColor`, `pixel.outline`,
-  `pixel.frame.add`, `pixel.tag.add`, `pixel.font.sheet`, `pixel.font.set`, `pixel.text`,
+  `pixel.frame.add`, `pixel.tag.add`, `pixel.text`,
   `pixel.export`, `pixel.import`. `list_commands` with `filter: "pixel"` lists them all with their
   parameters.
 
 ## Limits
 
 1024 art pixels a side, 64 sprite layers, 1024 frames, 256 tags and palette colours; exports up to
-8192 pixels a side. A pixel font is read from the sheet's first frame, up to 1024 characters and
-128-pixel cells. Not done yet: Aseprite file import, a bitmap font export for Unity.
+8192 pixels a side. Not done yet: Aseprite file import.

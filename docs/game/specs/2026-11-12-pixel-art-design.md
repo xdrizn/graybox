@@ -1,5 +1,10 @@
 # Pixel art in Graybox (G16) — design
 
+> **Dropped on 2026-11-13 (G16.8)**: the "Pixel button" starter and pixel fonts (the glyph sheet
+> and its `pixel.font.*` commands). The owner never asked for them and does not want them in the
+> product. Buttons are still made by hand from 9-sliced pixel art with a Pixel text label (D3, D4),
+> and "Pixel text" on ordinary text layers (D5) stays.
+
 Owner's request (2026-11-12): a **pixel art tool inside Graybox**, built for making game UI. It
 should be easy, smart and intuitive, and impressive. In detail:
 - draw pixel art and make **components** from it;
@@ -41,8 +46,8 @@ around it. That keeps the pixel art inside the UI work instead of in a separate 
 | D1 | **Pixel mode** in the bottom mode switcher: Draw · **Pixel** · Design · Prototype · Inspect. Its pill shows the pixel tools. Double-clicking a pixel layer enters it; Esc or Done returns to Design. With no pixel layer selected, dragging on the canvas makes a new sprite of that size, snapped to the pixel scale; a small "New sprite" popover sets width × height and scale. |
 | D2 | **Pixel layer** = a node that carries a sprite (Graybox-owned data) and draws it with nearest-neighbour sampling at an integer scale. Its position snaps to whole canvas pixels, and its size to whole art pixels. |
 | D3 | **Smart resize**: resizing a pixel layer in Design mode never blurs. Without 9-slice it repeats or extends the nearest edge pixels outward (Grow) or crops (Shrink), never scaling the art; Alt+drag scales by whole multiples. With 9-slice on (insets in **art pixels**), corners stay, edges and centre are **tiled** (default) or **stretched by whole pixels**. That gives the button that grows with its text. |
-| D4 | **Pixel 9-slice + auto layout + text**: a pixel layer used as a frame's background (or a frame with a pixel fill) gives its 9-slice insets as the auto-layout padding (an option, on by default). A text child in the centre makes the frame hug the text, and the art regrows (D3). A "Pixel button" starter creates exactly that in one click. |
-| D5 | **Text that matches pixel art**: text layers get a "Pixel text" option: no anti-aliasing, glyphs snapped to the art-pixel grid at the parent's pixel scale. Any font the file can use works (installed fonts, fonts inside the file, the font store). **Pixel fonts drawn in Graybox** (a glyph sheet sprite turned into a font) are G16.6. |
+| D4 | **Pixel 9-slice + auto layout + text**: a pixel layer used as a frame's background (or a frame with a pixel fill) gives its 9-slice insets as the auto-layout padding (an option, on by default). A text child in the centre makes the frame hug the text, and the art regrows (D3). |
+| D5 | **Text that matches pixel art**: text layers get a "Pixel text" option: no anti-aliasing, glyphs snapped to the art-pixel grid at the parent's pixel scale. Any font the file can use works (installed fonts, fonts inside the file, the font store). |
 | D6 | **Palette = Graybox colours**: the palette panel shows the file's colour styles and variables, the colours used in the sprite, and a local palette (add, sort, load and save `.gpl` and `.hex`). **Selection colours** (right panel) lists a pixel layer's colours like any frame's, and changing one replaces it in the pixels (all frames and layers, an option for exact or similar matches). A palette swap can become a **component variant** ("Red team"). |
 | D7 | **Storage**: sprites live in the `.figcraft` file as Graybox-owned data: size, layers, frames, cels (RGBA, compressed), tags, palette, slices, with serde defaults. Old files are unchanged. The engine model and operations live in a new pure crate `crates/pixel` (L2, no egui), deterministic and fully unit-tested. |
 | D8 | **Everything is a command** (`pixel.create`, `pixel.stroke`, `pixel.fill`, `pixel.select`, `pixel.transform`, `pixel.replace_color`, `pixel.layer.*`, `pixel.frame.*`, `pixel.export`…). One stroke is one undo step. Commands are in the junk sweep. Claude, the CLI and MCP reach them ("draw a 16×16 heart"). |
@@ -115,13 +120,11 @@ tags, which layers, trim, padding, extrude (edge bleed), and power-of-two size.
    - the palette panel tied to styles and variables;
    - Selection colours on pixel layers, and replace across the sprite;
    - layers inside a sprite (add, hide, opacity, reorder, merge).
-3. **G16.3 Smart resize, 9-slice and the pixel button**:
+3. **G16.3 Smart resize, 9-slice and pixel text**:
    - Grow and Shrink resize;
    - pixel-unit 9-slice (tile or stretch), drawn on the canvas with the existing 9-slice handles;
    - insets as auto-layout padding;
    - Pixel text;
-   - the "Pixel button" starter (frame + 9-slice art + centred text + auto layout, hover and pressed
-     variants);
    - tile mode and the tileset preview;
    - components and variants from pixel layers, and palette-swap variants.
 4. **G16.4 Animation**: timeline, frames, durations, onion skin, tags, playback, and playing in
@@ -130,8 +133,6 @@ tags, which layers, trim, padding, extrude (edge bleed), and power-of-two size.
    (C#, compile-checked; batchmode test if Unity is available), PNG and sheet import, and the export
    dialog with presets.
 6. **G16.6 Polish and extras**:
-   - pixel fonts from a glyph sheet (usable by text layers; exported to Unity as a bitmap font if time
-     allows);
    - shade mode;
    - MCP tools so Claude can draw and edit sprites;
    - a performance pass (a 256×256 sprite with 8 layers and 24 frames stays smooth);

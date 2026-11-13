@@ -340,25 +340,6 @@ fn an_image_paste_after_copying_pixels_pastes_them_into_the_sprite_not_onto_the_
     assert!(selected(&mut u, id).is_some(), "the pasted pixels are selected");
 }
 
-#[test]
-fn the_pixel_button_in_the_new_pill_makes_the_component_set_and_leaves_pixel_mode() {
-    let mut u = Ui::new(Session::new());
-    for _ in 0..3 {
-        u.frame(vec![]);
-    }
-    super::enter_from_switcher(&mut u.app);
-    u.frame(vec![]);
-    assert_eq!(u.app.pixel.mode, Mode::New);
-    super::pill::button_in_view(&mut u.app);
-    u.frame(vec![]);
-    assert_eq!(u.app.pixel.mode, Mode::Off);
-    let doc = u.app.session.doc().unwrap();
-    let sel = u.app.session.selection();
-    let [set] = sel[..] else { panic!("the set is selected: {sel:?}") };
-    assert_eq!(doc.node(set).unwrap().name, "Pixel button");
-    assert_eq!(doc.node(set).unwrap().children.len(), 3);
-}
-
 fn pixel_in(u: &mut Ui, id: u64, frame: usize, x: i64, y: i64) -> Option<String> {
     let r = u.app.session.execute("pixel.pick", &json!({"id": id, "x": x, "y": y, "frame": frame})).unwrap();
     r["color"].as_str().map(str::to_string)

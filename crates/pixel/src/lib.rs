@@ -12,7 +12,6 @@
 pub mod anim;
 pub mod canvas;
 pub mod export;
-pub mod font;
 pub mod import;
 pub mod paint;
 pub mod palette;

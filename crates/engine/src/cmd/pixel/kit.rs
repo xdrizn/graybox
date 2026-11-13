@@ -1,16 +1,15 @@
 //! Graybox pixel art (G16.3): pixel art used for game UI. A pixel layer's 9-slice snaps to whole art
 //! pixels and, on a frame with auto layout, gives its cuts as the padding; Pixel text draws a text
-//! layer on the art-pixel grid; the Pixel button starter makes a three-state button component; a
-//! palette swap becomes a new variant.
+//! layer on the art-pixel grid; a palette swap becomes a new variant.
 
 use figcraft_doc::nine_slice::{KEY as SLICE_KEY, NineSlice};
 use figcraft_doc::{Document, NodeId, NodeKind};
-use figcraft_pixel::{Canvas, Rgba, Sprite, canvas, store};
+use figcraft_pixel::{Rgba, Sprite, store};
 use figcraft_render::pixel::TEXT_KEY;
 use serde_json::{Value, json};
 
 use super::{rgba_of, show};
-use crate::automation::params::{boolean, get, num, req_id, targets};
+use crate::automation::params::{boolean, get, req_id, targets};
 use crate::cmd::CommandSpec;
 use crate::{Result, Session, bad, spec};
 
@@ -19,16 +18,9 @@ pub(super) fn specs() -> Vec<CommandSpec> {
         spec!(
             "pixel.text",
             "Pixel text",
-            "{ids? (text layers; default the selection), on? (default true), scale? (art scale 1–64; default the scale of the pixel art it sits in or beside, else 4), font? (a pixel font of the file by name: one glyph pixel becomes one art pixel)}  draws the text with no anti-aliasing, its glyphs on the art-pixel grid → {ids}",
+            "{ids? (text layers; default the selection), on? (default true), scale? (art scale 1–64; default the scale of the pixel art it sits in or beside, else 4)}  draws the text with no anti-aliasing, its glyphs on the art-pixel grid → {ids}",
             true,
             text
-        ),
-        spec!(
-            "pixel.button",
-            "Pixel button",
-            "{x?, y?, text? (default \"Button\"), scale? (1–16, default 4)}  makes a component set of three pixel buttons (State=Default, Hover, Pressed): a frame with auto layout, 9-sliced pixel art as its background with its cuts as the padding, and a Pixel text label → {id (the set), variants}",
-            false,
-            button
         ),
         spec!(
             "pixel.paletteVariant",
@@ -178,21 +170,7 @@ fn text(s: &mut Session, p: &Value) -> Result<Value> {
             return Err(bad(cmd, format!("\"{}\" isn't a text layer", n.name)));
         }
     }
-    let font = match get(p, "font").filter(|v| !v.is_null()) {
-        None => None,
-        Some(Value::String(name)) => Some(name.clone()),
-        Some(_) => return Err(bad(cmd, "`font` must be the name of a pixel font")),
-    };
     let scales: Vec<u32> = ids.iter().map(|id| given.or_else(|| around(doc, *id)).unwrap_or(4)).collect();
-    // Each layer's font settings at its scale, all checked before anything changes.
-    let mut set = Vec::new();
-    for (id, &scale) in ids.iter().zip(&scales) {
-        if let Some(name) = &font {
-            let props =
-                super::font::text_props(doc, name, scale).ok_or_else(|| bad(cmd, format!("there's no pixel font \"{name}\" in this file")))?;
-            set.push((*id, props));
-        }
-    }
     for (id, scale) in ids.iter().zip(scales) {
         let n = doc.get_mut(*id)?;
         if on {
@@ -200,9 +178,6 @@ fn text(s: &mut Session, p: &Value) -> Result<Value> {
         } else {
             n.plugin_data.remove(TEXT_KEY);
         }
-    }
-    for (id, props) in set {
-        s.execute("node.set", &json!({"ids": [id.0], "props": props}))?;
     }
     Ok(json!({"ids": ids.iter().map(|i| i.0).collect::<Vec<_>>()}))
 }
@@ -228,128 +203,8 @@ fn around(doc: &Document, id: NodeId) -> Option<u32> {
     })
 }
 
-/// The art's size (art pixels) and its 9-slice cut on each side.
-const ART: u32 = 12;
-const CUT: u32 = 4;
-
-/// One state's colours (original): outline, face, light edge, dark edge; pressed swaps the edges
-/// and drops the label one art pixel.
-struct Look {
-    name: &'static str,
-    outline: Rgba,
-    face: Rgba,
-    light: Rgba,
-    dark: Rgba,
-    pressed: bool,
-}
-
-fn hex(s: &str) -> Rgba {
-    canvas::parse_hex(s).unwrap_or([0, 0, 0, 255])
-}
-
-fn looks() -> [Look; 3] {
-    let outline = hex("#15172a");
-    [
-        Look { name: "Default", outline, face: hex("#3a63c4"), light: hex("#6e9cf2"), dark: hex("#243d82"), pressed: false },
-        Look { name: "Hover", outline, face: hex("#4d7ae0"), light: hex("#8fb6ff"), dark: hex("#2c4a9a"), pressed: false },
-        Look { name: "Pressed", outline, face: hex("#2f539f"), light: hex("#6e9cf2"), dark: hex("#1c2f66"), pressed: true },
-    ]
-}
-
-/// The button's art: a box with its corners cut by one pixel, an outline, a light top-left edge and
-/// a dark bottom-right edge (swapped when pressed).
-fn art(look: &Look) -> Option<Canvas> {
-    let mut c = Canvas::new(ART, ART)?;
-    let last = i64::from(ART) - 1;
-    let (lit, shade) = if look.pressed { (look.dark, look.light) } else { (look.light, look.dark) };
-    for y in 0..=last {
-        for x in 0..=last {
-            let (xe, ye) = (x == 0 || x == last, y == 0 || y == last);
-            if xe && ye {
-                continue;
-            }
-            let inner_corner = (x == 1 || x == last - 1) && (y == 1 || y == last - 1);
-            let color = if xe || ye || inner_corner {
-                look.outline
-            } else if y == last - 1 || x == last - 1 {
-                shade
-            } else if y == 1 || x == 1 {
-                lit
-            } else {
-                look.face
-            };
-            c.set(x, y, color);
-        }
-    }
-    Some(c)
-}
-
 fn id_in(v: &Value) -> Option<u64> {
     v.get("id").and_then(Value::as_u64)
-}
-
-/// One undo step: the nested commands are grouped (the command itself records none).
-fn button(s: &mut Session, p: &Value) -> Result<Value> {
-    s.grouped("Pixel button", |s| make_button(s, p))
-}
-
-fn make_button(s: &mut Session, p: &Value) -> Result<Value> {
-    let cmd = "pixel.button";
-    let finite = |k: &str| num(p, k).filter(|f| f.is_finite()).map_or(0.0, |f| f.clamp(-1e6, 1e6).round());
-    let (x, y) = (finite("x"), finite("y"));
-    let label: String = get(p, "text").and_then(Value::as_str).filter(|t| !t.trim().is_empty()).unwrap_or("Button").chars().take(200).collect();
-    let scale = num(p, "scale").filter(|f| f.is_finite()).map_or(4, |f| f.round().clamp(1.0, 16.0) as u32);
-    let k = f64::from(scale);
-    let side = f64::from(ART) * k;
-    let cut = f64::from(CUT) * k;
-    let mut mains = Vec::new();
-    let mut top = y;
-    for look in &looks() {
-        let made = s.execute(
-            "frame.create",
-            &json!({
-                "x": x, "y": top, "width": side, "height": side,
-                "name": format!("State={}", look.name), "select": false, "props": {"fills": [], "clip": false},
-            }),
-        )?;
-        let frame = NodeId(id_in(&made).ok_or_else(|| bad(cmd, "the frame wasn't made"))?);
-        let sprite = Sprite::new(ART, ART, scale).ok_or_else(|| bad(cmd, "that scale can't be used"))?;
-        let picture = art(look).ok_or_else(|| bad(cmd, "the art can't be drawn"))?;
-        {
-            let doc = s.doc_mut()?;
-            let n = doc.get_mut(frame)?;
-            store::save(&mut n.plugin_data, &sprite);
-            if let (Some(l), Some(f)) = (sprite.layers.first(), sprite.frames.first()) {
-                store::put_cel(&mut n.plugin_data, l.id, f.id, &picture);
-            }
-            show(doc, frame, &sprite);
-        }
-        let down = if look.pressed { k } else { 0.0 };
-        s.execute("node.set", &json!({"ids": [frame.0], "props": {"layout": "horizontal", "mainAlign": "center", "crossAlign": "center"}}))?;
-        s.execute("game.nineSlice.set", &json!({"ids": [frame.0], "insets": [cut, cut, cut, cut]}))?;
-        if down > 0.0 {
-            // Pressed: the label sits one art pixel lower.
-            s.execute("node.set", &json!({"ids": [frame.0], "props": {"padding": [cut + down, cut, cut - down, cut]}}))?;
-        }
-        let t = s.execute(
-            "text.create",
-            &json!({"text": label, "x": 0, "y": 0, "parent": frame.0, "name": "Label", "select": false,
-                "props": {"fontSize": 12.0 * k, "lineHeight": 14.0 * k, "fill": "#ffffff"}}),
-        )?;
-        if let Some(t) = id_in(&t) {
-            s.execute("pixel.text", &json!({"ids": [t], "on": true, "scale": scale}))?;
-        }
-        s.execute("node.set", &json!({"ids": [frame.0], "props": {"sizingH": "hug", "sizingV": "hug"}}))?;
-        // The next state goes below this one at its hugged height.
-        top += s.doc()?.node(frame).map_or(side, |n| n.height) + 4.0 * k;
-        let comp = s.execute("component.create", &json!({"ids": [frame.0]}))?;
-        mains.push(id_in(&comp).unwrap_or(frame.0));
-    }
-    let set = id_in(&s.execute("component.combineVariants", &json!({"ids": mains}))?).ok_or_else(|| bad(cmd, "the variants weren't combined"))?;
-    // The set doesn't clip: a state that grows with a longer label stays in view.
-    s.execute("node.set", &json!({"ids": [set], "props": {"name": "Pixel button", "clip": false}}))?;
-    s.set_selection(vec![NodeId(set)]);
-    Ok(json!({"id": set, "variants": mains}))
 }
 
 fn palette_variant(s: &mut Session, p: &Value) -> Result<Value> {

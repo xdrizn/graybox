@@ -21,7 +21,6 @@ use crate::{Result, Session, bad, spec};
 mod anim;
 pub mod board;
 mod edit;
-pub mod font;
 pub(crate) mod io;
 pub(crate) mod kit;
 mod paint;
@@ -103,7 +102,6 @@ pub fn specs() -> Vec<CommandSpec> {
     list.extend(anim::specs());
     list.extend(io::specs());
     list.extend(kit::specs());
-    list.extend(font::specs());
     list.extend(paint::specs());
     list.extend(tools::specs());
     list.extend(board::specs());
@@ -243,13 +241,10 @@ fn edit_cel(s: &mut Session, id: NodeId, sprite: &Sprite, (layer, frame): (u32, 
     }
     if changed > 0 {
         store::put_cel(&mut doc.get_mut(id)?.plugin_data, layer, frame, &cel);
-        // The image fill shows the frame at rest: drawing on another frame leaves it as it is
-        // (a glyph sheet's font still follows its first frame).
+        // The image fill shows the frame at rest: drawing on another frame leaves it as it is.
         let index = sprite.frames.iter().position(|f| f.id == frame);
         if index == Some(figcraft_pixel::anim::frame_at(sprite, 0.0).0) {
             show(doc, id, sprite);
-        } else if index == Some(0) {
-            font::changed(doc, id);
         }
     }
     Ok(changed)
@@ -283,8 +278,6 @@ pub fn show(doc: &mut Document, id: NodeId, sprite: &Sprite) {
     {
         doc.images.remove(&old);
     }
-    // A glyph sheet's font follows its drawing.
-    font::changed(doc, id);
 }
 
 fn create(s: &mut Session, p: &Value) -> Result<Value> {

@@ -10,7 +10,6 @@ use crate::cmd::file::{file_bytes, load_bytes};
 
 mod anim;
 mod board;
-mod font;
 mod io;
 mod kit;
 mod nine;
@@ -137,6 +136,39 @@ fn a_background_colour_and_scale() {
     let n = s.doc().unwrap().node(NodeId(id)).unwrap();
     assert_eq!((n.width, n.height), (10.0, 15.0));
     assert_eq!(ex(&mut s, "pixel.get", json!({"id": id}))["scale"], 5);
+}
+
+/// Pixel fonts were removed (G16.8). A file made while they existed still opens: the glyph-sheet
+/// settings left on a layer are ignored, the layer is an ordinary sprite, and text that named the
+/// font falls back to a font this computer has instead of failing.
+#[test]
+fn an_old_file_with_a_glyph_sheet_opens_as_an_ordinary_sprite() {
+    let (mut s, id) = sprite();
+    ex(&mut s, "pixel.stroke", json!({"id": id, "points": [[1, 1], [6, 6]], "color": "#112233"}));
+    let text = ex(&mut s, "text.create", json!({"text": "Score", "x": 0, "y": 100}))["id"].as_u64().unwrap();
+    {
+        let doc = s.doc_mut().unwrap();
+        // What `pixel.font.set` used to leave on the sheet, and the font a text layer named.
+        doc.get_mut(NodeId(id)).unwrap().plugin_data.insert(
+            "graybox.pixel.font".into(),
+            r#"{"name":"Sheet Test Mono","chars":"AB","cell_width":4,"cell_height":6,"baseline":4,"spacing":1}"#.into(),
+        );
+        if let figcraft_doc::NodeKind::Text(td) = &mut doc.get_mut(NodeId(text)).unwrap().kind {
+            td.style.font_family = "Sheet Test Mono".into();
+        }
+    }
+    let before = picture(&mut s, id);
+    let bytes = file_bytes(s.ds().unwrap()).unwrap();
+    let (doc, _) = load_bytes(&bytes, "old.figcraft").unwrap();
+    let mut t = Session::with_document(doc);
+    assert_eq!(picture(&mut t, id), before, "the art is still there");
+    assert_eq!(ex(&mut t, "pixel.get", json!({"id": id}))["width"], 8, "an ordinary sprite");
+    // Drawing on it still works and no command tries to rebuild a font.
+    ex(&mut t, "pixel.stroke", json!({"id": id, "points": [[0, 7]], "color": "#445566"}));
+    assert_eq!(ex(&mut t, "pixel.pick", json!({"id": id, "x": 0, "y": 7}))["color"], "#445566");
+    // The text layer still lays out (its unknown family falls back).
+    let n = t.doc().unwrap().node(NodeId(text)).unwrap();
+    assert!(n.width.is_finite() && n.width > 0.0, "the text still has a box: {}", n.width);
 }
 
 #[test]

@@ -19,7 +19,6 @@ pub(crate) mod colors;
 mod draw;
 mod edges;
 mod export;
-mod font;
 mod input;
 mod panel;
 mod pill;

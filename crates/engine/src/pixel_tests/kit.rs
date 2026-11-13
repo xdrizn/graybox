@@ -1,5 +1,5 @@
-//! Pixel art (G16.3): 9-slice in whole art pixels, its cuts as auto-layout padding, Pixel text, the
-//! Pixel button starter, palette-swap variants, and instances that follow their main's pixels.
+//! Pixel art (G16.3): 9-slice in whole art pixels, its cuts as auto-layout padding, Pixel text,
+//! palette-swap variants, and instances that follow their main's pixels.
 
 use figcraft_doc::nine_slice::NineSlice;
 use figcraft_doc::{NodeId, NodeKind};
@@ -19,6 +19,18 @@ fn padding(s: &Session, id: u64) -> [f64; 4] {
 
 fn id_of(v: &serde_json::Value) -> u64 {
     v["id"].as_u64().unwrap()
+}
+
+/// A component set holding one pixel variant: a frame whose background is a 12 × 12 sprite filled
+/// in `#3a63c4` at scale 4, made a component and combined into a set. Returns (set, the variant).
+fn pixel_set(s: &mut Session) -> (u64, u64) {
+    let frame = id_of(&ex(s, "frame.create", json!({"x": 0, "y": 0, "width": 48, "height": 48, "name": "Card", "props": {"fills": []}})));
+    let art = id_of(&ex(s, "pixel.create", json!({"parent": frame, "width": 12, "height": 12, "scale": 4})));
+    ex(s, "pixel.fill", json!({"id": art, "x": 0, "y": 0, "color": "#3a63c4"}));
+    ex(s, "game.image.toBackground", json!({"ids": [art]}));
+    let comp = id_of(&ex(s, "component.create", json!({"ids": [frame]})));
+    let set = id_of(&ex(s, "component.combineVariants", json!({"ids": [comp]})));
+    (set, s.doc().unwrap().node(NodeId(set)).unwrap().children[0].0)
 }
 
 #[test]
@@ -94,49 +106,10 @@ fn pixel_text_snaps_to_the_scale_of_the_pixel_art_around_it() {
     assert!(refused(&mut s, "pixel.text", json!({"ids": [f], "on": true})).contains("text"));
 }
 
-/// One command makes a component set of three pixel buttons (Default, Hover, Pressed): each a
-/// frame with auto layout hugging a Pixel text label, its art 9-sliced, its cuts the padding.
-#[test]
-fn the_pixel_button_starter_makes_three_states_that_grow_with_their_label() {
-    let mut s = Session::new();
-    let before = s.undo_labels(1000).len();
-    let set = id_of(&ex(&mut s, "pixel.button", json!({"x": 0, "y": 0})));
-    assert_eq!(s.undo_labels(1000).len(), before + 1, "one undo step: {:?}", s.undo_labels(1000));
-    let doc = s.doc().unwrap();
-    let set_node = doc.node(NodeId(set)).unwrap();
-    assert!(matches!(set_node.kind, NodeKind::ComponentSet { .. }));
-    assert_eq!(set_node.name, "Pixel button");
-    assert!(!set_node.clip, "a state that grows stays in view");
-    let names: Vec<String> = set_node.children.iter().map(|c| doc.node(*c).unwrap().name.clone()).collect();
-    assert_eq!(names, ["State=Default", "State=Hover", "State=Pressed"]);
-    let first = set_node.children[0];
-    let b = doc.node(first).unwrap();
-    assert!(store::is_pixel(&b.plugin_data));
-    let cut = NineSlice::of(b).unwrap().insets;
-    assert_eq!(cut, [16.0; 4], "4 art pixels at scale 4");
-    assert_eq!(b.layout.as_ref().unwrap().padding, [16.0; 4]);
-    let label = b.children[0];
-    assert!(doc.node(label).unwrap().plugin_data.contains_key("graybox.pixelText"));
-    let w = b.width;
-    assert!(w > 48.0, "it hugs the label");
-    let boxes: Vec<(f64, f64)> = set_node.children.iter().map(|c| doc.node(*c).unwrap()).map(|n| (n.transform.as_coeffs()[5], n.height)).collect();
-    for pair in boxes.windows(2) {
-        assert!(pair[1].0 >= pair[0].0 + pair[0].1 + 8.0, "the states don't overlap: {boxes:?}");
-    }
-    ex(&mut s, "text.set", json!({"id": label.0, "characters": "Continue playing"}));
-    assert!(s.doc().unwrap().node(first).unwrap().width > w + 40.0, "a longer label, a wider button");
-    assert_eq!(s.selection(), vec![NodeId(set)]);
-    ex(&mut s, "edit.undo", json!({}));
-    assert!(s.doc().unwrap().node(NodeId(set)).is_some(), "the first undo takes back the label");
-    ex(&mut s, "edit.undo", json!({}));
-    assert!(s.doc().unwrap().node(NodeId(set)).is_none(), "the button is one undo step");
-}
-
 #[test]
 fn a_palette_swap_becomes_a_variant_with_its_colours_replaced() {
     let mut s = Session::new();
-    let set = id_of(&ex(&mut s, "pixel.button", json!({})));
-    let default = s.doc().unwrap().node(NodeId(set)).unwrap().children[0].0;
+    let (set, default) = pixel_set(&mut s);
     let before = s.undo_labels(1000).len();
     let r = ex(&mut s, "pixel.paletteVariant", json!({"id": default, "value": "Red", "swap": [["#3a63c4", "#c43a3a"]]}));
     assert_eq!(s.undo_labels(1000).len(), before + 1, "one undo step");
@@ -156,8 +129,7 @@ fn a_palette_swap_becomes_a_variant_with_its_colours_replaced() {
 #[test]
 fn instances_follow_their_mains_pixels() {
     let mut s = Session::new();
-    let set = id_of(&ex(&mut s, "pixel.button", json!({})));
-    let main = s.doc().unwrap().node(NodeId(set)).unwrap().children[0];
+    let main = NodeId(pixel_set(&mut s).1);
     let inst = id_of(&ex(&mut s, "instance.create", json!({"component": main.0, "x": 300, "y": 0})));
     let doc = s.doc().unwrap();
     assert_eq!(figcraft_render::pixel::source(doc, doc.node(NodeId(inst)).unwrap()).map(|n| n.id), Some(main));
@@ -177,17 +149,22 @@ fn a_palette_swap_of_a_lone_component_makes_it_a_set_of_two() {
     assert_eq!(doc.node(set).unwrap().children.len(), 2);
 }
 
-/// Review fixes: the Pressed label drop survives new cuts, a frame's own 9-slice becomes one in art
-/// pixels when a sprite moves in, an instance's pixels can be read, and swap variants get their own
-/// names.
+/// Review fixes: padding set beyond the cuts survives new cuts, a frame's own 9-slice becomes one
+/// in art pixels when a sprite moves in, an instance's pixels can be read, and swap variants get
+/// their own names.
 #[test]
 fn cuts_keep_extra_padding_and_moved_slices_snap() {
     let mut s = Session::new();
-    let set = id_of(&ex(&mut s, "pixel.button", json!({})));
-    let pressed = s.doc().unwrap().node(NodeId(set)).unwrap().children[2].0;
-    assert_eq!(padding(&s, pressed), [20.0, 16.0, 12.0, 16.0], "the label sits one art pixel lower");
-    ex(&mut s, "game.nineSlice.set", json!({"ids": [pressed], "insets": [12, 12, 12, 12]}));
-    assert_eq!(padding(&s, pressed), [16.0, 12.0, 8.0, 12.0], "still one art pixel lower");
+    let card = id_of(&ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 48, "height": 48})));
+    let art = id_of(&ex(&mut s, "pixel.create", json!({"parent": card, "width": 12, "height": 12, "scale": 4})));
+    ex(&mut s, "pixel.fill", json!({"id": art, "x": 0, "y": 0, "color": "#3a63c4"}));
+    ex(&mut s, "game.image.toBackground", json!({"ids": [art]}));
+    ex(&mut s, "node.set", json!({"ids": [card], "props": {"layout": "horizontal"}}));
+    ex(&mut s, "game.nineSlice.set", json!({"ids": [card], "insets": [16, 16, 16, 16]}));
+    assert_eq!(padding(&s, card), [16.0; 4], "the cuts are the padding");
+    ex(&mut s, "node.set", json!({"ids": [card], "props": {"padding": [20, 16, 12, 16]}}));
+    ex(&mut s, "game.nineSlice.set", json!({"ids": [card], "insets": [12, 12, 12, 12]}));
+    assert_eq!(padding(&s, card), [16.0, 12.0, 8.0, 12.0], "what was set beyond the cuts is kept");
 
     let f = id_of(&ex(&mut s, "frame.create", json!({"x": 500, "width": 200, "height": 100})));
     ex(&mut s, "game.nineSlice.set", json!({"ids": [f], "insets": [10, 10, 10, 10]}));
@@ -200,8 +177,7 @@ fn cuts_keep_extra_padding_and_moved_slices_snap() {
 #[test]
 fn an_instance_reads_as_its_main_and_swap_variants_get_their_own_names() {
     let mut s = Session::new();
-    let set = id_of(&ex(&mut s, "pixel.button", json!({})));
-    let main = s.doc().unwrap().node(NodeId(set)).unwrap().children[0].0;
+    let main = pixel_set(&mut s).1;
     let inst = id_of(&ex(&mut s, "instance.create", json!({"component": main, "x": 400, "y": 0})));
     let rows = |s: &mut Session, id: u64| ex(s, "pixel.get", json!({"id": id, "pixels": true, "frame": 0}))["pictures"][0]["rows"].clone();
     assert_eq!(rows(&mut s, inst), rows(&mut s, main));

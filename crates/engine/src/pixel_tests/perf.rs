@@ -75,7 +75,4 @@ fn a_256_sprite_with_8_layers_and_24_frames_stays_quick() {
     time("frame composed from 8 cels (render cache miss)", 10, &mut || {
         let _ = figcraft_pixel::store::frame_image(&n.plugin_data, &sprite, 5);
     });
-    time("pixel fonts refreshed (every UI frame)", 200, &mut || {
-        crate::cmd::pixel::font::refresh(&doc);
-    });
 }

@@ -26,8 +26,6 @@ pub fn load_shared(app: &FigApp) {
     use std::sync::{Mutex, PoisonError};
     static LOADED: Mutex<BTreeSet<(String, usize)>> = Mutex::new(BTreeSet::new());
     let Ok(doc) = app.session.doc() else { return };
-    // Pixel fonts drawn in the file (G16.6), loaded again when their glyph sheet changed.
-    figcraft_engine::cmd::pixel::font::refresh(doc);
     if doc.game.fonts.is_empty() {
         return;
     }

@@ -141,10 +141,6 @@ fn draw_edit(app: &mut FigApp, painter: &egui::Painter, id: figcraft_doc::NodeId
     if app.pixel.grid && zoom >= GRID_FROM {
         grid(app, painter, xf, w, h, zoom);
     }
-    // Only the first frame makes the font: the guide shows there.
-    if d.frame == 0 {
-        glyph_guide(app, painter, id, xf, (w, h), &t);
-    }
     let outline = Stroke::new(1.0, t.accent);
     painter.add(Shape::closed_line(q.to_vec(), outline));
     brush_preview(app, painter, xf, &d, zoom);
@@ -238,45 +234,6 @@ fn preview_cel(app: &FigApp, d: &super::Decoded, shift: bool) -> Canvas {
         transform::clip_to(&mut c, &d.cel, mask);
     }
     c
-}
-
-/// On a glyph sheet (G16.6): each cell's character in its corner and its baseline, so the artist
-/// sees which letter goes where. Hidden while cells are too small on screen to read.
-fn glyph_guide(app: &FigApp, painter: &egui::Painter, id: figcraft_doc::NodeId, xf: Affine, (w, h): (f64, f64), t: &Tokens) {
-    use figcraft_pixel::font::{self, Font};
-    let Ok(doc) = app.session.doc() else { return };
-    let Some(f) = doc.node(id).and_then(|n| n.plugin_data.get(font::KEY)).and_then(|s| Font::load(s)) else { return };
-    let (cw, ch) = (f64::from(f.cell_width), f64::from(f.cell_height));
-    let cols = (w / cw).floor().max(0.0) as u32;
-    let cell_px = art_to_screen(app, xf, 0.0, 0.0).distance(art_to_screen(app, xf, 0.0, ch));
-    if cols == 0 || cell_px < 20.0 {
-        return;
-    }
-    let size = (cell_px * 0.22).clamp(8.0, 13.0);
-    let clip = painter.clip_rect();
-    let base = Stroke::new(1.0, t.accent.gamma_multiply(0.45));
-    // A small dark chip under each label, so it reads on the checkerboard and on the art.
-    let chip = Color32::from_black_alpha(130);
-    let ink = Color32::from_white_alpha(210);
-    for (i, c) in f.chars.chars().enumerate().take(font::MAX_CHARS) {
-        let i = i as u32;
-        let (x0, y0) = (f64::from(i % cols) * cw, f64::from(i / cols) * ch);
-        if y0 + ch > h {
-            break;
-        }
-        let (a, b) = (art_to_screen(app, xf, x0, y0), art_to_screen(app, xf, x0 + cw, y0 + ch));
-        if !Rect::from_two_pos(a, b).intersects(clip) {
-            continue;
-        }
-        let by = y0 + f64::from(f.baseline);
-        painter.line_segment([art_to_screen(app, xf, x0, by), art_to_screen(app, xf, x0 + cw, by)], base);
-        if !c.is_whitespace() && !c.is_control() {
-            let galley = painter.layout_no_wrap(c.to_string(), egui::FontId::proportional(size), ink);
-            let at = a + egui::vec2(1.0, 1.0);
-            painter.rect_filled(Rect::from_min_size(at, galley.size() + egui::vec2(4.0, 0.0)), egui::CornerRadius::same(2), chip);
-            painter.galley(at + egui::vec2(2.0, 0.0), galley, ink);
-        }
-    }
 }
 
 /// The pixel grid: a faint line between every art pixel (only lines on screen are drawn).

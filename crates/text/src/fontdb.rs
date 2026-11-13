@@ -730,31 +730,6 @@ impl FontDb {
         (0..count).filter_map(|i| Face::from_bytes(FontBytes::Shared(shared.clone()), i, None, None)).map(|f| self.add(f)).collect()
     }
 
-    /// Graybox: [`add_bytes`](Self::add_bytes), but each face takes the place of its family's
-    /// faces (their slots are reused, so editing a font over and over doesn't grow the list).
-    fn replace_bytes(&mut self, bytes: Vec<u8>) -> Vec<String> {
-        let shared = Arc::new(bytes);
-        let Some(face) = Face::from_bytes(FontBytes::Shared(shared), 0, None, None) else { return Vec::new() };
-        let key = face.family.to_lowercase();
-        let family = face.family.clone();
-        let slot = self.families.get(&key).and_then(|(_, v)| v.first().copied()).filter(|i| *i < self.faces.len());
-        match slot {
-            Some(i) => {
-                self.generation += 1;
-                if let Some(f) = self.faces.get_mut(i) {
-                    *f = Arc::new(face);
-                }
-                if let Some((_, v)) = self.families.get_mut(&key) {
-                    *v = vec![i];
-                }
-            }
-            None => {
-                self.add(face);
-            }
-        }
-        vec![family]
-    }
-
     /// The family and style of the face whose PostScript name is `ps` (ignoring case), loaded or
     /// only scanned.
     pub fn postscript_face(&self, ps: &str) -> Option<(String, String)> {
@@ -1625,19 +1600,6 @@ pub fn load_font_bytes(bytes: Vec<u8>) -> Vec<String> {
     families.dedup();
     if !families.is_empty() {
         db.loaded_bytes.insert(key, families.clone());
-        drop(db);
-        crate::clear_layout_cache();
-    }
-    families
-}
-
-/// Graybox: load a font made in the app (a pixel font drawn on a glyph sheet) whose family may be
-/// loaded already from an earlier version: each face replaces that family's faces instead of
-/// joining them, so text shows the latest drawing. Returns the families (none: not a font file).
-pub fn replace_font_bytes(bytes: Vec<u8>) -> Vec<String> {
-    let mut db = db().write().unwrap_or_else(std::sync::PoisonError::into_inner);
-    let families = db.replace_bytes(bytes);
-    if !families.is_empty() {
         drop(db);
         crate::clear_layout_cache();
     }

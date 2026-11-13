@@ -21,6 +21,27 @@ fn exported(s: &mut Session, p: Value) -> Vec<(String, Vec<u8>)> {
     ex(s, "pixel.export", p)["files"].as_array().unwrap().iter().map(|f| (f["name"].as_str().unwrap().to_string(), unb64(&f["data"]))).collect()
 }
 
+/// A button built by hand: a frame with auto layout hugging a Pixel text label, its background a
+/// 12 × 12 sprite cut 4 art pixels in on every side. Returns the component made of it.
+fn pixel_button(s: &mut Session, label: &str) -> u64 {
+    let id_of = |v: &Value| v["id"].as_u64().unwrap();
+    let frame = id_of(&ex(s, "frame.create", json!({"x": 600, "y": 0, "width": 48, "height": 48, "name": "Button", "props": {"fills": []}})));
+    let art = id_of(&ex(s, "pixel.create", json!({"parent": frame, "width": 12, "height": 12, "scale": 4})));
+    ex(s, "pixel.fill", json!({"id": art, "x": 0, "y": 0, "color": "#3a63c4"}));
+    ex(s, "game.image.toBackground", json!({"ids": [art]}));
+    ex(s, "node.set", json!({"ids": [frame], "props": {"layout": "horizontal", "mainAlign": "center", "crossAlign": "center"}}));
+    ex(s, "game.nineSlice.set", json!({"ids": [frame], "insets": [16, 16, 16, 16]}));
+    let text = id_of(&ex(
+        s,
+        "text.create",
+        json!({"text": label, "x": 0, "y": 0, "parent": frame, "name": "Label", "select": false,
+            "props": {"fontSize": 48.0, "lineHeight": 56.0, "fill": "#ffffff"}}),
+    ));
+    ex(s, "pixel.text", json!({"ids": [text], "on": true, "scale": 4}));
+    ex(s, "node.set", json!({"ids": [frame], "props": {"sizingH": "hug", "sizingV": "hug"}}));
+    id_of(&ex(s, "component.create", json!({"ids": [frame]})))
+}
+
 fn json_file(files: &[(String, Vec<u8>)]) -> Value {
     serde_json::from_slice(&files.iter().find(|(n, _)| n.ends_with(".json")).unwrap().1).unwrap()
 }
@@ -137,17 +158,17 @@ fn a_screen_sent_to_unity_marks_pixel_layers_and_writes_a_sheet_for_animated_one
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// A pixel button on a screen goes to Unity as its 9-sliced art (the sprite's own size, no label
-/// baked in) with the label as a text child, so the button grows in Unity like in Graybox.
+/// A button made of 9-sliced pixel art with a Pixel text label, on a screen, goes to Unity as its
+/// art (the sprite's own size, no label baked in) with the label as a text child, so the button
+/// grows in Unity like in Graybox.
 #[test]
 fn a_pixel_button_sent_to_unity_keeps_its_label_out_of_the_9_sliced_art() {
     let dir = std::env::temp_dir().join(format!("graybox-pixel-button-unity-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let mut s = Session::new();
     let screen = ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 400, "height": 200, "name": "Menu"}))["id"].as_u64().unwrap();
-    let set = ex(&mut s, "pixel.button", json!({"x": 600, "y": 0, "text": "Start game"}))["id"].as_u64().unwrap();
-    let main = s.doc().unwrap().node(NodeId(set)).unwrap().children[0];
-    let inst = ex(&mut s, "instance.create", json!({"component": main.0, "x": 20, "y": 20, "parent": screen}))["id"].as_u64().unwrap();
+    let main = pixel_button(&mut s, "Start game");
+    let inst = ex(&mut s, "instance.create", json!({"component": main, "x": 20, "y": 20, "parent": screen}))["id"].as_u64().unwrap();
     let out = ex(&mut s, "game.unity.export", json!({"frame": screen, "dir": dir.to_string_lossy()}));
     let folder = std::path::PathBuf::from(out["screens"][0]["folder"].as_str().unwrap());
     let layout: Value = serde_json::from_slice(&std::fs::read(folder.join("layout.json")).unwrap()).unwrap();

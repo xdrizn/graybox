@@ -1345,6 +1345,10 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - `crates/engine/src/cmd/arrange.rs` `scale_node`: an instance scaled (itself or inside a scaled frame)
   gets its "size" override, so a variant change keeps its size (upstream only marked layers inside
   instances).
+- `crates/engine/src/canvas/tools/drag.rs` `move_down` (`board_background`, and the selection-box
+  fallback) and `pointer.rs` `hover`: a selected top-level frame with layers marquees instead of being
+  dragged, and shows no hover over its background (`tools/frame_work.rs`, new, `mod` in `tools.rs`;
+  `frame_work_tests` in `lib.rs`); `draw.rs` `board_click`: Shift-click takes a selected frame out.
 - `crates/ui-egui/src/present/actions.rs` Change to: `cmd::game::keep_instance_size` before the swap.
 - `apps/figcraft/src/main.rs`: with nothing to open, start in the most recent file that still exists.
 - `crates/ui-egui/src/services.rs` `Services::cursor_screen_pixels` (desktop Windows: `mouse_position`
@@ -1390,10 +1394,6 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   by position (9-slice thirds) until set by hand (`GameSettings::anchored`); `game.anchors.auto`.
 - `crates/ui-egui/src/panels/right.rs` `position_fields`: `game::anchor_ui` (Figma-like constraints
   with a clickable box; "Anchor layers by position" for a frame); `constraints_row`/`pretty` kept unused.
-- `crates/engine/src/canvas/tools/drag.rs` `move_down` (`board_background`, and the selection-box
-  fallback) and `pointer.rs` `hover`: a selected top-level frame with layers marquees instead of being
-  dragged, and shows no hover over its background (`tools/frame_work.rs`, new, `mod` in `tools.rs`;
-  `frame_work_tests` in `lib.rs`); `draw.rs` `board_click`: Shift-click takes a selected frame out.
 - Upstream tests changed for position anchoring: `history_behaviour_tests` scene and
   `canvas_fixes_tests::a_selected_layer_shows_its_constraint_guides_in_its_frame` anchor by hand.
 - `crates/engine/src/shift_select.rs` (new, `mod` in `lib.rs`) and `canvas/tools/drag.rs` press: Shift-click
