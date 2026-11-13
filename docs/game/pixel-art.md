@@ -14,6 +14,9 @@ Graybox desenha pixel art direto no canvas, para UI de jogo:
 - **Vetor virando pixel**: copie uma camada ou grupo no canvas (`Ctrl+C`), abra um sprite e cole
   (`Ctrl+V`): vira pixel na hora, no tamanho dele em pixels de arte, cabendo no quadro, com a borda
   cortada (sem franja transparente) e pronta para editar pixel a pixel.
+- **Painel com o sprite aberto**: a seção Fill vira as duas cores do desenho (não "image 100%"), e
+  **Selected colors** (as cores da arte) fica entre Fill e Stroke. O conta-gotas pega cor de
+  qualquer ponto do canvas, não só de dentro do quadro.
 - **Cores do Graybox**: as duas cores abrem o seletor de cor padrão, com os estilos de cor e as
   variáveis do arquivo; a cor lembra de que estilo veio, e se o estilo mudar o painel oferece
   "Update from styles". Paletas `.gpl`/`.hex` viram estilos de cor (Palette > Import…).
@@ -76,8 +79,14 @@ with **Done**, `Esc` or `Enter`.
 - Two colours: the main button draws the first, the right button the second; `X` swaps them. A
   click on either opens Graybox's colour picker: a custom colour, the file's colour styles (by
   folder), colour variables and the colours in this sprite. A colour taken from a style or variable
-  keeps that link in the sprite, so when the style changes **Update from styles** (Pixel colors)
+  keeps that link in the sprite, so when the style changes **Update from styles** (Selected colors)
   repaints those pixels, and Replace colour moves the link to the new colour.
+- **The panel while a sprite is open**: the Fill section shows the two drawing colours instead of
+  the layer's image fill ("image 100 %" says nothing while drawing). Click either swatch for the
+  standard colour picker — a plain colour, one of the file's colour styles or a colour variable, and
+  the link to it is kept; the header's swap button and `X` swap them. They stay in the pill too.
+  **Selected colors** (the colours the art is drawn with, where one can be replaced everywhere) sits
+  between Fill and Stroke.
 - Mirror left/right and up/down, with pink handles past the top and left sides to drag each axis
   (the pointer turns into a resize arrow over them); with both on, the ring where they cross drags
   both at once. Tile mode wraps drawing round the edges and shows the sprite repeated around
@@ -118,7 +127,7 @@ with **Done**, `Esc` or `Enter`.
   stays on the page. By command: `pixel.paste {id, source}` for a layer in the file, or
   `pixel.paste {id, clipboard: true}`; `threshold` (0–100 %) changes where the alpha is cut, and 0
   keeps it as drawn.
-- **Palette swap**: in Pixel colors, pick a colour, then **As variant** makes a new variant
+- **Palette swap**: in Selected colors, pick a colour, then **As variant** makes a new variant
   ("Palette=Red") with the colours swapped.
 
 ## Animation

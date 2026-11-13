@@ -212,7 +212,7 @@ fn replace_color(s: &mut Session, p: &Value) -> Result<Value> {
     let tol = tolerance(p);
     // The colour style or variable `to` came from (G16.6): it replaces `from`'s link.
     let link = super::tools::link_param(cmd, s.doc()?, p)?;
-    // Several pixel layers at once (Pixel colors): `ids`, every layer and frame of each.
+    // Several pixel layers at once (Selected colors): `ids`, every layer and frame of each.
     if let Some(list) = get(p, "ids").filter(|v| !v.is_null()) {
         let ids: Vec<NodeId> = list
             .as_array()
@@ -373,7 +373,7 @@ fn drawn_picture(doc: &figcraft_doc::Document, ids: &[NodeId], sprite: &Sprite, 
         k *= side / widest;
     }
     let pm = figcraft_render::render_area(doc, ids, b, k)?;
-    let px: Vec<Rgba> = pm
+    let mut px: Vec<Rgba> = pm
         .pixels()
         .iter()
         .map(|c| {
@@ -385,7 +385,40 @@ fn drawn_picture(doc: &figcraft_doc::Document, ids: &[NodeId], sprite: &Sprite, 
             }
         })
         .collect();
+    if cut > 0 {
+        snap_near_colours(&mut px);
+    }
     Canvas::from_pixels(pm.width(), pm.height(), px)
+}
+
+/// Rounding where the drawing was anti-aliased leaves an edge pixel a shade off its own colour
+/// (`#1f88e4` beside `#1e88e5`), which would read as four colours in Selected colors (G16.8). Each
+/// pixel takes the most used colour within two steps a channel of it, so one flat colour stays one
+/// colour; a real step between two shades is further apart and is left alone, and a drawing of many
+/// colours (a photo, a gradient) is not touched at all.
+fn snap_near_colours(px: &mut [Rgba]) {
+    let mut count: std::collections::BTreeMap<Rgba, usize> = std::collections::BTreeMap::new();
+    for c in px.iter().filter(|c| c[3] > 0) {
+        *count.entry(*c).or_default() += 1;
+        if count.len() > 256 {
+            return;
+        }
+    }
+    let near = |a: Rgba, b: Rgba| (0..4).all(|i| a[i].abs_diff(b[i]) <= 2);
+    let mut to: std::collections::BTreeMap<Rgba, Rgba> = std::collections::BTreeMap::new();
+    for (c, n) in &count {
+        // The most used colour nearby (itself when nothing nearby is used more).
+        let best = count.iter().filter(|(o, _)| near(*c, **o)).max_by_key(|(o, m)| (**m, std::cmp::Reverse(**o)));
+        match best {
+            Some((o, m)) if *m > *n => to.insert(*c, *o),
+            _ => to.insert(*c, *c),
+        };
+    }
+    for c in px.iter_mut() {
+        if let Some(o) = to.get(c) {
+            *c = *o;
+        }
+    }
 }
 
 /// What Copy took, drawn as pixels (G16.8): the copied layers are put on the page, drawn, and taken

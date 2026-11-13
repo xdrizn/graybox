@@ -1042,6 +1042,27 @@
     rectangle): the title over the board, the whole board shown inside the row, a pixel drawn at
     (0, 0) leaving `absoluteBounds` at exactly 188, 116, 96 × 96, the art still there after Esc and
     after reopening, and the new brush field in the pill.
+  - Three more the owner asked for the same day, each its own commit:
+    - **The sprite's background turns off** (the checkerboard button beside the grid): the empty
+      pixels become see-through, so a reference under the sprite can be traced. Only how the board
+      is shown while editing — the pixels, the export and the layer in Design are untouched.
+      `Editor::background` (remembered like the grid), `draw.rs` leaves the checker quads out, new
+      `Icon::Checkerboard` drawn in code.
+    - **A vector copied on the canvas pastes in as pixels**: `pixel.paste` grows `clipboard` (the
+      copied layers are put on the page, drawn, and taken straight back out inside the one command)
+      and `threshold` (default 50 %: alpha under it is left out and the rest comes in solid, so
+      there is no feathered fringe; 0 keeps the alpha as drawn). A layer bigger than the board is
+      fitted to it instead of refused. Pixel mode's Paste takes the newest copy, pixels or layers,
+      by the clipboard's own copy count (`layers_generation`).
+    - **Colours in Pixel mode.** The eyedropper reads the whole canvas: a painted art pixel gives
+      its own colour, an empty one what is drawn under the sprite, and outside the board whatever
+      the page shows (new `pixel.colorAt {x, y}`). The colour picker's own eyedropper works over a
+      sprite too (Pixel mode lets a press through while `tool.pick_only` is set), and its colour
+      goes to the drawing colour it was opened on, where the file's colour styles and variables were
+      already offered. In the panel, while a sprite is open the Fill section is the two drawing
+      colours (each opening the standard picker, the style or variable link kept, the header's swap
+      button and `X` swapping them) instead of "image 100 %", and "Pixel colors" is now **Selected
+      colors**, between Fill and Stroke.
 
 ## Decisions
 - G16 pixel art, details the spec left open (chosen as a pixel artist would expect):
@@ -1165,6 +1186,19 @@
       select and drag behave exactly as a frame's own name does, with no new command.
     - The brush shape joins the size field rather than keeping its own button (Aseprite reads that
       way, and he looked for it there); the shortcuts stay so nobody loses them.
+    - The sprite's background is a **view** toggle, nothing in the file: an exported sprite and the
+      layer in Design look the same whether it is on or off.
+    - A vector pasted into a sprite is **rasterised, not linked**: it becomes ordinary pixels to be
+      edited, and the vector it came from stays on the page untouched. Alpha is cut rather than
+      feathered by default, since a pixel artist wants a sharp edge; `threshold: 0` keeps the alpha
+      for anyone who wants the soft one. No new command: `pixel.paste` already drew a layer as
+      pixels, so it gained `clipboard` and `threshold` instead of a second path.
+    - The eyedropper takes what is **rendered** at that point, so over empty canvas it picks the
+      page's own colour (the app's own eyedropper does the same). Picking transparency by clicking
+      an empty art pixel is gone: the eraser is how a pixel is cleared.
+    - "Selected colors" sits where the owner asked (between Fill and Stroke) and keeps everything it
+      did. The app's own upstream section is "Selection colors", under Effects: a near name but a
+      different thing, far apart in the panel, and he named this one himself.
 - G11.4 movement (recommended option each time):
   - No physics engine: one cylinder against the world's axis-aligned boxes (two passes) plus the
     heightfield; a few hundred boxes per step is cheap at 60 Hz and the same on wasm.
@@ -1642,7 +1676,11 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     in art pixels, in Pixel mode); `panels/right.rs`: the 9-slice section moved above Export;
     `canvas/input.rs`: the Pixel mode hook returns `!game::pixel::has_cursor` (its own pointer
     over a mirror handle or a board side stays).
-  - G16.8: no new hook, and one **removed**: pixel fonts are gone, so `crates/text/src/fontdb.rs`
+  - G16.8 (colours and the background): `icons.rs` / `icons/draw.rs`: `Checkerboard` (in
+    `draw_pixel_art`); `panels/right.rs`: `game::pixel::colors::fill_section` takes the Fill
+    section's place while a sprite is edited, and `colors::section` moved from under Selection
+    colours to between Fill and Stroke.
+  - G16.8: no other new hook, and one **removed**: pixel fonts are gone, so `crates/text/src/fontdb.rs`
     `replace_font_bytes` / `FontDb::replace_bytes` and their re-export in `crates/text/src/lib.rs`
     were deleted (upstream text is untouched again). The sprite's title reuses the engine's own
     `tools::labels` list from our module, so the canvas needed no change.

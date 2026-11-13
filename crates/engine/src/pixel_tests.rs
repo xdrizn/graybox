@@ -419,6 +419,16 @@ fn a_vector_drawn_into_a_sprite_has_no_half_transparent_fringe() {
         rows.as_array().unwrap().iter().flat_map(|r| r.as_array().unwrap()).filter_map(Value::as_str).filter(|c| *c != ".").collect();
     assert!(!painted.is_empty(), "the circle came in");
     assert!(painted.iter().all(|c| *c == "#ff0000"), "every pixel is the fill itself, none a faded edge: {painted:?}");
+    // A colour the drawing rounds off at the edges still comes in as one colour, not four shades a
+    // step apart (they would read as four rows in Selected colors).
+    let (mut s, id) = sprite();
+    let round = ex(&mut s, "shape.ellipse", json!({"x": 200, "y": 0, "width": 24, "height": 24}))["id"].as_u64().unwrap();
+    ex(&mut s, "node.set", json!({"ids": [round], "props": {"fill": "#1e88e5"}}));
+    ex(&mut s, "pixel.paste", json!({"id": id, "source": round}));
+    let rows = ex(&mut s, "pixel.get", json!({"id": id, "pixels": true, "frame": 0}))["pictures"][0]["rows"].clone();
+    let painted: Vec<&str> =
+        rows.as_array().unwrap().iter().flat_map(|r| r.as_array().unwrap()).filter_map(Value::as_str).filter(|c| *c != ".").collect();
+    assert!(painted.iter().all(|c| *c == "#1e88e5"), "one flat colour: {painted:?}");
     // Asked for it, the alpha is kept as drawn instead.
     let (mut s, id) = sprite();
     let round = ex(&mut s, "shape.ellipse", json!({"x": 200, "y": 0, "width": 24, "height": 24}))["id"].as_u64().unwrap();

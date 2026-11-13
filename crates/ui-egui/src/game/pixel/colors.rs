@@ -1,10 +1,10 @@
 //! Pixel colours, with Graybox's own colour system (G16.6): the tools' two colours and a swap in
-//! the Pixel colors section are edited in the standard colour picker
+//! the Selected colors section are edited in the standard colour picker
 //! ([`PickerTarget::Pixel`](crate::colorpicker::PickerTarget::Pixel)), which here also offers the
 //! file's colour styles and colour variables (the colour then remembers where it came from) and
 //! the sprite's own colours.
 //!
-//! The Pixel colors section (under Selection colours) lists the colours the selected pixel layers
+//! The Selected colors section (between Fill and Stroke) lists the colours the selected pixel layers
 //! (and pixel layers inside the selected frames) are drawn with. Changing one replaces it in every
 //! layer and frame of those sprites, as one undo step; colours painted from a style that has
 //! changed since can be brought up to date.
@@ -26,7 +26,7 @@ use crate::widgets;
 
 /// The most colours the section lists.
 const MAX_ROWS: usize = 32;
-/// The picker slot of the Pixel colors swap (0 and 1 are the tools' colours).
+/// The picker slot of the Selected colors swap (0 and 1 are the tools' colours).
 pub(crate) const SWAP: usize = 2;
 /// The most styles or variables the picker lists.
 const MAX_LISTED: usize = 256;
@@ -102,7 +102,7 @@ pub(crate) fn link_name(doc: &Document, link: &str) -> Option<String> {
     doc.variables.get_by_id(id).map(|v| v.name.clone())
 }
 
-/// A swap the Pixel colors section has open in the picker: the colour, what it becomes, the
+/// A swap the Selected colors section has open in the picker: the colour, what it becomes, the
 /// layers it changes and (one component selected) the component it can become a variant of.
 #[derive(Clone, Debug)]
 pub(crate) struct Swap {
@@ -114,6 +114,55 @@ pub(crate) struct Swap {
 
 fn swap_open(app: &FigApp) -> bool {
     matches!(app.ui.picker, Some(PickerTarget::Pixel { which: SWAP }))
+}
+
+/// The Fill section while a sprite is being edited (G16.8): "image 100 %" says nothing to the
+/// artist, so the two drawing colours take its place — the same two as the pill, the primary first.
+/// A click on either opens the standard colour picker, where a plain colour, one of the file's
+/// colour styles or a colour variable can be chosen and the link to it is kept. `X` still swaps
+/// them, and so does the swap button. Returns whether it drew (the Fill section is then left out).
+pub(crate) fn fill_section(app: &mut FigApp, ui: &mut Ui, doc: &Arc<Document>, sel: &[NodeId]) -> bool {
+    #[cfg(test)]
+    app.pixel.fill_rects.clear();
+    let [id] = sel else { return false };
+    if app.pixel.mode != super::Mode::Edit(*id) {
+        return false;
+    }
+    let t = Tokens::get(ui.ctx());
+    let swap = widgets::section_header(ui, "Fill", &[(crate::icons::Icon::Swap, "Swap the two colours (X)")], false).is_some();
+    if swap {
+        app.pixel.colors.swap(0, 1);
+        app.pixel.links.swap(0, 1);
+    }
+    for which in [0, 1] {
+        let Some(c) = app.pixel.colors.get(which).copied() else { continue };
+        let link = app.pixel.links.get(which).cloned().flatten();
+        super::panel::padded(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing = vec2(8.0, 4.0);
+                let (r, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::click());
+                #[cfg(test)]
+                app.pixel.fill_rects.push(r);
+                ui.painter().rect_filled(r, CornerRadius::same(4), c32(c));
+                let open = matches!(app.ui.picker, Some(PickerTarget::Pixel { which: w }) if w == which);
+                let border = if open { t.accent } else { t.border_strong };
+                ui.painter().rect_stroke(r, CornerRadius::same(4), Stroke::new(if open { 2.0 } else { 1.0 }, border), egui::StrokeKind::Inside);
+                let name = link.as_deref().and_then(|l| link_name(doc, l));
+                let label = name.clone().unwrap_or_else(|| canvas::to_hex(c).to_uppercase());
+                ui.label(egui::RichText::new(label).font(crate::theme::regular(11.0)).color(t.text));
+                let what = if which == 0 { "Primary colour (the main button draws it)" } else { "Secondary colour (the right button draws it)" };
+                let from = name.map(|n| format!("  ·  from {n}")).unwrap_or_default();
+                app.picker_control(PickerTarget::Pixel { which }, &resp.on_hover_text(format!("{what}{from}  ·  X swaps")));
+            });
+        });
+    }
+    true
+}
+
+/// Where the Fill section drew the two colours (tests).
+#[cfg(test)]
+pub(crate) fn fill_swatches(app: &FigApp) -> Option<Vec<egui::Rect>> {
+    Some(app.pixel.fill_rects.clone()).filter(|r| !r.is_empty())
 }
 
 /// The section, when the selection holds pixel layers. Returns whether it drew.
@@ -129,7 +178,7 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Arc<Document>, sel: &
         return false;
     }
     let t = Tokens::get(ui.ctx());
-    widgets::section_header(ui, "Pixel colors", &[], false);
+    widgets::section_header(ui, "Selected colors", &[], false);
     // A swap whose picker closed (a click elsewhere) is over.
     if !swap_open(app) {
         app.pixel.swap = None;

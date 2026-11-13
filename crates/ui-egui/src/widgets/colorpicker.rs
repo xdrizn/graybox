@@ -60,7 +60,7 @@ pub enum PickerTarget {
         pending: Option<String>,
     },
     /// Graybox: a Pixel mode colour (G16.6): 0 and 1 the tools' first and second colour, 2 the
-    /// colour a Pixel colors swap changes to (`crate::game::pixel::colors`).
+    /// colour a Selected colors swap changes to (`crate::game::pixel::colors`).
     Pixel {
         which: usize,
     },

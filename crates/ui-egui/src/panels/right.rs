@@ -308,8 +308,16 @@ fn design(app: &mut FigApp, ui: &mut Ui) {
         crate::typography::typography(app, ui, &shown, &sel);
         widgets::separator(ui);
     }
-    paints(app, ui, &shown, &sel, true);
+    // Graybox: while a sprite is edited its Fill is the two drawing colours, not "image 100 %" (G16.8).
+    if !crate::game::pixel::colors::fill_section(app, ui, &shown, &sel) {
+        paints(app, ui, &shown, &sel, true);
+    }
     widgets::separator(ui);
+    // Graybox: the colours the selected pixel layers are drawn with, to swap one everywhere; the
+    // owner reads them as the layer's own colours, so they sit between Fill and Stroke (G16.8).
+    if crate::game::pixel::colors::section(app, ui, &shown, &sel) {
+        widgets::separator(ui);
+    }
     paints(app, ui, &shown, &sel, false);
     widgets::separator(ui);
     effects(app, ui, &shown, &sel);
@@ -320,10 +328,6 @@ fn design(app: &mut FigApp, ui: &mut Ui) {
         widgets::separator(ui);
     }
     crate::selection_colors::section(app, ui, &shown, &sel);
-    // Graybox: the colours pixel layers are drawn with, to swap one everywhere (G16).
-    if crate::game::pixel::colors::section(app, ui, &shown, &sel) {
-        widgets::separator(ui);
-    }
     if crate::selection_cache::every(&shown, &sel, |n| n.kind.is_frame_like()) {
         grids(app, ui, &shown, &sel);
         widgets::separator(ui);

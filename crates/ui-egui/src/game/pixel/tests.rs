@@ -966,3 +966,40 @@ fn the_pickers_eyedropper_samples_the_canvas_while_a_sprite_is_open() {
     assert_eq!(u.app.pixel.colors[0], [0x00, 0x00, 0xff, 255], "the sample became the drawing colour");
     assert_eq!(u.app.pixel.mode, Mode::Edit(figcraft_doc::NodeId(id)), "and the sprite is still open");
 }
+
+/// G16.8: while a sprite is edited the Fill section is the two drawing colours (not "image"), and
+/// the colours of the art are "Selected colors", between Fill and Stroke. Closed, the layer's own
+/// Fill is back.
+#[test]
+fn the_fill_section_shows_the_drawing_colours_while_a_sprite_is_edited() {
+    let (mut u, id) = editing();
+    u.app.session.execute("pixel.stroke", &json!({"id": id, "points": [[1, 1]], "color": "#ff0000"})).unwrap();
+    u.app.session.execute("select.set", &json!({"ids": [id]})).unwrap();
+    u.frame(vec![]);
+    let texts = painted_texts(&mut u);
+    let at = |needle: &str| texts.iter().position(|t| t == needle);
+    assert!(at("Fill").is_some(), "the Fill section is there: {texts:?}");
+    assert!(!texts.iter().any(|t| t == "Image"), "not the image fill of the layer: {texts:?}");
+    let first = crate::game::pixel::colors::fill_swatches(&u.app).expect("the two colours are drawn");
+    assert_eq!(first.len(), 2, "the primary and the secondary");
+    // The hex of the primary colour is written beside its swatch.
+    let hex = figcraft_pixel::canvas::to_hex(u.app.pixel.colors[0]).to_uppercase();
+    assert!(texts.contains(&hex), "the primary colour is named: {hex} in {texts:?}");
+    // Selected colors sits between Fill and Stroke.
+    let (fill, selected, stroke) = (at("Fill"), at("Selected colors"), at("Stroke"));
+    assert!(selected.is_some(), "the art's colours are listed: {texts:?}");
+    assert!(fill < selected && selected < stroke, "Fill {fill:?}, Selected colors {selected:?}, Stroke {stroke:?}");
+    // A click on the primary swatch opens the standard picker on it (styles and variables there).
+    press(&mut u, first[0].center(), PointerButton::Primary, true);
+    press(&mut u, first[0].center(), PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert_eq!(u.app.ui.picker, Some(crate::colorpicker::PickerTarget::Pixel { which: 0 }));
+    // Leaving brings the layer's own Fill back.
+    crate::colorpicker::close(&mut u.app);
+    key(&mut u, Key::Escape, false);
+    u.frame(vec![]);
+    assert_eq!(u.app.pixel.mode, Mode::Off);
+    let texts = painted_texts(&mut u);
+    assert!(crate::game::pixel::colors::fill_swatches(&u.app).is_none());
+    assert!(texts.iter().any(|t| t == "Image"), "the image fill again: {texts:?}");
+}

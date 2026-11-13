@@ -221,7 +221,7 @@ pub struct Editor {
     /// The colour style or variable each colour came from (0 primary, 1 secondary, 2 the Pixel
     /// colors swap), as `style:<id>` or `var:<id>`: painting records it on the sprite (G16.6).
     pub(crate) links: [Option<String>; 3],
-    /// The Pixel colors swap open in the colour picker.
+    /// The Selected colors swap open in the colour picker.
     pub(crate) swap: Option<colors::Swap>,
     /// The colours the frame being edited uses, and the decode key they were counted for.
     pub(crate) used: Option<(u64, Vec<figcraft_pixel::Rgba>)>,
@@ -253,6 +253,9 @@ pub struct Editor {
     pub(crate) export: export::Prefs,
     /// The Pixel art section of the Design panel is folded away.
     pub(crate) panel_closed: bool,
+    /// Where the Fill section drew the two colours last frame (tests, G16.8).
+    #[cfg(test)]
+    pub(crate) fill_rects: Vec<egui::Rect>,
 }
 
 impl Default for Editor {
@@ -299,6 +302,8 @@ impl Default for Editor {
             onion_tex: Vec::new(),
             export: export::Prefs::default(),
             panel_closed: false,
+            #[cfg(test)]
+            fill_rects: Vec::new(),
         }
     }
 }

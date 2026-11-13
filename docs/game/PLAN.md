@@ -235,7 +235,10 @@ Pixel layers edited in place in a Pixel mode, Aseprite-style standard tools, sma
 - [x] G16.8 Pixel feedback (2026-11-13): the Pixel button starter and pixel fonts dropped (never
   asked for; Pixel text on ordinary text layers stays), the open sprite titled above its board like a
   frame, the art no longer jumping when a sprite inside an auto layout is drawn on, the brush shape
-  picked next to the brush size.
+  picked next to the brush size, the sprite's background turned off to trace what is under it, a
+  copied vector pasted in as pixels, the eyedropper picking from the whole canvas (the colour
+  picker's too), and the panel's Fill showing the two drawing colours with Selected colors between
+  Fill and Stroke.
 
 ### G17 — 3D rotation of frames (owner's request, 2026-11-13)
 Spec: [`specs/2026-11-13-frames-3d-design.md`](specs/2026-11-13-frames-3d-design.md). Diegetic, tilted HUD
