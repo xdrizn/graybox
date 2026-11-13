@@ -1374,11 +1374,11 @@ mod crt_tests;
 mod diff_tests;
 // Graybox: documents (G13).
 #[cfg(test)]
+mod docs_md_tests;
+#[cfg(test)]
 mod docs_tests;
 #[cfg(test)]
 mod effects_tests;
-#[cfg(test)]
-mod docs_md_tests;
 #[cfg(test)]
 mod guides_tests;
 #[cfg(test)]
