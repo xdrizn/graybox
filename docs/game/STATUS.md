@@ -749,6 +749,33 @@
       the file). Hidden, the sprite shows the frame being edited; Prototype and Play still play.
     - The pill no longer fits a ~900-point canvas with the Timeline button added: when narrow it
       leaves the zoom label out, then folds the two mirror buttons into one that steps through them.
+  - G16.7 pixel feedback from Adriel (2026-11-13):
+    - **Board and trim (decided by the orchestrator).** In Pixel mode a pixel layer is a board: the
+      Design panel's W and H (where a frame's sit) are its size in art pixels, and typing a size or
+      dragging the board's sides adds or cuts art pixels there (`pixel.canvas {width, height,
+      anchor | offset}`; anchor is the side kept, Alt drags from the centre; the scale stays).
+      Outside Pixel mode the layer hugs its used pixels: `show()` calls `board::retrim`, which
+      stores the box round the pixels of every frame's visible layers as plugin data
+      (`graybox.pixel.trim`, `store::shown_box`; each cel's box is cached by the hash of its stored
+      text, so a stroke decodes one cel) and, when the layer is at the size of the box it showed,
+      moves and sizes it to the new box so the art never moves on the page. A layer resized in
+      Design keeps its size (its art regrows by its grow mode); an empty board keeps the board's
+      size. The renderer, the image fill and the Unity animation sheet draw `store::shown_image`
+      (the trimmed art); 9-slice cuts and base are measured on it, and `pixel.export` (the whole
+      board, as before) moves the cuts out by the margins. Pixel mode draws the whole board round
+      the layer (`art_to_page` offsets by the trim). The Pixel art section reads "Board: W × H art
+      pixels". A 9-sliced layer or an instance is not a board (no sides to drag, no W/H in art
+      pixels).
+    - The 9-slice section sits just above Export (it was under Layout).
+    - 9-slice with components already worked on the main component, on its pixel layer and on a
+      layer sliced before it became a component (instances resized keep the corners); now tested,
+      and the section says "Applies to this layer; instances of the component resize with it" on
+      a component or a layer inside one.
+    - Mirror axes: the pink handles grab from 13 points away and turn the pointer into a resize
+      arrow (Pixel mode tells the canvas it set its own pointer, `pixel::has_cursor`); with both
+      axes on, a ring where they cross drags both. Handles win over the board's sides.
+    - The pixel Text tool (text drawn into pixels) was started and cancelled by Adriel before it was
+      committed; Pixel text and pixel fonts stay as they were.
 - G11.4 movement (recommended option each time):
   - No physics engine: one cylinder against the world's axis-aligned boxes (two passes) plus the
     heightfield; a few hundred boxes per step is cheap at 60 Hz and the same on wasm.
@@ -819,33 +846,6 @@
     gets its own static buffer (built the first time it is drawn) and no first-person portal light.
   - Camera yaw and pitch change every display frame (a mouse turn shows at once); the hero moves in fixed
     steps, using the camera yaw at that step. The picture is interpolated between two steps.
-  - G16.7 pixel feedback from Adriel (2026-11-13):
-    - **Board and trim (decided by the orchestrator).** In Pixel mode a pixel layer is a board: the
-      Design panel's W and H (where a frame's sit) are its size in art pixels, and typing a size or
-      dragging the board's sides adds or cuts art pixels there (`pixel.canvas {width, height,
-      anchor | offset}`; anchor is the side kept, Alt drags from the centre; the scale stays).
-      Outside Pixel mode the layer hugs its used pixels: `show()` calls `board::retrim`, which
-      stores the box round the pixels of every frame's visible layers as plugin data
-      (`graybox.pixel.trim`, `store::shown_box`; each cel's box is cached by the hash of its stored
-      text, so a stroke decodes one cel) and, when the layer is at the size of the box it showed,
-      moves and sizes it to the new box so the art never moves on the page. A layer resized in
-      Design keeps its size (its art regrows by its grow mode); an empty board keeps the board's
-      size. The renderer, the image fill and the Unity animation sheet draw `store::shown_image`
-      (the trimmed art); 9-slice cuts and base are measured on it, and `pixel.export` (the whole
-      board, as before) moves the cuts out by the margins. Pixel mode draws the whole board round
-      the layer (`art_to_page` offsets by the trim). The Pixel art section reads "Board: W × H art
-      pixels". A 9-sliced layer or an instance is not a board (no sides to drag, no W/H in art
-      pixels).
-    - The 9-slice section sits just above Export (it was under Layout).
-    - 9-slice with components already worked on the main component, on its pixel layer and on a
-      layer sliced before it became a component (instances resized keep the corners); now tested,
-      and the section says "Applies to this layer; instances of the component resize with it" on
-      a component or a layer inside one.
-    - Mirror axes: the pink handles grab from 13 points away and turn the pointer into a resize
-      arrow (Pixel mode tells the canvas it set its own pointer, `pixel::has_cursor`); with both
-      axes on, a ring where they cross drags both. Handles win over the board's sides.
-    - The pixel Text tool (text drawn into pixels) was started and cancelled by Adriel before it was
-      committed; Pixel text and pixel fonts stay as they were.
   - Jog is the default speed (5 m/s), a light stick walks slower, Shift runs (8.5), crouch (2.4) only
     slows down for now (no lower capsule). Gravity 20, jump 7 (about 1.2 m).
   - The new-file card is skipped in this crate's own tests (`cfg!(test)` in `kind_ui::after_run`): they
