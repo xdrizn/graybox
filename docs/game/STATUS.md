@@ -1223,6 +1223,20 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     in art pixels, in Pixel mode); `panels/right.rs`: the 9-slice section moved above Export;
     `canvas/input.rs`: the Pixel mode hook returns `!game::pixel::has_cursor` (its own pointer
     over a mirror handle or a board side stays).
+- G17 (3D rotation of layers): workspace `Cargo.toml` (`figcraft-tilt`), `xtask/src/layers.rs`
+  (`tilt` at L0), `crates/doc/Cargo.toml` (depends on `figcraft-tilt`), `crates/doc/src/lib.rs`
+  (`pub mod tilt`); `crates/doc/src/geometry.rs` `hit_rec` and `layers_at` (the point goes back
+  through a tilted layer's warp, `tilt::flat_point`); `crates/render/src/lib.rs` (`mod tilt`;
+  `export_bounds`: a tilted layer exports its `paint_bounds`); `crates/render/src/draw.rs`
+  `draw_layer` (`tilt::draw` before `pixel::layer`), `bounds_within` (`tilt::grow`),
+  `paint_bounds` (`tilt::inside_tilted`); `crates/engine/src/cmd.rs` (`mod tilt`, its specs);
+  `crates/engine/src/canvas/tools/keys.rs` `Session::hit` (runs the hit test as `hit_shown` inside
+  `tilt::with_flat`, edit flat); `crates/engine/src/tests.rs` (two junk entries);
+  `crates/ui-egui/src/canvas/render.rs` `request_render` (`tilt_ui::view`); `canvas.rs`
+  (`tilt_ui::draw`); `panels/right.rs` (`tilt_ui::section` under Position);
+  `present/transition.rs` `smart_interpolate` (`tilt_ui::lerp`); `crates/engine/src/cmd/edit/select.rs`
+  `layers_at` and `crates/ui-egui/src/menus/select_layer.rs` (inside `tilt::with_flat`, edit flat);
+  `xtask/src/layers.rs` `same_layer_ok` (`figcraft-tilt` → `figcraft-geom` within L0).
 
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.
@@ -1255,17 +1269,3 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - G0.3: checkpoint and recovery copy every 2 minutes.
 - G2.3: try controllers on Linux/macOS (gilrs code is in).
 - G7: share link opening in Play (code is in, untested).
-- G17 (3D rotation of layers): workspace `Cargo.toml` (`figcraft-tilt`), `xtask/src/layers.rs`
-  (`tilt` at L0), `crates/doc/Cargo.toml` (depends on `figcraft-tilt`), `crates/doc/src/lib.rs`
-  (`pub mod tilt`); `crates/doc/src/geometry.rs` `hit_rec` and `layers_at` (the point goes back
-  through a tilted layer's warp, `tilt::flat_point`); `crates/render/src/lib.rs` (`mod tilt`;
-  `export_bounds`: a tilted layer exports its `paint_bounds`); `crates/render/src/draw.rs`
-  `draw_layer` (`tilt::draw` before `pixel::layer`), `bounds_within` (`tilt::grow`),
-  `paint_bounds` (`tilt::inside_tilted`); `crates/engine/src/cmd.rs` (`mod tilt`, its specs);
-  `crates/engine/src/canvas/tools/keys.rs` `Session::hit` (runs the hit test as `hit_shown` inside
-  `tilt::with_flat`, edit flat); `crates/engine/src/tests.rs` (two junk entries);
-  `crates/ui-egui/src/canvas/render.rs` `request_render` (`tilt_ui::view`); `canvas.rs`
-  (`tilt_ui::draw`); `panels/right.rs` (`tilt_ui::section` under Position);
-  `present/transition.rs` `smart_interpolate` (`tilt_ui::lerp`); `crates/engine/src/cmd/edit/select.rs`
-  `layers_at` and `crates/ui-egui/src/menus/select_layer.rs` (inside `tilt::with_flat`, edit flat);
-  `xtask/src/layers.rs` `same_layer_ok` (`figcraft-tilt` → `figcraft-geom` within L0).

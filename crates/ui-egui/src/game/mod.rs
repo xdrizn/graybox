@@ -26,8 +26,6 @@ pub mod looks;
 pub mod map;
 pub mod menu;
 pub(crate) mod nine_slice_ui;
-// 3D rotation of layers (G17).
-pub(crate) mod tilt_ui;
 pub mod proto_targets;
 pub(crate) mod pseudo_view;
 pub mod renderer;
@@ -35,6 +33,8 @@ pub mod screen_fit;
 pub mod screen_ui;
 pub mod share;
 pub(crate) mod style_fill;
+// 3D rotation of layers (G17).
+pub(crate) mod tilt_ui;
 // Graybox: the third-person game (G11) and the picker of which game a file plays.
 pub(crate) mod kind_ui;
 pub(crate) mod tps;
