@@ -3,7 +3,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use figcraft_color::{Color, Paint};
-use figcraft_doc::game::{ACTIONS, DisabledItems, EVENT_NAMES, GameSettings, MENU_ACTIONS, MenuSettings, default_menu_bindings, validate_keys};
+use figcraft_doc::game::{
+    ACTIONS, DisabledItems, EVENT_NAMES, GameKind, GameSettings, MENU_ACTIONS, MenuSettings, default_menu_bindings, validate_keys,
+};
 use figcraft_doc::proto::{Action, Easing, Interaction, OverlayAnchor, OverlayPosition, Transition, Trigger};
 use figcraft_doc::{AutoLayout, Collection, Document, LayoutMode, Mode, Node, NodeId, NodeKind, TextData, Variable, VariableValue};
 use figcraft_geom::Affine;
@@ -102,18 +104,28 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
 }
 
-fn defaults() -> Vec<(&'static str, VariableValue)> {
-    vec![
+/// The Game variables Play keeps up to date. The third-person game adds its own (G11.5).
+fn defaults(kind: GameKind) -> Vec<(&'static str, VariableValue)> {
+    let mut list = vec![
         ("vida", VariableValue::Number(100.0)),
         ("vidaMax", VariableValue::Number(100.0)),
         ("municao", VariableValue::Number(12.0)),
         ("reserva", VariableValue::Number(72.0)),
         ("atacante", VariableValue::String(String::new())),
         ("ultimoDano", VariableValue::Number(0.0)),
-        ("arma", VariableValue::String("Pistol".into())),
+        ("arma", VariableValue::String(if kind == GameKind::ThirdPerson { "Sword" } else { "Pistol" }.into())),
         ("agachado", VariableValue::Boolean(false)),
         ("emChamas", VariableValue::Boolean(false)),
-    ]
+    ];
+    if kind == GameKind::ThirdPerson {
+        list.extend([
+            ("stamina", VariableValue::Number(100.0)),
+            ("staminaMax", VariableValue::Number(100.0)),
+            ("escalando", VariableValue::Boolean(false)),
+            ("mirando", VariableValue::Boolean(false)),
+        ]);
+    }
+    list
 }
 
 /// Idempotent setup; existing same-name values (even incompatible user values) are never replaced.
@@ -143,7 +155,7 @@ pub fn ensure_variables(doc: &mut Document) {
     } else {
         collection.modes
     };
-    for (name, value) in defaults() {
+    for (name, value) in defaults(doc.game.kind) {
         if doc.variables.variables.iter().any(|v| v.collection == collection.id && v.name == name) {
             continue;
         }
@@ -168,7 +180,7 @@ pub fn ensure_variables(doc: &mut Document) {
 /// Canonical name → variable id, scoped to the Game collection and checked for the expected type.
 pub fn variable_ids(doc: &Document) -> BTreeMap<String, String> {
     let Some(collection) = doc.variables.collections.iter().find(|c| c.name == "Game") else { return BTreeMap::new() };
-    defaults()
+    defaults(doc.game.kind)
         .into_iter()
         .filter_map(|(name, value)| {
             let kind = value.type_of()?;
@@ -185,7 +197,7 @@ fn check_variables(doc: &Document, cmd: &str) -> Result<()> {
     if collections.next().is_some() || collection.extends.is_some() {
         return Err(bad(cmd, "Game must be one local variable collection"));
     }
-    for (name, value) in defaults() {
+    for (name, value) in defaults(doc.game.kind) {
         let mut vars = doc.variables.variables.iter().filter(|v| v.collection == collection.id && v.name == name);
         if let Some(v) = vars.next()
             && (Some(v.kind) != value.type_of() || vars.next().is_some())
@@ -649,7 +661,7 @@ fn set_bar(s: &mut Session, p: &Value) -> Result<Value> {
             let name = v
                 .as_str()
                 .filter(|n| figcraft_doc::game::BAR_VARIABLES.contains(n))
-                .ok_or_else(|| bad(cmd, "variable must be vida, municao or reserva"))?;
+                .ok_or_else(|| bad(cmd, "variable must be vida, municao, reserva or stamina"))?;
             settings.bars.insert(node, name.to_string());
         }
     }

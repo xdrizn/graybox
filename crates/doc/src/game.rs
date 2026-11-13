@@ -198,8 +198,9 @@ impl GameKind {
     }
 }
 
-/// Game values a "game bar" can follow (health, ammo in the magazine, reserve ammo).
-pub const BAR_VARIABLES: [&str; 3] = ["vida", "municao", "reserva"];
+/// Game values a "game bar" can follow (health, ammo in the magazine, reserve ammo, and the
+/// third-person stamina).
+pub const BAR_VARIABLES: [&str; 4] = ["vida", "municao", "reserva", "stamina"];
 pub const MAX_SCREEN_SETTINGS: usize = 4096;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -431,7 +432,7 @@ impl GameSettings {
             }
         }
         if self.bars.values().any(|v| !BAR_VARIABLES.contains(&v.as_str())) {
-            return Err("A game bar follows vida, municao or reserva".into());
+            return Err("A game bar follows vida, municao, reserva or stamina".into());
         }
         if self.menus.len() > MAX_MENUS {
             return Err(format!("Use at most {MAX_MENUS} navigable menus"));

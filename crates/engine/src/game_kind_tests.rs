@@ -91,3 +91,37 @@ fn the_kind_names_parse_both_ways() {
     assert_eq!(GameKind::parse(""), None);
     assert_eq!(GameKind::parse("fps2"), None);
 }
+
+fn names_of(s: &Session) -> Vec<String> {
+    crate::cmd::game::variable_ids(s.doc().unwrap()).into_keys().collect()
+}
+
+#[test]
+fn the_third_person_game_adds_its_own_variables() {
+    let mut s = Session::new();
+    ex(&mut s, "game.setup", json!({}));
+    let first = names_of(&s);
+    assert!(first.contains(&"municao".to_string()) && !first.contains(&"stamina".to_string()));
+    ex(&mut s, "game.kind.set", json!({"kind": "thirdPerson"}));
+    ex(&mut s, "game.setup", json!({}));
+    let third = names_of(&s);
+    for name in ["vida", "vidaMax", "stamina", "staminaMax", "arma", "agachado", "escalando", "mirando", "atacante"] {
+        assert!(third.contains(&name.to_string()), "{name} in {third:?}");
+    }
+    // The third-person hero starts with its sword on its back.
+    let mut s = Session::new();
+    ex(&mut s, "game.kind.set", json!({"kind": "thirdPerson"}));
+    ex(&mut s, "game.setup", json!({}));
+    let doc = s.doc().unwrap();
+    let arma = doc.variables.variables.iter().find(|v| v.name == "arma").unwrap();
+    assert_eq!(arma.values.values().next(), Some(&figcraft_doc::VariableValue::String("Sword".into())));
+}
+
+#[test]
+fn a_game_bar_can_follow_stamina() {
+    let mut s = Session::new();
+    let bar = ex(&mut s, "shape.rectangle", json!({"width": 100, "height": 10}))["id"].clone();
+    ex(&mut s, "game.bar.set", json!({"node": bar, "variable": "stamina"}));
+    assert_eq!(s.doc().unwrap().game.bars.values().next().map(String::as_str), Some("stamina"));
+    assert!(s.execute("game.bar.set", &json!({"node": bar, "variable": "mana"})).is_err());
+}

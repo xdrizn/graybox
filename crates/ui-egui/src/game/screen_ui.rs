@@ -16,8 +16,13 @@ const BACKGROUNDS: [(GameBackground, &str, &str); 3] = [
     (GameBackground::Paused, "paused", "Game paused"),
     (GameBackground::Hidden, "hidden", "No game"),
 ];
-const BARS: [(Option<&str>, &str); 4] =
-    [(None, "None"), (Some("vida"), "Health (vida)"), (Some("municao"), "Ammo (municao)"), (Some("reserva"), "Reserve (reserva)")];
+const BARS: [(Option<&str>, &str); 5] = [
+    (None, "None"),
+    (Some("vida"), "Health (vida)"),
+    (Some("municao"), "Ammo (municao)"),
+    (Some("reserva"), "Reserve (reserva)"),
+    (Some("stamina"), "Stamina (stamina)"),
+];
 
 pub fn section(app: &mut FigApp, ui: &mut Ui, doc: &Document, node: &Node) {
     let t = Tokens::get(ui.ctx());

@@ -366,6 +366,11 @@ impl Animator {
         self.overlay = None;
     }
 
+    /// The clip playing over the body (a draw, the bow, a flinch), if any.
+    pub fn overlay_clip(&self) -> Option<ClipId> {
+        self.overlay.map(|overlay| overlay.playing.clip)
+    }
+
     /// Let go of an upper-body clip (the bow drawn) and keep the rest as it is.
     pub fn release(&mut self) {
         if self.overlay.is_some() {

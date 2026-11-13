@@ -8,14 +8,18 @@
 //! - G11.2 world: `world.rs` (and new files for terrain, props, climbable tags).
 //! - G11.3 hero and animation: `hero.rs` (the pose), `rig.rs`, `clip.rs`, `clips.rs`, `animator.rs`.
 //! - G11.4 movement and camera: `controller.rs`, `collide.rs`, `camera.rs`.
-//! - G11.5 combat: `combat.rs` (weapons and strikes) and new files, plus the events and variables of this module.
+//! - G11.5 combat: `combat.rs` (weapons and strikes), `damage.rs` (health and events), `foes.rs`
+//!   (dummies and husks), `arrows.rs`, plus the events and variables of this module.
 mod animator;
+mod arrows;
 mod camera;
 mod clip;
 mod clips;
 mod collide;
 mod combat;
 mod controller;
+mod damage;
+mod foes;
 mod hero;
 mod layout;
 mod props;
@@ -25,15 +29,18 @@ mod world;
 
 use crate::STEP_SECS;
 use crate::clock::FixedClock;
-use crate::state::Input;
+use crate::state::{GameEvent, Input};
 use glam::Vec3;
 
 pub use animator::{Animator, Drive, LOCOMOTION, Look, Weapon, locomotion_weights};
+pub use arrows::{ARROW_DAMAGE, ARROW_SPEED, Arrow, ArrowPose, MAX_ARROWS};
 pub use camera::{OrbitCamera, PITCH_MAX, PITCH_MIN};
 pub use clip::{Clip, ClipId, Ease, Key, Layer, Mode};
 pub use clips::clip;
 pub use combat::Combat;
 pub use controller::{Action, Moves, Presses, STAMINA_MAX};
+pub use damage::{FALL_SAFE, HEALTH_MAX, Vitals};
+pub use foes::{DUMMY_HEIGHT, FOE_RADIUS, Foe, FoeKind, FoePose, FoeState, HUSK_DAMAGE, HUSK_HEIGHT, MAX_FOES, PIECES_TIME};
 pub use hero::{HEIGHT as HERO_HEIGHT, Hero, HeroPose, RADIUS as HERO_RADIUS};
 pub use layout::{ROCK_MAX, TREE_MAX};
 pub use props::{
@@ -45,6 +52,8 @@ pub use world::{HALF_EXTENT, World};
 
 #[cfg(test)]
 mod animation_tests;
+#[cfg(test)]
+mod combat_tests;
 #[cfg(test)]
 mod movement_tests;
 #[cfg(test)]
@@ -61,6 +70,12 @@ pub struct Frame {
     pub eye: Vec3,
     /// What the camera looks at (the hero's middle: the hero is centred on screen).
     pub target: Vec3,
+    /// The foes (G11.5), the first `foe_count` of them.
+    pub foes: [FoePose; MAX_FOES],
+    pub foe_count: usize,
+    /// The arrows in the air or stuck, the first `arrow_count` of them.
+    pub arrows: [ArrowPose; MAX_ARROWS],
+    pub arrow_count: usize,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -78,12 +93,18 @@ pub struct Tps {
     pending: Presses,
     /// The attack button was held last frame (a press is when it goes down).
     attack_held: bool,
+    /// Dummies and husks (G11.5).
+    pub foes: Vec<Foe>,
+    pub arrows: Vec<Arrow>,
+    /// Game events for the designed UI, until it takes them.
+    events: damage::Events,
 }
 
 impl Default for Tps {
     fn default() -> Self {
         let world = World::new();
         let hero = Hero::at(world.spawn());
+        let foes = foes::spawn_all(&world);
         Self {
             clock: FixedClock::default(),
             ticks: 0,
@@ -94,6 +115,9 @@ impl Default for Tps {
             world,
             pending: Presses::default(),
             attack_held: false,
+            foes,
+            arrows: Vec::with_capacity(MAX_ARROWS),
+            events: damage::Events::default(),
         }
     }
 }
@@ -115,6 +139,15 @@ impl Tps {
             self.input.roll = false;
             self.input.weapon = 0;
             self.pending = Presses::default();
+            if self.dead() {
+                // A death screen that pauses the game still lets the hero fall to the ground.
+                let steps = self.clock.advance(dt);
+                for _ in 0..steps {
+                    controller::step(&mut self.hero, &Input::default(), self.camera.yaw, &self.world, Presses::default(), &mut self.events, DT);
+                    self.hero.animate(false, DT);
+                }
+                return steps;
+            }
             return 0;
         }
         self.camera.turn(self.input.look);
@@ -136,8 +169,13 @@ impl Tps {
             let previewing = self.hero.animator.previewing().is_some();
             let input = if previewing { Input { forward: 0.0, strafe: 0.0, ..self.input } } else { self.input };
             let presses = if previewing { Presses::default() } else { presses };
-            combat::step(&mut self.hero, presses, held && !previewing, DT);
-            controller::step(&mut self.hero, &input, self.camera.yaw, &self.world, presses, DT);
+            let mut field = combat::Field { foes: &mut self.foes, arrows: &mut self.arrows, events: &mut self.events, aim: self.camera.direction() };
+            combat::step(&mut self.hero, presses, held && !previewing, &mut field, DT);
+            controller::step(&mut self.hero, &input, self.camera.yaw, &self.world, presses, &mut self.events, DT);
+            if !previewing {
+                foes::step(&mut self.foes, &mut self.hero, &self.world, &mut self.events, DT);
+                arrows::step(&mut self.arrows, &mut self.foes, &self.world, &mut self.events, DT);
+            }
             self.hero.animate(input.crouch, DT);
         }
         steps
@@ -146,8 +184,26 @@ impl Tps {
     /// The hero and the camera as they are now, between the last two steps.
     pub fn frame(&self) -> Frame {
         let hero = self.hero.pose(self.clock.alpha() as f32);
+        let alpha = self.clock.alpha() as f32;
         let (eye, target) = self.camera.eye_and_target(hero.position, &self.world);
-        Frame { hero, eye, target }
+        let mut frame = Frame {
+            hero,
+            eye,
+            target,
+            foes: [FoePose::default(); MAX_FOES],
+            foe_count: 0,
+            arrows: [ArrowPose::default(); MAX_ARROWS],
+            arrow_count: 0,
+        };
+        for (slot, foe) in frame.foes.iter_mut().zip(&self.foes) {
+            *slot = foes::pose(foe, alpha);
+            frame.foe_count += 1;
+        }
+        for (slot, arrow) in frame.arrows.iter_mut().zip(&self.arrows) {
+            *slot = arrows::pose(arrow, alpha);
+            frame.arrow_count += 1;
+        }
+        frame
     }
 
     /// Debug pose viewer: show `clip` over and over on the hero standing still (`None` ends it).
@@ -155,6 +211,24 @@ impl Tps {
         // The camera comes closer while a clip is shown.
         self.camera.distance = if clip.is_some() { 3.0 } else { OrbitCamera::default().distance };
         self.hero.animator.preview(clip);
+    }
+
+    /// Out of health: lying there until [`Tps::respawn`].
+    pub fn dead(&self) -> bool {
+        damage::dead(&self.hero)
+    }
+
+    /// Back at the start with full health (a dead hero, or any time).
+    pub fn respawn(&mut self) {
+        let spawn = self.world.spawn();
+        damage::respawn(&mut self.hero, spawn, &mut self.events);
+        self.arrows.clear();
+        self.pending = Presses::default();
+    }
+
+    /// The game events since the last call (the designed UI's triggers), oldest first.
+    pub fn drain_events(&mut self) -> Vec<GameEvent> {
+        self.events.drain()
     }
 
     pub fn world(&self) -> &World {

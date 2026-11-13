@@ -6,6 +6,7 @@ use super::animator::{Animator, Drive, Weapon};
 use super::clip::ClipId;
 use super::combat::Combat;
 use super::controller::Moves;
+use super::damage::Vitals;
 use super::rig::Pose;
 use glam::{Quat, Vec3};
 
@@ -39,6 +40,8 @@ pub struct Hero {
     pub moves: Moves,
     /// The weapon in use and the strike being played (G11.5).
     pub combat: Combat,
+    /// Health (G11.5).
+    pub vitals: Vitals,
 }
 
 impl Hero {
@@ -54,6 +57,7 @@ impl Hero {
             animator: Animator::new(),
             moves: Moves::default(),
             combat: Combat::default(),
+            vitals: Vitals::default(),
         }
     }
 

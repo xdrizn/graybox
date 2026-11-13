@@ -6,7 +6,8 @@
 //! and the presenter), so the file's bindings keep working.
 use super::{Play, renderer};
 use figcraft_doc::game::GameKind;
-use figcraft_game::tps::{ClipId, Tps};
+use figcraft_game::GameEvent;
+use figcraft_game::tps::{Action, ClipId, STAMINA_MAX, Tps, Weapon};
 use serde_json::{Value, json};
 
 /// The line at the bottom of Play while the third-person game runs.
@@ -94,6 +95,84 @@ fn preview_label(ui: &egui::Ui, rect: egui::Rect, tps: &Tps) {
     ui.painter().text(rect.min + egui::vec2(16.0, 14.0), egui::Align2::LEFT_TOP, text, crate::theme::regular(16.0), t.text);
 }
 
+/// The Game variables the third-person game keeps up to date in Play (G11.5): the same names as
+/// the first-person game where they mean the same, plus `stamina`, `staminaMax`, `escalando` and
+/// `mirando`. Fixed arrays, so publishing every frame allocates nothing; a name the file has no
+/// Game variable for is skipped.
+pub(crate) struct Variables<'a> {
+    pub numbers: [(&'static str, f64); 5],
+    pub flags: [(&'static str, bool); 4],
+    pub texts: [(&'static str, &'a str); 2],
+}
+
+/// The weapon's name for the HUD.
+fn weapon_label(weapon: Weapon) -> &'static str {
+    match weapon {
+        Weapon::None => "Unarmed",
+        Weapon::Sword => "Sword",
+        Weapon::Spear => "Spear",
+        Weapon::Club => "Club",
+        Weapon::Bow => "Bow",
+    }
+}
+
+/// The values of the Game variables now, if the third-person game is the one playing.
+pub(crate) fn variables(play: &Play) -> Option<Variables<'_>> {
+    let tps = play.tps.as_ref()?;
+    let hero = &tps.hero;
+    let vitals = &hero.vitals;
+    let action = hero.moves.action;
+    let climbing = matches!(action, Action::Ladder { .. } | Action::Wall { .. } | Action::Mantle { .. });
+    let crouching = tps.input.crouch && action == Action::Free && hero.grounded;
+    Some(Variables {
+        numbers: [
+            ("vida", f64::from(vitals.health)),
+            ("vidaMax", f64::from(vitals.max)),
+            ("ultimoDano", f64::from(vitals.last_damage)),
+            ("stamina", f64::from(hero.moves.stamina)),
+            ("staminaMax", f64::from(STAMINA_MAX)),
+        ],
+        flags: [("agachado", crouching), ("escalando", climbing), ("mirando", hero.combat.aiming()), ("emChamas", false)],
+        texts: [("atacante", vitals.attacker), ("arma", weapon_label(hero.animator.weapon()))],
+    })
+}
+
+/// How full a game bar following `name` is (0..1), if the third-person game is playing.
+pub(crate) fn bar_share(play: &Play, name: &str) -> Option<f64> {
+    let hero = &play.tps.as_ref()?.hero;
+    let (value, max) = match name {
+        "vida" => (hero.vitals.health, hero.vitals.max),
+        "stamina" => (hero.moves.stamina, STAMINA_MAX),
+        // No ammo in this game: those bars stay full.
+        _ => (1.0, 1.0),
+    };
+    Some(if max > 0.0 && value.is_finite() { f64::from((value / max).clamp(0.0, 1.0)) } else { 0.0 })
+}
+
+/// The third-person hero is down (Enter respawns it).
+pub(crate) fn dead(play: &Play) -> bool {
+    play.tps.as_ref().is_some_and(Tps::dead)
+}
+
+/// A dead hero comes back at the start when the respawn key was pressed.
+pub(crate) fn respawn_on_request(play: &mut Play) {
+    if let Some(tps) = play.tps.as_mut()
+        && tps.dead()
+        && play.game.input.respawn
+    {
+        tps.respawn();
+        play.game.input.respawn = false;
+    }
+}
+
+/// The game events since the last frame, from the game being played.
+pub(crate) fn drain_events(play: &mut Play) -> Vec<GameEvent> {
+    match play.tps.as_mut() {
+        Some(tps) => tps.drain_events(),
+        None => play.game.drain_events(),
+    }
+}
+
 /// What the control channel reports for a third-person game (None for the first-person one).
 pub(crate) fn inspect(play: &Play) -> Option<Value> {
     let tps = play.tps.as_ref()?;
@@ -106,6 +185,11 @@ pub(crate) fn inspect(play: &Play) -> Option<Value> {
         "weapon": tps.hero.animator.weapon().name(), "weaponInHand": tps.hero.animator.in_hand(),
         "action": tps.hero.moves.action.name(), "stamina": tps.hero.moves.stamina,
         "strike": tps.hero.combat.striking().map(ClipId::name), "aiming": tps.hero.combat.aiming(),
+        "health": tps.hero.vitals.health, "dead": tps.dead(), "attacker": tps.hero.vitals.attacker,
+        "foes": tps.foes.iter().map(|foe| json!({
+            "kind": foe.kind.name(), "state": foe.state.name(), "health": foe.health, "position": foe.position.to_array(),
+        })).collect::<Vec<_>>(),
+        "arrows": tps.arrows.len(),
         "paused": tps.paused, "captured": play.captured, "ticks": tps.ticks(),
     }))
 }
@@ -168,5 +252,47 @@ mod tests {
         assert_eq!(report["kind"], "thirdPerson");
         assert_eq!(report["grounded"], true, "it starts standing on the ground");
         assert!(report["cameraYaw"].is_number());
+    }
+
+    #[test]
+    fn the_hud_reads_the_third_person_hero() {
+        let mut play = Play::new();
+        assert!(variables(&play).is_none() && bar_share(&play, "vida").is_none(), "first person publishes its own");
+        sync(&mut play, GameKind::ThirdPerson);
+        let values = variables(&play).unwrap();
+        let number = |name: &str| values.numbers.iter().find(|(n, _)| *n == name).map(|(_, v)| *v);
+        assert_eq!(number("vida"), Some(100.0));
+        assert_eq!(number("stamina"), Some(100.0));
+        assert_eq!(number("staminaMax"), Some(f64::from(STAMINA_MAX)));
+        assert!(values.texts.contains(&("arma", "Sword")), "the sword on its back");
+        assert!(values.flags.contains(&("escalando", false)) && values.flags.contains(&("mirando", false)));
+        let tps = play.tps.as_mut().unwrap();
+        tps.hero.vitals.health = 25.0;
+        tps.hero.moves.stamina = 50.0;
+        tps.hero.animator.set_weapon(Weapon::Bow, false);
+        assert_eq!(bar_share(&play, "vida"), Some(0.25));
+        assert_eq!(bar_share(&play, "stamina"), Some(0.5));
+        assert_eq!(bar_share(&play, "municao"), Some(1.0), "no ammo: full");
+        assert!(variables(&play).unwrap().texts.contains(&("arma", "Bow")));
+    }
+
+    #[test]
+    fn a_dead_hero_respawns_on_the_respawn_key_and_the_events_reach_the_screens() {
+        let mut play = Play::new();
+        sync(&mut play, GameKind::ThirdPerson);
+        play.game.input.respawn = true;
+        respawn_on_request(&mut play);
+        assert!(drain_events(&mut play).is_empty(), "alive: the key does nothing");
+        let tps = play.tps.as_mut().unwrap();
+        tps.hero.moves.action = Action::Dead { time: 0.0 };
+        tps.hero.vitals.health = 0.0;
+        assert!(dead(&play));
+        play.game.input.respawn = true;
+        respawn_on_request(&mut play);
+        assert!(!dead(&play) && !play.game.input.respawn);
+        assert_eq!(play.tps.as_ref().unwrap().hero.vitals.health, 100.0);
+        let events = drain_events(&mut play);
+        assert!(events.contains(&GameEvent::Respawned) && events.contains(&GameEvent::HealthChanged), "{events:?}");
+        assert!(drain_events(&mut play).is_empty(), "taken once");
     }
 }

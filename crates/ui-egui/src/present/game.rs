@@ -104,6 +104,7 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
             play.game.respawn();
             play.game.input.respawn = false;
         }
+        game::tps::respawn_on_request(play);
         if running {
             play.frame(now);
         } else {
@@ -111,7 +112,7 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
         }
     }
     publish(&mut p);
-    let events = p.game.as_mut().map(|play| play.game.drain_events()).unwrap_or_default();
+    let events = p.game.as_mut().map(game::tps::drain_events).unwrap_or_default();
     for event in events {
         dispatch(&mut p, event.name(), now);
     }
@@ -185,10 +186,15 @@ fn bar_widths(p: &Presenter) -> Vec<(NodeId, f64)> {
     let (Some(play), Some(original)) = (&p.game, &p.original) else { return Vec::new() };
     let player = &play.game.player;
     let share = |name: &str| -> f64 {
+        if let Some(share) = game::tps::bar_share(play, name) {
+            return share;
+        }
         let (value, max) = match name {
             "vida" => (f64::from(player.health), f64::from(player.max_health)),
             "municao" => (f64::from(player.ammo), f64::from(figcraft_game::MAGAZINE_SIZE)),
-            _ => (f64::from(player.reserve), f64::from(figcraft_game::START_RESERVE)),
+            "reserva" => (f64::from(player.reserve), f64::from(figcraft_game::START_RESERVE)),
+            // Graybox: no stamina in the first-person game, the bar stays full.
+            _ => (1.0, 1.0),
         };
         if max > 0.0 && value.is_finite() { (value / max).clamp(0.0, 1.0) } else { 0.0 }
     };
@@ -377,15 +383,20 @@ fn publish(p: &mut Presenter) {
     let (Some(play), Some(doc)) = (&p.game, &mut p.design) else { return };
     let player = &play.game.player;
     let ids = &play.variable_ids;
-    let numbers = [
-        ("vida", player.health as f64),
-        ("vidaMax", player.max_health as f64),
-        ("municao", player.ammo as f64),
-        ("reserva", player.reserve as f64),
-        ("ultimoDano", player.last_damage as f64),
-    ];
+    // Graybox: the third-person game publishes its own values (G11.5).
+    let values = game::tps::variables(play).unwrap_or(game::tps::Variables {
+        numbers: [
+            ("vida", player.health as f64),
+            ("vidaMax", player.max_health as f64),
+            ("municao", player.ammo as f64),
+            ("reserva", player.reserve as f64),
+            ("ultimoDano", player.last_damage as f64),
+        ],
+        flags: [("agachado", player.crouching), ("emChamas", player.on_fire), ("escalando", false), ("mirando", false)],
+        texts: [("atacante", player.attacker.as_str()), ("arma", "Pistola")],
+    });
     let mut before = None;
-    for (name, value) in numbers {
+    for (name, value) in values.numbers {
         let Some(id) = ids.get(name) else { continue };
         let Some(var) = doc.variables.get_by_id(id) else { continue };
         if var.values.values().all(|v| *v == VariableValue::Number(value)) {
@@ -396,7 +407,7 @@ fn publish(p: &mut Presenter) {
         }
         figcraft_engine::proto_run::set_variable(doc, p.current, id, &serde_json::json!(value), None);
     }
-    for (name, value) in [("agachado", player.crouching), ("emChamas", player.on_fire)] {
+    for (name, value) in values.flags {
         let Some(id) = ids.get(name) else { continue };
         let Some(var) = doc.variables.get_by_id(id) else { continue };
         if var.values.values().all(|v| *v == VariableValue::Boolean(value)) {
@@ -419,7 +430,7 @@ fn publish(p: &mut Presenter) {
             node.width = width;
         }
     }
-    for (name, value) in [("atacante", player.attacker.as_str()), ("arma", "Pistola")] {
+    for (name, value) in values.texts {
         let Some(id) = ids.get(name) else { continue };
         let Some(var) = doc.variables.get_by_id(id) else { continue };
         if var.values.values().all(|v| matches!(v,VariableValue::String(s) if s==value)) {
@@ -464,7 +475,7 @@ fn volume_control(p: &mut Presenter, ui: &mut Ui, rect: Rect) {
 fn help(p: &Presenter, ui: &Ui, rect: Rect) {
     let Some(play) = &p.game else { return };
     let t = crate::theme::Tokens::get(ui.ctx());
-    let text = if play.game.player.dead {
+    let text = if play.game.player.dead || game::tps::dead(play) {
         "Enter: respawn  ·  F10 / Del: editor"
     } else if play.game.paused {
         "Paused  ·  close the menu to resume  ·  F10 / Del: editor"

@@ -108,6 +108,14 @@ fn ray_box(solid: &Solid, from: Vec3, to: Vec3) -> Option<f32> {
     Some(near)
 }
 
+/// Where along `from`..`to` (0..1) a straight path first enters a solid, if it does (an arrow).
+pub(crate) fn first_solid(world: &World, from: Vec3, to: Vec3) -> Option<f32> {
+    if !from.is_finite() || !to.is_finite() {
+        return None;
+    }
+    world.solids().iter().filter(|solid| solid.is_finite()).filter_map(|solid| ray_box(solid, from, to)).reduce(f32::min)
+}
+
 /// The part of the way from `target` to `eye` (0..1) that is clear of solids and terrain, so the
 /// camera can stop short of a wall or a hill instead of looking through it.
 pub(crate) fn clear_sight(world: &World, target: Vec3, eye: Vec3) -> f32 {

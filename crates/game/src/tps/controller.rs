@@ -8,6 +8,7 @@ use super::clip::ClipId;
 use super::clips::clip;
 use super::collide::{self, STEP};
 use super::combat;
+use super::damage::{self, Events};
 use super::hero::{Hero, RADIUS, wrap_pi};
 use super::props::{ClimbKind, Climbable};
 use super::world::World;
@@ -85,6 +86,10 @@ pub enum Action {
         time: f32,
         getting_up: bool,
     },
+    /// Out of health (G11.5): it lies there until it respawns.
+    Dead {
+        time: f32,
+    },
 }
 
 impl Action {
@@ -96,6 +101,7 @@ impl Action {
             Action::Wall { .. } => "wall",
             Action::Mantle { .. } => "mantle",
             Action::Down { .. } => "down",
+            Action::Dead { .. } => "dead",
         }
     }
 }
@@ -174,7 +180,7 @@ fn wish(input: &Input, camera_yaw: f32) -> Vec3 {
 }
 
 /// One fixed step. `camera_yaw` says which way "forward" is.
-pub(super) fn step(hero: &mut Hero, input: &Input, camera_yaw: f32, world: &World, presses: Presses, dt: f32) {
+pub(super) fn step(hero: &mut Hero, input: &Input, camera_yaw: f32, world: &World, presses: Presses, events: &mut Events, dt: f32) {
     if !hero.position.is_finite() || !hero.velocity.is_finite() || !hero.facing.is_finite() {
         *hero = Hero::at(world.spawn());
     }
@@ -187,12 +193,18 @@ pub(super) fn step(hero: &mut Hero, input: &Input, camera_yaw: f32, world: &Worl
     moves.rest += dt;
 
     match hero.moves.action {
-        Action::Free => free(hero, input, wish, camera_yaw, world, dt),
+        Action::Free => free(hero, input, wish, camera_yaw, world, events, dt),
         Action::Roll { time, direction } => roll(hero, world, time, direction, dt),
         Action::Ladder { index } => ladder(hero, input, world, index, presses, dt),
         Action::Wall { index } => wall(hero, input, world, index, presses, dt),
         Action::Mantle { time, duration, from, to } => mantle(hero, time, duration, from, to, dt),
         Action::Down { time, getting_up } => down(hero, time, getting_up, dt),
+        Action::Dead { time } => {
+            // It falls where it is and lies there; the input does nothing.
+            hero.velocity = Vec3::new(0.0, hero.velocity.y - GRAVITY * dt, 0.0);
+            travel(hero, world, dt);
+            hero.moves.action = Action::Dead { time: time + dt };
+        }
     }
 
     let moves = &mut hero.moves;
@@ -231,7 +243,7 @@ fn travel(hero: &mut Hero, world: &World, dt: f32) -> bool {
     landed
 }
 
-fn free(hero: &mut Hero, input: &Input, wish: Vec3, camera_yaw: f32, world: &World, dt: f32) {
+fn free(hero: &mut Hero, input: &Input, wish: Vec3, camera_yaw: f32, world: &World, events: &mut Events, dt: f32) {
     let pace = combat::pace(&hero.combat);
     let running = input.run && !hero.moves.tired && wish.length_squared() > 0.01;
     let mut top = if input.crouch {
@@ -282,9 +294,15 @@ fn free(hero: &mut Hero, input: &Input, wish: Vec3, camera_yaw: f32, world: &Wor
             start_roll(hero, direction);
             return;
         }
+        // Over 4 m it hurts; over 7 m it also knocks the hero down (G11.5).
+        damage::fall(hero, drop, events);
+        if damage::dead(hero) {
+            return;
+        }
         if drop > HARD_FALL {
             hero.moves.action = Action::Down { time: 0.0, getting_up: false };
             hero.velocity = Vec3::ZERO;
+            hero.animator.release();
             hero.animator.play(ClipId::Knockdown);
             return;
         }

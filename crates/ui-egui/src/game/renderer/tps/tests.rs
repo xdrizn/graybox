@@ -207,3 +207,102 @@ fn the_grass_tuft_is_three_blades_that_lean_and_are_lit_from_above() {
         assert!(vertex.position[0].abs() < 0.6 && vertex.position[2].abs() < 0.6);
     }
 }
+
+fn foe_pose(kind: figcraft_game::tps::FoeKind) -> figcraft_game::tps::FoePose {
+    figcraft_game::tps::FoePose { kind, position: Vec3::new(3.0, 2.0, -4.0), facing: 0.7, ..Default::default() }
+}
+
+#[test]
+fn husks_and_dummies_are_closed_boxes_standing_on_their_feet_and_only_the_husk_eyes_glow() {
+    use figcraft_game::tps::{FoeKind, HUSK_HEIGHT};
+    for kind in [FoeKind::Husk, FoeKind::Dummy] {
+        let mut out = Vec::new();
+        super::foes::foe(&mut out, &foe_pose(kind));
+        assert!(!out.is_empty() && out.len() % 36 == 0, "{kind:?}: {} vertices", out.len());
+        assert!(out.iter().all(|v| v.position.iter().chain(&v.normal).chain(&v.material).all(|x| x.is_finite())));
+        let low = out.iter().map(|v| v.position[1]).fold(f32::MAX, f32::min);
+        let high = out.iter().map(|v| v.position[1]).fold(f32::MIN, f32::max);
+        assert!((low - 2.0).abs() < 0.05, "{kind:?} stands on its feet: {low}");
+        assert!(high - 2.0 < HUSK_HEIGHT + 0.2, "{kind:?} is about as tall as it collides: {high}");
+        let glowing = out.iter().filter(|v| v.material[1] > 0.0).count();
+        assert_eq!(glowing > 0, kind == FoeKind::Husk, "{kind:?}");
+        // Every box faces out of its middle.
+        for (index, cube) in out.chunks_exact(36).enumerate() {
+            let middle = cube.iter().fold(Vec3::ZERO, |sum, v| sum + Vec3::from_array(v.position)) / 36.0;
+            for points in triangles(cube) {
+                let centre = (points[0] + points[1] + points[2]) / 3.0;
+                assert!(normal(points).dot(centre - middle) > -1e-4, "{kind:?} box {index} turned inside out");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_broken_foe_falls_apart_and_is_gone_after_its_pieces_time() {
+    use figcraft_game::tps::{FoeKind, PIECES_TIME};
+    let whole = {
+        let mut out = Vec::new();
+        super::foes::foe(&mut out, &foe_pose(FoeKind::Husk));
+        out
+    };
+    let mut pieces = Vec::new();
+    super::foes::foe(&mut pieces, &figcraft_game::tps::FoePose { broken: Some(0.5), ..foe_pose(FoeKind::Husk) });
+    assert_eq!(pieces.len(), whole.len(), "the same parts, flying apart");
+    assert_ne!(pieces.first().map(|v| v.position), whole.first().map(|v| v.position));
+    assert!(pieces.iter().all(|v| v.position[1] > 2.0 - 0.3), "pieces stay above the ground");
+    let mut late = Vec::new();
+    super::foes::foe(&mut late, &figcraft_game::tps::FoePose { broken: Some(PIECES_TIME * 0.9), ..foe_pose(FoeKind::Husk) });
+    for (index, cube) in late.chunks_exact(36).enumerate() {
+        let middle = cube.iter().map(|v| v.position[1]).sum::<f32>() / 36.0;
+        assert!(middle > 2.0 - 0.05, "piece {index} lies on the ground, not in it: {middle}");
+    }
+    let mut gone = Vec::new();
+    super::foes::foe(&mut gone, &figcraft_game::tps::FoePose { broken: Some(PIECES_TIME), ..foe_pose(FoeKind::Husk) });
+    assert!(gone.is_empty());
+    let mut junk = Vec::new();
+    super::foes::foe(&mut junk, &figcraft_game::tps::FoePose { position: Vec3::NAN, ..foe_pose(FoeKind::Dummy) });
+    super::foes::foe(&mut junk, &figcraft_game::tps::FoePose { broken: Some(f32::NAN), raise: f32::INFINITY, ..foe_pose(FoeKind::Dummy) });
+    assert!(junk.iter().all(|v| v.position.iter().all(|x| x.is_finite())));
+}
+
+#[test]
+fn arrows_point_where_they_fly_and_broken_ones_are_not_drawn() {
+    use figcraft_game::tps::ArrowPose;
+    let mut out = Vec::new();
+    super::foes::arrow(&mut out, &ArrowPose { position: Vec3::new(0.0, 1.0, 0.0), direction: Vec3::new(0.0, 0.0, -2.0) });
+    assert_eq!(out.len(), 72, "a shaft and a fletch");
+    // All of it is behind the tip.
+    assert!(out.iter().all(|v| v.position[2] > -0.05), "behind the tip, along +Z");
+    assert!(out.iter().all(|v| v.position.iter().all(|x| x.is_finite())));
+    for pose in [ArrowPose { position: Vec3::ONE, direction: Vec3::ZERO }, ArrowPose { position: Vec3::NAN, direction: Vec3::X }] {
+        let mut none = Vec::new();
+        super::foes::arrow(&mut none, &pose);
+        assert!(none.is_empty(), "{pose:?}");
+    }
+}
+
+#[test]
+fn the_frame_draws_the_valley_foes_and_arrows() {
+    use figcraft_game::tps::Tps;
+    let tps = Tps::new();
+    let frame = tps.frame();
+    assert!(frame.foe_count >= 6, "the valley has dummies and husks: {}", frame.foe_count);
+    let draw = |frame: &figcraft_game::tps::Frame, foes: usize| {
+        let mut vertices = Vec::new();
+        super::dynamic(
+            &mut vertices,
+            &super::Draw {
+                pose: frame.hero,
+                eye: frame.eye,
+                time: 0.0,
+                look: super::look::TpsLook::default(),
+                foes: frame.foes,
+                foe_count: foes,
+                arrows: frame.arrows,
+                arrow_count: frame.arrow_count,
+            },
+        );
+        vertices.len()
+    };
+    assert!(draw(&frame, frame.foe_count) > draw(&frame, 0) + frame.foe_count * 36 * 6);
+}
