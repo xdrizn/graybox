@@ -36,6 +36,8 @@ highlight, no stray pixels, few colours. Read pixels back with pixel.get {id, pi
 - Edits: pixel.stroke (lines, `shade` to step along the sprite palette), pixel.shape, pixel.fill, \
 pixel.replaceColor, pixel.outline; frames and animation: pixel.frame.add, pixel.tag.add; 9-slice: game.nineSlice.set.
 - Pixel text: pixel.text {ids} makes any text layer sharp on the art-pixel grid.
+- Vector into pixels: pixel.paste {id, source: <any layer's id>} (or `clipboard: true` for what Copy \
+took) draws it as pixels at the sprite's scale, fitted to the board, alpha cut so the edges stay sharp.
 - Export: pixel.export {id, format: png|frames|sheet|gif|unity} hands the files back.
 
 Pages (run_command): page.add {name?, parent?} adds a page, inside another page when `parent` is \

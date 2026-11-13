@@ -392,12 +392,61 @@ fn a_palette_loads_from_gpl_and_hex_and_exports_again() {
 }
 
 #[test]
-fn a_layer_pastes_in_at_the_sprite_scale_and_a_huge_one_is_refused() {
+fn a_layer_pastes_in_at_the_sprite_scale_and_a_huge_one_is_fitted_to_the_board() {
     let (mut s, id) = sprite();
     let small = ex(&mut s, "shape.rectangle", json!({"x": 200, "y": 0, "width": 8, "height": 12}))["id"].as_u64().unwrap();
     let r = ex(&mut s, "pixel.paste", json!({"id": id, "source": small, "x": 1, "y": 1}));
     assert_eq!((r["width"].as_u64(), r["height"].as_u64()), (Some(2), Some(3)), "8 × 12 page units at scale 4");
     assert_eq!(picture(&mut s, id)[1..5], [".##.....", ".##.....", ".##.....", "........"]);
-    let huge = ex(&mut s, "shape.rectangle", json!({"x": 0, "y": 500, "width": 60000, "height": 40}))["id"].as_u64().unwrap();
-    assert!(refused(&mut s, "pixel.paste", json!({"id": id, "source": huge})).contains("1024"));
+    // G16.8: bigger than the board, it comes in at the size that fits instead of being refused.
+    let huge = ex(&mut s, "shape.rectangle", json!({"x": 0, "y": 500, "width": 6000, "height": 3000}))["id"].as_u64().unwrap();
+    let r = ex(&mut s, "pixel.paste", json!({"id": id, "source": huge}));
+    assert_eq!(r["width"].as_u64(), Some(8), "fitted to the 8 × 8 board");
+    assert!(r["height"].as_u64().is_some_and(|h| (1..=8).contains(&h)), "and keeps its shape: {r:?}");
+}
+
+/// G16.8: a vector drawn as pixels lands sharp — the alpha is cut, not feathered, so no half
+/// transparent fringe is left round the shape.
+#[test]
+fn a_vector_drawn_into_a_sprite_has_no_half_transparent_fringe() {
+    let (mut s, id) = sprite();
+    // A circle: its edge is anti-aliased when it is drawn, so there is a fringe to cut.
+    let round = ex(&mut s, "shape.ellipse", json!({"x": 200, "y": 0, "width": 24, "height": 24}))["id"].as_u64().unwrap();
+    ex(&mut s, "node.set", json!({"ids": [round], "props": {"fill": "#ff0000"}}));
+    ex(&mut s, "pixel.paste", json!({"id": id, "source": round}));
+    let rows = ex(&mut s, "pixel.get", json!({"id": id, "pixels": true, "frame": 0}))["pictures"][0]["rows"].clone();
+    let painted: Vec<&str> =
+        rows.as_array().unwrap().iter().flat_map(|r| r.as_array().unwrap()).filter_map(Value::as_str).filter(|c| *c != ".").collect();
+    assert!(!painted.is_empty(), "the circle came in");
+    assert!(painted.iter().all(|c| *c == "#ff0000"), "every pixel is the fill itself, none a faded edge: {painted:?}");
+    // Asked for it, the alpha is kept as drawn instead.
+    let (mut s, id) = sprite();
+    let round = ex(&mut s, "shape.ellipse", json!({"x": 200, "y": 0, "width": 24, "height": 24}))["id"].as_u64().unwrap();
+    ex(&mut s, "node.set", json!({"ids": [round], "props": {"fill": "#ff0000"}}));
+    ex(&mut s, "pixel.paste", json!({"id": id, "source": round, "threshold": 0}));
+    let rows = ex(&mut s, "pixel.get", json!({"id": id, "pixels": true, "frame": 0}))["pictures"][0]["rows"].clone();
+    let painted: Vec<&str> =
+        rows.as_array().unwrap().iter().flat_map(|r| r.as_array().unwrap()).filter_map(Value::as_str).filter(|c| *c != ".").collect();
+    assert!(painted.iter().any(|c| *c != "#ff0000"), "a feathered edge is there: {painted:?}");
+}
+
+/// G16.8: what Copy took comes into the sprite as pixels, in one undo step, and the copied layers
+/// are not left behind on the page.
+#[test]
+fn copied_layers_paste_into_a_sprite_as_pixels_in_one_undo_step() {
+    let (mut s, id) = sprite();
+    let rect = ex(&mut s, "shape.rectangle", json!({"x": 200, "y": 0, "width": 8, "height": 8}))["id"].as_u64().unwrap();
+    ex(&mut s, "node.set", json!({"ids": [rect], "props": {"fill": "#00ff00"}}));
+    ex(&mut s, "edit.copy", json!({"ids": [rect]}));
+    let before = s.doc().unwrap().subtree(s.page().unwrap()).len();
+    let r = ex(&mut s, "pixel.paste", json!({"id": id, "clipboard": true, "x": 2, "y": 2}));
+    assert_eq!((r["width"].as_u64(), r["height"].as_u64()), (Some(2), Some(2)), "8 × 8 page units at scale 4");
+    assert_eq!(ex(&mut s, "pixel.pick", json!({"id": id, "x": 2, "y": 2}))["color"], "#00ff00");
+    assert_eq!(s.doc().unwrap().subtree(s.page().unwrap()).len(), before, "the copied layer isn't left on the page");
+    ex(&mut s, "edit.undo", json!({}));
+    assert_eq!(ex(&mut s, "pixel.pick", json!({"id": id, "x": 2, "y": 2}))["color"], Value::Null, "one undo step");
+    assert_eq!(s.doc().unwrap().subtree(s.page().unwrap()).len(), before);
+    // Nothing copied: it says so instead of pasting.
+    let (mut s, id) = sprite();
+    assert!(refused(&mut s, "pixel.paste", json!({"id": id, "clipboard": true})).contains("copied"));
 }

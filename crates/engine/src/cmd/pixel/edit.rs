@@ -60,7 +60,7 @@ pub(super) fn specs() -> Vec<CommandSpec> {
         spec!(
             "pixel.paste",
             "Paste pixels",
-            "{id, png? (base64 PNG) | source? (id of any layer: drawn at the sprite's scale), x?, y? (art pixels, default 0), layer?, frame?}  the pasted pixels become the selection → {width, height}",
+            "{id, png? (base64 PNG) | source? (id of any layer) | clipboard? (what Copy took: layers, vector or not), x?, y? (art pixels, default 0), threshold? (0–100 %, default 50: alpha under it is left out and the rest comes in solid, so edges stay sharp; 0 keeps the alpha as drawn), layer?, frame?}  a layer is drawn at the sprite's scale, made smaller if it wouldn't fit the board; the pasted pixels become the selection → {width, height}",
             true,
             paste
         ),
@@ -311,6 +311,7 @@ fn paste(s: &mut Session, p: &Value) -> Result<Value> {
     let cmd = "pixel.paste";
     let id = req_id(cmd, p, "id")?;
     let sprite = sprite_of(cmd, s.doc()?, id)?;
+    let cut = threshold_of(cmd, p)?;
     let picture = match (get(p, "png").and_then(Value::as_str), opt_id(cmd, p, "source")?) {
         (Some(text), _) => {
             if text.len() > MAX_PASTE_BYTES {
@@ -320,9 +321,11 @@ fn paste(s: &mut Session, p: &Value) -> Result<Value> {
             Canvas::from_png(&bytes).ok_or_else(|| bad(cmd, "`png` isn't a picture a sprite can take (PNG, at most 1024 a side)"))?
         }
         (None, Some(source)) => {
-            layer_picture(s, source, sprite.scale).ok_or_else(|| bad(cmd, "that layer can't be drawn as pixels (at most 1024 art pixels a side)"))?
+            let doc = s.doc()?;
+            drawn_picture(doc, &[source], &sprite, cut).ok_or_else(|| bad(cmd, "that layer can't be drawn as pixels"))?
         }
-        (None, None) => return Err(bad(cmd, "give `png` or `source`")),
+        (None, None) if boolean(p, "clipboard").unwrap_or(false) => clipboard_picture(s, &sprite, cut)?,
+        (None, None) => return Err(bad(cmd, "give `png`, `source` or `clipboard`")),
     };
     let (x, y) = (whole(cmd, p, "x", 0)?, whole(cmd, p, "y", 0)?);
     let (layer, frame) = cel_of(cmd, &sprite, p)?;
@@ -336,26 +339,71 @@ fn paste(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({"width": picture.width(), "height": picture.height()}))
 }
 
-/// Layer `source` drawn at one art pixel per `scale` page units (straight alpha).
-fn layer_picture(s: &Session, source: NodeId, scale: u32) -> Option<Canvas> {
-    let doc = s.doc().ok()?;
-    let k = 1.0 / f64::from(scale.max(1));
-    // Too big for a sprite: refused before it is drawn (it could be thousands of pixels a side).
-    let b = figcraft_render::export_bounds(doc, source)?;
-    let side = f64::from(Canvas::MAX_SIDE);
-    if !(b.width() * k <= side && b.height() * k <= side) {
+/// The `threshold` param as an alpha 0–255: a pixel at least this opaque comes in solid, a fainter
+/// one not at all. 0 keeps the alpha as it was drawn.
+fn threshold_of(cmd: &str, p: &Value) -> Result<u8> {
+    match get(p, "threshold").filter(|v| !v.is_null()) {
+        None => Ok(128),
+        Some(v) => {
+            let pct = v.as_f64().filter(|f| f.is_finite() && *f >= 0.0 && *f <= 100.0).ok_or_else(|| bad(cmd, "`threshold` must be 0–100"))?;
+            Ok((pct * 2.55).round().clamp(0.0, 255.0) as u8)
+        }
+    }
+}
+
+/// Layers `ids` drawn as the pixels of `sprite` (G16.8): one art pixel per `scale` page units, so a
+/// drawing comes in at its own size in art pixels, made smaller (keeping its shape) when that
+/// wouldn't fit the board. With `cut` above 0 the alpha is cut at it instead of feathered: a pixel
+/// that opaque comes in solid and a fainter one not at all, so the edges stay sharp pixel art.
+fn drawn_picture(doc: &figcraft_doc::Document, ids: &[NodeId], sprite: &Sprite, cut: u8) -> Option<Canvas> {
+    let b = ids.iter().filter_map(|id| figcraft_render::export_bounds(doc, *id)).reduce(|a, b| a.union(b))?;
+    if !(b.width().is_finite() && b.height().is_finite()) || b.width() <= 0.0 || b.height() <= 0.0 {
         return None;
     }
-    let pm = figcraft_render::render_node(doc, source, k)?;
+    let mut k = 1.0 / f64::from(sprite.scale.max(1));
+    // Fitted to the board: a drawing wider or taller than the sprite comes in at the size that fits.
+    let room = (f64::from(sprite.width) / (b.width() * k)).min(f64::from(sprite.height) / (b.height() * k));
+    if room.is_finite() && room < 1.0 {
+        k *= room;
+    }
+    // A sprite holds 1024 art pixels a side at most, whatever the board says.
+    let side = f64::from(Canvas::MAX_SIDE);
+    let widest = (b.width().max(b.height()) * k).max(1.0);
+    if widest > side {
+        k *= side / widest;
+    }
+    let pm = figcraft_render::render_area(doc, ids, b, k)?;
     let px: Vec<Rgba> = pm
         .pixels()
         .iter()
         .map(|c| {
             let c = c.demultiply();
-            [c.red(), c.green(), c.blue(), c.alpha()]
+            match cut {
+                0 => [c.red(), c.green(), c.blue(), c.alpha()],
+                _ if c.alpha() >= cut => [c.red(), c.green(), c.blue(), 255],
+                _ => [0, 0, 0, 0],
+            }
         })
         .collect();
     Canvas::from_pixels(pm.width(), pm.height(), px)
+}
+
+/// What Copy took, drawn as pixels (G16.8): the copied layers are put on the page, drawn, and taken
+/// straight back out, so vector work copied anywhere in the file can be pasted into a sprite and
+/// then edited pixel by pixel. One undo step, like any other paste.
+fn clipboard_picture(s: &mut Session, sprite: &Sprite, cut: u8) -> Result<Canvas> {
+    let cmd = "pixel.paste";
+    if s.clipboard.nodes.is_empty() {
+        return Err(bad(cmd, "nothing was copied to paste"));
+    }
+    let page = s.page()?;
+    let ids = crate::cmd::edit::paste_into(s, page, None)?;
+    let picture = drawn_picture(s.doc()?, &ids, sprite, cut);
+    let doc = s.doc_mut()?;
+    for id in &ids {
+        let _ = doc.remove(*id);
+    }
+    picture.ok_or_else(|| bad(cmd, "what was copied can't be drawn as pixels"))
 }
 
 /// The sprite layer `layer` names (an id of this sprite).

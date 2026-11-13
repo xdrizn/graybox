@@ -478,10 +478,17 @@ fn command_key(app: &mut FigApp, key: Key, shift: bool) -> bool {
             }
         }
         Key::V if !shift => {
-            let Some((picture, x, y)) = app.pixel.clipboard.clone() else { return false };
-            let Some(png) = picture.to_png() else { return true };
-            let png = base64::engine::general_purpose::STANDARD.encode(png);
-            on_cel(app, "pixel.paste", json!({"png": png, "x": x, "y": y}));
+            match app.pixel.clipboard.clone() {
+                Some((picture, x, y)) => {
+                    let Some(png) = picture.to_png() else { return true };
+                    let png = base64::engine::general_purpose::STANDARD.encode(png);
+                    on_cel(app, "pixel.paste", json!({"png": png, "x": x, "y": y}));
+                }
+                // Layers copied on the canvas (a vector, a group, anything drawn) come in as
+                // pixels, at their own size in art pixels, fitted to the board (G16.8).
+                None if !super::copied_layers(app).is_empty() => on_cel(app, "pixel.paste", json!({"clipboard": true})),
+                None => return false,
+            }
             app.pixel.pasted = true;
             // The pasted pixels are selected: the Move tool takes them where they should go.
             app.pixel.tool = Tool::Move;
@@ -500,6 +507,8 @@ fn copy(app: &mut FigApp) {
     let (x, y) = d.selection.as_ref().and_then(figcraft_pixel::Mask::bounds).map_or((0, 0), |b| (b.0, b.1));
     app.pixel.to_system = Some(piece.clone());
     app.pixel.clipboard = Some((piece, x, y));
+    // These pixels are what Paste takes now, until layers are copied on the canvas again (G16.8).
+    app.pixel.clip_layers = super::copied_layers(app);
 }
 
 /// The pointer is off the canvas (over a panel, or out of the window): a drag on the sprite goes on

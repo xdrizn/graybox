@@ -862,3 +862,37 @@ fn the_sprite_background_can_be_turned_off_in_the_pill() {
     u.frame(vec![]);
     assert_eq!(super::pill::background_cell(&u.app).map(|(_, on)| on), Some(true));
 }
+
+/// A vector copied on the canvas and pasted while a sprite is open comes in as pixels (G16.8), at
+/// its own size in art pixels, ready to be edited pixel by pixel. Pixels copied afterwards win
+/// again.
+#[test]
+fn a_copied_vector_pastes_into_the_sprite_as_pixels() {
+    let (mut u, id) = editing();
+    // A 32 × 32 green square on the page, copied. The sprite is 16 × 16 at scale 8.
+    let rect = u.app.session.execute("shape.rectangle", &json!({"x": 400, "y": 0, "width": 32, "height": 32})).unwrap()["id"].as_u64().unwrap();
+    u.app.session.execute("node.set", &json!({"ids": [rect], "props": {"fill": "#00ff00"}})).unwrap();
+    u.app.session.execute("edit.copy", &json!({"ids": [rect]})).unwrap();
+    // Making the rectangle selected it, which left Pixel mode: the sprite is opened again.
+    u.app.run("pixel.mode", json!({"id": id}));
+    for _ in 0..2 {
+        u.frame(vec![]);
+    }
+    assert_eq!(u.app.pixel.mode, Mode::Edit(figcraft_doc::NodeId(id)));
+    assert!(u.app.pixel.clipboard.is_none(), "copying layers is what Paste takes now");
+    let before = undo_labels(&u).len();
+    let v = Event::Key { key: Key::V, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::COMMAND };
+    u.frame(vec![v]);
+    assert_eq!(undo_labels(&u).len(), before + 1, "one undo step");
+    assert_eq!(pixel(&mut u, id, 0, 0).as_deref(), Some("#00ff00"), "32 page units at scale 8: 4 art pixels");
+    assert_eq!(pixel(&mut u, id, 3, 3).as_deref(), Some("#00ff00"));
+    assert_eq!(pixel(&mut u, id, 4, 4), None);
+    assert_eq!(u.app.pixel.tool, Tool::Move, "the paste is ready to move");
+    assert!(u.app.session.doc().unwrap().node(figcraft_doc::NodeId(rect)).is_some(), "the vector itself stays on the page");
+    // Pixels copied after that are what Paste takes again.
+    u.app.pixel.tool = Tool::Pencil;
+    u.app.session.execute("pixel.select", &json!({"id": id, "kind": "rect", "from": [0, 0], "to": [0, 0]})).unwrap();
+    u.frame(vec![]);
+    u.frame(vec![Event::Copy]);
+    assert!(u.app.pixel.clipboard.is_some());
+}

@@ -11,6 +11,9 @@ Graybox desenha pixel art direto no canvas, para UI de jogo:
   tile, grade, sombra (Shade) e duas cores (botão direito usa a segunda).
 - **Fundo do sprite**: o botão de xadrez (ao lado da grade) desliga o fundo; aí o que está embaixo
   do sprite no canvas aparece através dos pixels vazios, para desenhar por cima de uma referência.
+- **Vetor virando pixel**: copie uma camada ou grupo no canvas (`Ctrl+C`), abra um sprite e cole
+  (`Ctrl+V`): vira pixel na hora, no tamanho dele em pixels de arte, cabendo no quadro, com a borda
+  cortada (sem franja transparente) e pronta para editar pixel a pixel.
 - **Cores do Graybox**: as duas cores abrem o seletor de cor padrão, com os estilos de cor e as
   variáveis do arquivo; a cor lembra de que estilo veio, e se o estilo mudar o painel oferece
   "Update from styles". Paletas `.gpl`/`.hex` viram estilos de cor (Palette > Import…).
@@ -101,6 +104,14 @@ with **Done**, `Esc` or `Enter`.
   pixel layer before making it a component: instances resized keep the corners, and the section says
   so ("Applies to this layer; instances of the component resize with it").
 - **Pixel text**: any text layer, drawn sharp on the art-pixel grid of the pixel art around it.
+- **Vector into pixels**: copy any layer or group on the canvas (`Ctrl+C`), open a sprite and paste
+  (`Ctrl+V`): it is drawn into the current sprite layer as pixels, at its own size in art pixels and
+  made smaller if it wouldn't fit the board. The alpha is cut at half, so there is no half
+  transparent fringe round the shape, and every pixel can then be edited like any other. The pasted
+  pixels arrive selected with the Move tool, ready to be put where they belong. The vector itself
+  stays on the page. By command: `pixel.paste {id, source}` for a layer in the file, or
+  `pixel.paste {id, clipboard: true}`; `threshold` (0–100 %) changes where the alpha is cut, and 0
+  keeps it as drawn.
 - **Palette swap**: in Pixel colors, pick a colour, then **As variant** makes a new variant
   ("Palette=Red") with the colours swapped.
 
@@ -134,7 +145,8 @@ Claude reaches every pixel command through the `graybox` MCP tools (`run_command
   pixel, e.g. `{"rows": ["..kk..", ".kffk."], "palette": {"k": "#1b1b2a", "f": "#e8b830"}}`.
 - `pixel.get {id, pixels: true}` reads the pixels back.
 - `pixel.stroke`, `pixel.shape`, `pixel.fill`, `pixel.replaceColor`, `pixel.outline`,
-  `pixel.frame.add`, `pixel.tag.add`, `pixel.text`,
+  `pixel.frame.add`, `pixel.tag.add`, `pixel.text`, `pixel.paste` (a PNG, a layer drawn as pixels,
+  or what Copy took),
   `pixel.export`, `pixel.import`. `list_commands` with `filter: "pixel"` lists them all with their
   parameters.
 

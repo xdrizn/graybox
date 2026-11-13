@@ -227,6 +227,9 @@ pub struct Editor {
     pub(crate) used: Option<(u64, Vec<figcraft_pixel::Rgba>)>,
     /// What Copy took: the pixels and where their top left was.
     pub(crate) clipboard: Option<(Canvas, i64, i64)>,
+    /// The layers the file's own clipboard held when the pixels above were copied (G16.8): copying
+    /// layers after that is what Paste then takes, drawn into the sprite as pixels.
+    pub(crate) clip_layers: Vec<figcraft_doc::NodeId>,
     /// A copy waiting to go on the system clipboard (it needs the frame's context).
     pub(crate) to_system: Option<Canvas>,
     /// This frame pasted with the V key (the paste event a browser sends with it is then not a second paste).
@@ -282,6 +285,7 @@ impl Default for Editor {
             swap: None,
             used: None,
             clipboard: None,
+            clip_layers: Vec::new(),
             to_system: None,
             pasted: false,
             cut: false,
@@ -386,6 +390,12 @@ pub(crate) fn settle(app: &mut FigApp) {
         leave(app);
         return;
     }
+    // Layers copied after the last pixel copy are what Paste takes (G16.8): they are drawn into
+    // the sprite as pixels, so vector work can be traced over and then edited pixel by pixel.
+    if copied_layers(app) != app.pixel.clip_layers {
+        app.pixel.clipboard = None;
+        app.pixel.clip_layers = copied_layers(app);
+    }
     if let Mode::Edit(id) = app.pixel.mode {
         if !is_pixel_layer(app, id) {
             leave(app);
@@ -403,6 +413,11 @@ pub(crate) fn settle(app: &mut FigApp) {
             }
         }
     }
+}
+
+/// The roots of the layers the file's own clipboard holds (what `edit.copy` took).
+pub(crate) fn copied_layers(app: &FigApp) -> Vec<figcraft_doc::NodeId> {
+    app.session.clipboard.nodes.iter().map(|(root, _)| *root).collect()
 }
 
 /// The ink for a stroke or shape with the current settings.
