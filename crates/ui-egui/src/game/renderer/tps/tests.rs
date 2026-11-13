@@ -1,8 +1,8 @@
 //! The third-person world's picture, counted on the CPU: budgets, determinism and the shapes' winding.
 use super::super::mesh::Vertex;
 use super::grass::{self, FADE_END, TUFT_VERTICES};
-use super::scene::{SHADOW_SIZE, SceneData};
-use super::shapes::{blob, frustum, material};
+use super::scene::{SHADOW_SIZE, SceneData, fade_crowns};
+use super::shapes::{CROWN, blob, frustum, material};
 use super::{props, sky};
 use figcraft_game::tps::{HALF_EXTENT, PropKind, World};
 use glam::Vec3;
@@ -294,6 +294,7 @@ fn the_frame_draws_the_valley_foes_and_arrows() {
             &super::Draw {
                 pose: frame.hero,
                 eye: frame.eye,
+                target: frame.target,
                 time: 0.0,
                 look: super::look::TpsLook::default(),
                 foes: frame.foes,
@@ -305,4 +306,46 @@ fn the_frame_draws_the_valley_foes_and_arrows() {
         vertices.len()
     };
     assert!(draw(&frame, frame.foe_count) > draw(&frame, 0) + frame.foe_count * 36 * 6);
+}
+
+#[test]
+fn tree_crowns_are_flagged_and_sit_inside_the_crown_the_game_knows() {
+    for kind in PropKind::ALL {
+        let mesh = props::mesh(kind);
+        let flagged: Vec<Vec3> = mesh.iter().filter(|vertex| vertex.material[3] == CROWN).map(|vertex| Vec3::from_array(vertex.position)).collect();
+        let Some(crown) = kind.crown() else {
+            assert!(flagged.is_empty(), "{kind:?} is not a tree");
+            continue;
+        };
+        assert!(flagged.len() * 2 >= mesh.len(), "{kind:?}: the crown is at least half the tree");
+        // The trunk is not flagged: it never fades (it is solid, and the camera stops in front of it).
+        assert!(mesh.iter().any(|vertex| vertex.material[3] == 0.0 && vertex.position[1] < 1.0), "{kind:?} trunk");
+        for point in flagged {
+            let along = point.y.clamp(crown.low, crown.high);
+            let away = (point - Vec3::new(0.0, along, 0.0)).length();
+            assert!(away < crown.radius * 1.15, "{kind:?}: {point} is {away} m out of a {} m crown", crown.radius);
+        }
+    }
+}
+
+#[test]
+fn the_crowns_in_the_way_fade_and_nothing_is_uploaded_when_nothing_changed() {
+    let (_, mut data) = data();
+    let Some(batch) = data.batches.iter_mut().find(|batch| batch.kind == PropKind::Pine && !batch.trees.is_empty()) else { panic!("pines") };
+    assert_eq!(batch.trees.len(), batch.instances.len());
+    let Some(pine) = batch.trees.first().copied() else { panic!("a pine") };
+    // The hero 3 m past the pine, the camera 3 m before it, looking through its crown.
+    let middle = pine.position + Vec3::Y * 2.4 * pine.scale;
+    let (eye, target) = (middle + Vec3::new(0.0, 0.3, 3.0), middle + Vec3::new(0.0, -0.3, -3.0));
+    assert!(fade_crowns(&batch.trees, &mut batch.instances, eye, target));
+    assert_eq!(batch.instances[0][5], 1.0);
+    let faded = batch.instances.iter().filter(|instance| instance[5] > 0.0).count();
+    assert!(faded < 5, "only the crowns on the line: {faded}");
+    assert!(!fade_crowns(&batch.trees, &mut batch.instances, eye, target), "the same view uploads nothing");
+    // A tiny move uploads nothing either; looking away from it brings it back.
+    assert!(!fade_crowns(&batch.trees, &mut batch.instances, eye + Vec3::X * 1e-4, target));
+    assert!(fade_crowns(&batch.trees, &mut batch.instances, eye + Vec3::X * 8.0, target + Vec3::X * 8.0));
+    assert_eq!(batch.instances[0][5], 0.0);
+    // Other props have no trees to fade.
+    assert!(data.batches.iter().filter(|batch| batch.kind.crown().is_none()).all(|batch| batch.trees.is_empty()));
 }

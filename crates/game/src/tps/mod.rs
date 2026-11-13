@@ -45,8 +45,8 @@ pub use foes::{DUMMY_HEIGHT, FOE_RADIUS, Foe, FoeKind, FoePose, FoeState, HUSK_D
 pub use hero::{HEIGHT as HERO_HEIGHT, Hero, HeroPose, RADIUS as HERO_RADIUS};
 pub use layout::{ROCK_MAX, TREE_MAX};
 pub use props::{
-    ARCH_LEG_HEIGHT, ARCH_LEG_SIZE, ARCH_LEG_X, BLOCK_SIZE, BROKEN_PILLAR_HEIGHT, CRATE_SIZE, ClimbKind, Climbable, PILLAR_HEIGHT, PILLAR_SIZE, Prop,
-    PropKind, Solid,
+    ARCH_LEG_HEIGHT, ARCH_LEG_SIZE, ARCH_LEG_X, BLOCK_SIZE, BROKEN_PILLAR_HEIGHT, CRATE_SIZE, ClimbKind, Climbable, Crown, PILLAR_HEIGHT,
+    PILLAR_SIZE, Prop, PropKind, Solid,
 };
 pub use terrain::{CELL, CELLS, FALL_X, RIVER_END, RIVER_HALF_WIDTH, Terrain, WATER_DEPTH, ZONES, Zone};
 pub use world::{HALF_EXTENT, World};
@@ -55,6 +55,8 @@ pub use world::{HALF_EXTENT, World};
 mod animation_tests;
 #[cfg(test)]
 mod bow_tests;
+#[cfg(test)]
+mod camera_tests;
 #[cfg(test)]
 mod combat_tests;
 #[cfg(test)]
@@ -149,7 +151,7 @@ impl Tps {
                 for _ in 0..steps {
                     controller::step(&mut self.hero, &Input::default(), self.camera.yaw, &self.world, Presses::default(), &mut self.events, DT);
                     self.hero.animate(false, DT);
-                    self.camera.follow(self.hero.combat.aiming(), DT);
+                    self.follow_camera(false);
                 }
                 return steps;
             }
@@ -188,9 +190,23 @@ impl Tps {
                 arrows::step(&mut self.arrows, &mut self.foes, &self.world, &mut self.events, DT);
             }
             self.hero.animate(input.crouch, DT);
-            self.camera.follow(self.hero.combat.aiming(), DT);
+            let steering = input.forward.abs() > 0.1 || input.strafe.abs() > 0.1 || previewing;
+            self.follow_camera(steering);
         }
         steps
+    }
+
+    /// One step of the camera after the hero (`steering`: the player moves the hero, or the camera
+    /// must not turn on its own for another reason).
+    fn follow_camera(&mut self, steering: bool) {
+        let follow = camera::Follow {
+            feet: self.hero.position,
+            facing: self.hero.facing,
+            aiming: self.hero.combat.aiming(),
+            airborne: !self.hero.grounded && self.hero.moves.action == Action::Free,
+            steering: steering || self.dead(),
+        };
+        self.camera.follow(follow, &self.world, DT);
     }
 
     /// The hero and the camera as they are now, between the last two steps.

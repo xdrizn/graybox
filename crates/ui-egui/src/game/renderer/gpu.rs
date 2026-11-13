@@ -378,7 +378,7 @@ impl Resources {
             let tps = self
                 .tps
                 .get_or_insert_with(|| super::tps::TpsGpu::new(device, noise, super::tps::SceneData::build(&figcraft_game::tps::World::new())));
-            tps.update(queue, draw.pose.position, draw.time, snapshot.eye, &draw.look);
+            tps.update(queue, draw.pose.position, draw.time, [snapshot.eye, draw.target], &draw.look);
         }
         queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&Uniform::new(snapshot, theme, size)));
         let world_count = dynamic(&mut self.dynamic_vertices, snapshot, &self.pistol);

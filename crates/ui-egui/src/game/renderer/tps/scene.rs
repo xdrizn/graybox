@@ -4,18 +4,21 @@ use super::super::mesh::Vertex;
 use super::grass::{self, Grass};
 use super::props;
 use super::world::{self, Statics};
-use figcraft_game::tps::{PropKind, World};
+use figcraft_game::tps::{Prop, PropKind, World};
+use glam::Vec3;
 
 /// The shadow map's side: 2048 on the desktop, 1024 in the browser.
 pub(in crate::game::renderer) const SHADOW_SIZE: u32 = if cfg!(target_arch = "wasm32") { 1024 } else { 2048 };
 
 /// One prop kind: its mesh and where each one stands. An instance is 8 floats:
-/// `x, y, z, yaw, scale, 0, 0, 0`.
+/// `x, y, z, yaw, scale, crown fade, 0, 0` (the fade: see [`fade_crowns`]).
 pub(super) struct Batch {
     #[cfg_attr(not(test), allow(dead_code))]
     pub kind: PropKind,
     pub vertices: Vec<Vertex>,
     pub instances: Vec<[f32; 8]>,
+    /// The trees of this batch, in the order of `instances` (empty for kinds without a crown).
+    pub trees: Vec<Prop>,
 }
 
 pub(in crate::game::renderer) struct SceneData {
@@ -34,17 +37,30 @@ impl SceneData {
         let batches = PropKind::ALL
             .into_iter()
             .map(|kind| {
-                let instances = world
-                    .props()
-                    .iter()
-                    .filter(|prop| prop.kind == kind)
-                    .map(|prop| [prop.position.x, prop.position.y, prop.position.z, prop.yaw, prop.scale, 0.0, 0.0, 0.0])
-                    .collect();
-                Batch { kind, vertices: props::mesh(kind), instances }
+                let mine = world.props().iter().filter(|prop| prop.kind == kind);
+                let instances =
+                    mine.clone().map(|prop| [prop.position.x, prop.position.y, prop.position.z, prop.yaw, prop.scale, 0.0, 0.0, 0.0]).collect();
+                let trees = if kind.crown().is_some() { mine.copied().collect() } else { Vec::new() };
+                Batch { kind, vertices: props::mesh(kind), instances, trees }
             })
             .collect();
         Self { statics: world::build(world), batches, tuft: grass::tuft_mesh(), grass: grass::build(world) }
     }
+}
+
+/// How much each tree's crown is in the way of a camera at `eye` looking at `target` (G11.6), into its
+/// instance (the sixth float, 0..1, in steps of 1/64 so small moves upload nothing). Returns whether
+/// any changed.
+pub(super) fn fade_crowns(trees: &[Prop], instances: &mut [[f32; 8]], eye: Vec3, target: Vec3) -> bool {
+    let mut changed = false;
+    for (tree, instance) in trees.iter().zip(instances.iter_mut()) {
+        let fade = (tree.crown_in_the_way(eye, target) * 64.0).round() / 64.0;
+        if instance[5] != fade {
+            instance[5] = fade;
+            changed = true;
+        }
+    }
+    changed
 }
 
 #[cfg(test)]

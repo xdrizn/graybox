@@ -7,8 +7,9 @@
 use super::super::{Uniform, mesh};
 use super::grass::{FADE_END, FADE_START, Grass, TUFT_VERTICES};
 use super::look::TpsLook;
-use super::scene::{SHADOW_SIZE, SceneData};
+use super::scene::{SHADOW_SIZE, SceneData, fade_crowns};
 use egui_wgpu::wgpu::{self, util::DeviceExt as _};
+use figcraft_game::tps::Prop;
 use glam::Vec3;
 use std::{borrow::Cow, ops::Range};
 
@@ -34,6 +35,9 @@ struct PropBatch {
     vertex_count: u32,
     instances: wgpu::Buffer,
     instance_count: u32,
+    /// Trees only: each one, and its instances as last uploaded (the crowns fade in the camera's way).
+    trees: Vec<Prop>,
+    placed: Vec<[f32; 8]>,
 }
 
 /// The views the picture is drawn into.
@@ -280,7 +284,7 @@ impl TpsGpu {
             Spec { vertex: "scene_vertex", fragment: Some("sky_fragment"), buffers: &single, cull: false, sky: true },
         );
         let scene_static = lit("scene_vertex", "scene_fragment", &single, true);
-        let scene_prop = lit("prop_vertex", "scene_fragment", &prop_buffers, true);
+        let scene_prop = lit("prop_vertex", "prop_fragment", &prop_buffers, true);
         let scene_grass = lit("grass_vertex", "scene_fragment", &grass_buffers, false);
         let scene_water = lit("water_vertex", "water_fragment", &single, true);
 
@@ -290,11 +294,18 @@ impl TpsGpu {
             .batches
             .iter()
             .filter(|batch| !batch.instances.is_empty() && !batch.vertices.is_empty())
-            .map(|batch| PropBatch {
-                vertices: buffer(device, "Greybox prop mesh", bytemuck::cast_slice(&batch.vertices), wgpu::BufferUsages::VERTEX),
-                vertex_count: batch.vertices.len() as u32,
-                instances: buffer(device, "Greybox prop instances", bytemuck::cast_slice(&batch.instances), wgpu::BufferUsages::VERTEX),
-                instance_count: batch.instances.len() as u32,
+            .map(|batch| {
+                // Trees are written again when a crown fades.
+                let trees = batch.trees.len() == batch.instances.len();
+                let usage = if trees { wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST } else { wgpu::BufferUsages::VERTEX };
+                PropBatch {
+                    vertices: buffer(device, "Greybox prop mesh", bytemuck::cast_slice(&batch.vertices), wgpu::BufferUsages::VERTEX),
+                    vertex_count: batch.vertices.len() as u32,
+                    instances: buffer(device, "Greybox prop instances", bytemuck::cast_slice(&batch.instances), usage),
+                    instance_count: batch.instances.len() as u32,
+                    trees: if trees { batch.trees.clone() } else { Vec::new() },
+                    placed: if trees { batch.instances.clone() } else { Vec::new() },
+                }
             })
             .collect();
         let tuft = buffer(device, "Greybox grass tuft", bytemuck::cast_slice(&data.tuft), wgpu::BufferUsages::VERTEX);
@@ -327,9 +338,14 @@ impl TpsGpu {
     }
 
     /// Per frame: where the hero is (the grass bends away from it), the time (the wind) and the camera
-    /// (which grass is worth drawing).
-    pub fn update(&mut self, queue: &wgpu::Queue, hero: Vec3, time: f32, eye: Vec3, look: &TpsLook) {
+    /// (which grass is worth drawing, which tree crowns are in the way of `target`, the hero).
+    pub fn update(&mut self, queue: &wgpu::Queue, hero: Vec3, time: f32, [eye, target]: [Vec3; 2], look: &TpsLook) {
         self.camera = eye;
+        for batch in &mut self.props {
+            if !batch.trees.is_empty() && fade_crowns(&batch.trees, &mut batch.placed, eye, target) {
+                queue.write_buffer(&batch.instances, 0, bytemuck::cast_slice(&batch.placed));
+            }
+        }
         let (horizon, zenith) = look.sky();
         let mut values = [0.0_f32; 16];
         values[..8].copy_from_slice(&[hero.x, hero.y, hero.z, BEND_RADIUS, time, WIND, FADE_START, FADE_END]);

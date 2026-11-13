@@ -11,6 +11,14 @@ pub(super) fn material(tone: u32, emissive: f32, roughness: f32) -> Material {
     [tone.min(5) as f32, emissive, roughness, 0.0]
 }
 
+/// The flag of a tree crown's vertices: the crown fades when it is in the camera's way (G11.6).
+pub(super) const CROWN: f32 = 2.0;
+
+/// A material for a tree crown (see [`CROWN`]).
+pub(super) fn crown(tone: u32) -> Material {
+    [tone.min(5) as f32, 0.0, 0.9, CROWN]
+}
+
 /// One flat triangle; the normal comes from the winding.
 pub(super) fn tri(out: &mut Vec<Vertex>, points: [Vec3; 3], material: Material) {
     let normal = (points[1] - points[0]).cross(points[2] - points[0]).normalize_or_zero();

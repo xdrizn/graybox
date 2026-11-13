@@ -32,6 +32,8 @@ pub(super) struct Draw {
     pub pose: HeroPose,
     /// Where the camera is (the sky is drawn around it).
     pub eye: Vec3,
+    /// What it looks at (the hero; tree crowns between the two fade).
+    pub target: Vec3,
     /// Seconds since the app started (the wind and the water run on it).
     pub time: f32,
     /// How the picture looks (see [`TpsLook`]).
@@ -56,6 +58,7 @@ pub fn paint(ui: &egui::Ui, rect: egui::Rect, tps: &Tps, theme: &SceneTheme) {
     let draw = Draw {
         pose: frame.hero,
         eye: frame.eye,
+        target: frame.target,
         time,
         look,
         foes: frame.foes,

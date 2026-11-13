@@ -501,6 +501,39 @@
   - Still to check: in the browser, that mouse 4/5 do not also move the page back or forward (eframe
     already stops the right-click menu). Over the right shoulder the raised bow is mostly hidden by the
     hero's head (seen clearly from the left shoulder): a pose tweak for the feel pass.
+- G11.6, the rest (2026-11-13): the camera eases back behind the hero, tree crowns fade out of its way,
+  the feel pass and the browser check.
+  - Camera (`tps/camera.rs`): after 2.5 s with no camera input, no steering and no aim mode it eases
+    back behind the hero and to its usual height on a critically damped spring (about 2 s, starting
+    gently, the short way round, drawn between steps). Any camera input restarts the wait; it never
+    turns while the player steers.
+  - Something between the camera and the hero still pulls it in at once (G11.4); it now eases back out
+    (5 per second) instead of jumping.
+  - Jumps and falls: the view's height trails the hero's on a spring (at most 1 m), so a jump moves the
+    hero up the screen instead of bobbing the view; on the ground, a ladder or a wall it springs back,
+    so hills keep the hero in the middle of the screen.
+  - Crowns (`Prop::crown_in_the_way` in `tps/props.rs`, `fade_crowns` in the renderer, `prop_fragment`
+    in `tps.wgsl`): a pine or oak crown on the line from the camera to the hero thins to a fine
+    screen-door pattern (at most 85% of its pixels gone) and the hero shows through; its shadow stays.
+    It fades smoothly with the distance from that line; only tree batches that changed are uploaded.
+  - Bow, seen in play: over the right shoulder the hood hid the bow. The ready and draw poses hold it a
+    little to the right and the aim camera now sits 1.0 m to the side (was 0.65) and 1.6 m up (was
+    1.5), so it shows on both shoulders; the string hand waits behind the grip instead of sticking out.
+  - Crossfades: G11.3's are kept (strikes fade in under 0.1 s on purpose, so a hit lands when pressed).
+  - Browser (`game/browser_buttons.rs`): while a game plays (and half a second after) the page cancels
+    the browser's own action for mouse 4 and 5 (press, release and auxclick), so they swap the shoulder
+    instead of going back or forward; the editor keeps the browser's behaviour.
+  - Checked in Edge (1256x708): the third-person game runs at the display's 200 fps, every frame under
+    5.2 ms; every mouse 4/5 event is cancelled while playing and none in the editor. Budgets: 116,896
+    triangles drawn plus 32,374 in the shadow map (limit 250k), 33 draw calls (limit 150), 18.9 MB of
+    GPU memory on the desktop and 6.9 MB in the browser (limit 40 MB). The release wasm is 65 MB before
+    wasm-opt and compression.
+  - Not yet: a real mouse 4/5 click in the browser (automation cannot press them, and some mice send
+    back and forward as keys through their driver, which no page can stop); the string hand dips a
+    little mid-draw (keys blend angle by angle); in aim mode the crown test uses the line to the
+    crosshair point, beside the hero. The installed copy comes with the batch install of this round.
+  - Tests: `tps/camera_tests.rs` (10), `bow_tests::over_either_shoulder_the_head_never_hides_the_bow`,
+    and the renderer's `tree_crowns_are_flagged_…` and `the_crowns_in_the_way_fade_…`.
 - G11.5, rest (2026-11-13, "continue todos os trabalhos"): foes, damage, arrows, and the variables
   and events the designed UI uses.
   - Foes (`tps/foes.rs`): three training dummies in a row 8 m in front of the start and five husks
@@ -1100,6 +1133,14 @@
   - Mouse 4 and mouse 5 both swap (a toggle), so the controller needs one button for it.
   - The crosshair point is computed in the simulation and arrows aim at it, so the dot never lies, even
     with the shoulder offset. The game draws only the dot; the designed UI can replace it.
+- G11.6 camera, crowns and browser (the recommended option each time):
+  - Easing back waits while the player steers instead of slowing down: turning the camera turns the
+    stick's directions, and the hero would run in circles.
+  - The view trails the hero only in a jump or a fall; on the ground it follows exactly.
+  - Crowns fade with a screen-door pattern (discard), not blending: nothing to sort, the same on WebGL2,
+    and the shadow stays whole.
+  - Mouse 4/5 are cancelled only while a game plays, from one capture listener on the window (eframe
+    already turns them into the Extra1 and Extra2 buttons).
 - G11.2 world (Adriel was away; the recommended option each time):
   - The ground is a heightfield with alternating triangle splits, and the walking height is looked up in
     those same triangles, so what you see is what you stand on. Only integer hashing and smoothstep make
@@ -1444,8 +1485,10 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     as fixed arrays too), `game::tps::dead` in the help line. `crates/ui-egui/src/game/screen_ui.rs`
     (ours): the Stamina bar choice.
   - G11.6, same file: `game::tps::paint` takes the crosshair flag (`!doc.game.hide_crosshair`).
+  - G11.6, `crates/ui-egui/Cargo.toml`: the wasm `web-sys` features gain `Window`, `Performance`,
+    `EventTarget`, `Event`, `MouseEvent` and `AddEventListenerOptions` (the mouse 4/5 listener).
   - `crates/ui-egui/src/game/mod.rs` (ours): `Play::tps`, hooks in `frame` and `inspect`, the Game picker
-    first in `prototype_section`.
+    first in `prototype_section`; `browser_buttons::playing()` in `frame` (G11.6).
 - Documents (G13.1; `crates/doc/src/docs.rs`, `crates/engine/src/cmd/docs.rs`, `crates/ui-egui/src/game/docs/` are ours):
   - `crates/doc/src/lib.rs`: `pub mod docs;`, `Document::docs` (serde default, skipped when empty), its
     initialiser in `without_pages`, `mod docs_tests;`.
@@ -1607,10 +1650,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 
 ## Next
 - G11 (third-person game; spec [`specs/2026-11-11-third-person-design.md`](specs/2026-11-11-third-person-design.md)).
-  Milestone G11 is in `PLAN.md`. G11.2 to G11.5 are done, and the bow of G11.6 (hip shot, aim
-  mode over the shoulder, crosshair, shoulder swap); next in G11.6: the camera easing back behind the
-  hero, crowns in the camera's way, feel tuning (the bow hidden by the head over the right shoulder),
-  budgets and the browser check (mouse 4/5 there).
+  Milestone G11 is done (`PLAN.md`); the installed copy comes with the batch install. Left from
+  G11.6: one real mouse 4/5 click in the browser, the string hand's dip mid-draw.
 - Navigable menus phase 2: tab bars (LB/RB) switching the menu below; spatial focus for layers
   without auto layout. To check: Tab sent through the control channel did not open the starter
   Inventory in Play (the controller's View did).

@@ -1122,7 +1122,7 @@ fn bow_aim(k: Key) -> Key {
     k.b(Spine, [-2.0, -14.0, 0.0])
         .b(Chest, [0.0, -40.0, 0.0])
         .b(Head, [2.0, 52.0, 0.0])
-        .b(UpperArmL, [90.0, 0.0, -56.0])
+        .b(UpperArmL, [90.0, 0.0, -33.0])
         .b(ForearmL, [0.0, 0.0, 0.0])
         .b(HandL, [0.0, 0.0, 0.0])
         .b(UpperArmR, [-90.0, 0.0, 72.0])
@@ -1145,9 +1145,9 @@ fn bow_nock(k: Key) -> Key {
     k.b(Spine, [-2.0, -8.0, 0.0])
         .b(Chest, [0.0, -30.0, 0.0])
         .b(Head, [2.0, 36.0, 0.0])
-        .b(UpperArmL, [90.0, 0.0, -50.0])
-        .b(UpperArmR, [80.0, 0.0, 10.0])
-        .b(ForearmR, [40.0, 0.0, 0.0])
+        .b(UpperArmL, [90.0, 0.0, -16.0])
+        .b(UpperArmR, [100.0, 20.0, -50.0])
+        .b(ForearmR, [20.0, 0.0, 0.0])
 }
 
 /// When the bow's draw reaches the nocked pose (aim mode draws from there).
@@ -1171,11 +1171,11 @@ fn bow_shoot() -> Clip {
         bow_aim(Key::at(0.07))
             .ease(Ease::InOut)
             .b(Chest, [0.0, -42.0, 0.0])
-            .b(UpperArmL, [94.0, 0.0, -55.0])
+            .b(UpperArmL, [94.0, 0.0, -32.0])
             .b(UpperArmR, [-96.0, 0.0, 86.0])
             .b(ForearmR, [118.0, 0.0, 0.0])
             .b(HandR, [0.0, 0.0, 30.0]),
-        bow_aim(Key::at(0.5)).b(UpperArmL, [80.0, 0.0, -50.0]).b(UpperArmR, [-70.0, 0.0, 70.0]).b(ForearmR, [110.0, 0.0, 0.0]),
+        bow_aim(Key::at(0.5)).b(UpperArmL, [80.0, 0.0, -16.0]).b(UpperArmR, [-70.0, 0.0, 70.0]).b(ForearmR, [110.0, 0.0, 0.0]),
     ];
     Clip::new(ClipId::BowShoot, 0.5, Mode::Once, keys).layer(Layer::Upper).fades(0.02, 0.3)
 }

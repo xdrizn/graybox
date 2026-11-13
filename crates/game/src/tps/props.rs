@@ -133,3 +133,74 @@ impl Prop {
         })
     }
 }
+
+/// A tree's crown, roughly: a vertical capsule around the trunk from `low` to `high` metres above the
+/// foot, `radius` wide (at scale 1). The renderer's crowns sit inside it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Crown {
+    pub low: f32,
+    pub high: f32,
+    pub radius: f32,
+}
+
+impl PropKind {
+    /// The crown of a tree (`None` for what is not one).
+    pub fn crown(self) -> Option<Crown> {
+        match self {
+            PropKind::Pine => Some(Crown { low: 1.3, high: 3.5, radius: 1.3 }),
+            PropKind::Oak => Some(Crown { low: 2.6, high: 3.4, radius: 1.75 }),
+            _ => None,
+        }
+    }
+}
+
+/// A crown fades fully when the line of sight passes within this share of its radius, and not at
+/// all past the second share (in between it fades smoothly).
+const CROWN_FADE: [f32; 2] = [0.9, 1.4];
+
+impl Prop {
+    /// How much this tree's crown is in the way of a camera at `eye` looking at the hero at `target`
+    /// (G11.6): 1 when the line between them goes through it (or the camera is inside it), 0 when it
+    /// passes well clear, smoothly in between. Not a tree, or junk: 0.
+    pub fn crown_in_the_way(&self, eye: Vec3, target: Vec3) -> f32 {
+        let Some(crown) = self.kind.crown() else { return 0.0 };
+        let scale = self.scale;
+        if !(eye.is_finite() && target.is_finite() && self.position.is_finite() && scale.is_finite() && scale > 1e-3) {
+            return 0.0;
+        }
+        let low = self.position + Vec3::Y * crown.low * scale;
+        let high = self.position + Vec3::Y * crown.high * scale;
+        let gap = segment_gap(eye, target, low, high) / (crown.radius * scale);
+        let [near, far] = CROWN_FADE;
+        let t = ((gap - near) / (far - near)).clamp(0.0, 1.0);
+        let fade = 1.0 - t * t * (3.0 - 2.0 * t);
+        if fade.is_finite() { fade } else { 0.0 }
+    }
+}
+
+/// The shortest distance between the segments `a0..a1` and `b0..b1`.
+fn segment_gap(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3) -> f32 {
+    let (da, db, r) = (a1 - a0, b1 - b0, a0 - b0);
+    let (aa, bb, ab) = (da.length_squared(), db.length_squared(), da.dot(db));
+    let (ar, br) = (da.dot(r), db.dot(r));
+    let tiny = 1e-9;
+    let (s, t) = if aa <= tiny && bb <= tiny {
+        (0.0, 0.0)
+    } else if aa <= tiny {
+        (0.0, (br / bb).clamp(0.0, 1.0))
+    } else if bb <= tiny {
+        ((-ar / aa).clamp(0.0, 1.0), 0.0)
+    } else {
+        let denominator = aa * bb - ab * ab;
+        let s = if denominator > tiny { ((ab * br - ar * bb) / denominator).clamp(0.0, 1.0) } else { 0.0 };
+        let t = (ab * s + br) / bb;
+        if t < 0.0 {
+            ((-ar / aa).clamp(0.0, 1.0), 0.0)
+        } else if t > 1.0 {
+            (((ab - ar) / aa).clamp(0.0, 1.0), 1.0)
+        } else {
+            (s, t)
+        }
+    };
+    ((a0 + da * s) - (b0 + db * t)).length()
+}

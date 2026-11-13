@@ -1,7 +1,7 @@
 //! One mesh for each kind of prop (trees, rocks, ruins, crates), standing on the origin and facing
 //! +Z with scale 1. The renderer draws each one instanced, once per [`figcraft_game::tps::Prop`].
 use super::super::mesh::{self, Vertex};
-use super::shapes::{blob, frustum, material};
+use super::shapes::{blob, crown, frustum, material};
 use figcraft_game::tps::{ARCH_LEG_HEIGHT, ARCH_LEG_SIZE, ARCH_LEG_X, BLOCK_SIZE, BROKEN_PILLAR_HEIGHT, CRATE_SIZE, PILLAR_HEIGHT, PropKind};
 use glam::{Mat4, Vec3};
 
@@ -12,14 +12,14 @@ fn boxed(out: &mut Vec<Vertex>, position: [f32; 3], size: [f32; 3], tone: u32, r
 fn pine(out: &mut Vec<Vertex>) {
     frustum(out, Vec3::ZERO, 6, [0.2, 0.12, 1.5], material(0, 0.0, 0.9), None);
     for (y, radius, height, tone) in [(0.9, 1.25, 1.7, 1), (1.9, 0.95, 1.5, 2), (2.8, 0.65, 1.4, 3)] {
-        frustum(out, Vec3::Y * y, 6, [radius, 0.0, height], material(tone, 0.0, 0.9), None);
+        frustum(out, Vec3::Y * y, 6, [radius, 0.0, height], crown(tone), None);
     }
 }
 
 fn oak(out: &mut Vec<Vertex>) {
     frustum(out, Vec3::ZERO, 6, [0.24, 0.17, 2.3], material(0, 0.0, 0.9), None);
-    blob(out, Vec3::new(0.0, 3.2, 0.0), Vec3::new(1.5, 1.2, 1.5), 3, material(2, 0.0, 0.9));
-    blob(out, Vec3::new(0.8, 2.6, 0.4), Vec3::new(0.9, 0.8, 0.9), 4, material(1, 0.0, 0.9));
+    blob(out, Vec3::new(0.0, 3.2, 0.0), Vec3::new(1.5, 1.2, 1.5), 3, crown(2));
+    blob(out, Vec3::new(0.8, 2.6, 0.4), Vec3::new(0.9, 0.8, 0.9), 4, crown(1));
 }
 
 fn rock(out: &mut Vec<Vertex>) {

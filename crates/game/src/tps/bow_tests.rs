@@ -242,3 +242,39 @@ fn aiming_right_after_a_hip_click_still_shoots_it() {
     run(&mut tps, AIM, 0.5);
     assert_eq!(tps.hero.animator.overlay_clip(), Some(ClipId::BowAim), "then the bow comes up nocked");
 }
+
+/// How far right of the middle of the screen `point` looks (the tangent of the angle, so a point
+/// in front of another on screen gives the same value whatever its distance).
+fn on_screen(tps: &Tps, point: Vec3) -> f32 {
+    let (eye, direction) = crosshair(tps);
+    right_of_centre(tps, point) / (point - eye).dot(direction).max(0.1)
+}
+
+/// The hero's bow hand, string hand and the middle of its hood, in the world.
+fn hands_and_hood(tps: &Tps) -> (Vec3, Vec3, Vec3) {
+    let pose = tps.hero.pose(1.0);
+    let root = glam::Mat4::from_translation(pose.position) * glam::Mat4::from_rotation_y(-pose.facing);
+    let bones = pose.skeleton.model_matrices();
+    let at = |bone: rig::Bone, offset: Vec3| root.transform_point3(bones[bone.index()].transform_point3(offset));
+    (at(rig::Bone::HandL, Vec3::ZERO), at(rig::Bone::HandR, Vec3::ZERO), at(rig::Bone::Head, Vec3::Y * 0.12))
+}
+
+#[test]
+fn over_either_shoulder_the_head_never_hides_the_bow() {
+    // From the right shoulder the bow hand was right behind the hood (play-test, G11.6).
+    let mut tps = with_bow(10.0);
+    for shoulder in ["right", "left"] {
+        run(&mut tps, AIM, 0.8);
+        let (bow, string, hood) = hands_and_hood(&tps);
+        let gap = (on_screen(&tps, bow) - on_screen(&tps, hood)).abs();
+        assert!(gap > 0.1, "{shoulder} shoulder, ready: the bow is {gap} from the hood");
+        assert!(bow.distance(string) < 0.45, "the string hand is at the bow, not out to the side: {}", bow.distance(string));
+        click(&mut tps, AIM);
+        run(&mut tps, AIM, 0.25);
+        let (bow, _, hood) = hands_and_hood(&tps);
+        let gap = (on_screen(&tps, bow) - on_screen(&tps, hood)).abs();
+        assert!(gap > 0.1, "{shoulder} shoulder, drawn: the bow is {gap} from the hood");
+        run(&mut tps, AIM, 1.0);
+        run(&mut tps, Input { shoulder: true, ..AIM }, 1.0 / 60.0);
+    }
+}

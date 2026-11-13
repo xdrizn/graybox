@@ -41,6 +41,8 @@ pub(crate) mod tilt_ui;
 // Graybox: the third-person game (G11) and the picker of which game a file plays.
 pub(crate) mod kind_ui;
 pub(crate) mod tps;
+// Graybox: mouse 4 and 5 are game buttons in the browser, not back and forward (G11.6).
+mod browser_buttons;
 pub(crate) mod unity_ui;
 // Graybox: the tree list shared by the Docs tab and the Pages list, and the Pages list itself (G9).
 pub(crate) mod page_list;
@@ -121,6 +123,7 @@ impl Play {
         if now.is_finite() {
             self.last = Some(now);
         }
+        browser_buttons::playing();
         // Graybox: the third-person game runs instead of the first-person one.
         if let Some(steps) = tps::advance(self, dt) {
             return steps;

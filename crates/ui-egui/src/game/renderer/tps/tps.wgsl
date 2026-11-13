@@ -2,6 +2,7 @@
 // shares the uniforms, `Input`, `Output`, `visibility` and `shade`.
 //
 // - prop_vertex / prop_shadow_vertex: one mesh drawn many times, each instance moved and turned.
+//   prop_fragment thins a tree crown that is in the camera's way.
 // - grass_vertex: tufts of blades that sway in the wind, bend away from the hero and shrink with
 //   distance, all in the vertex shader (no per-blade CPU work after placement).
 // - water_vertex / water_fragment: the river and the waterfall, with a glow that runs along them.
@@ -20,7 +21,7 @@ struct Tps {
 struct Instance {
     // xyz: where the prop stands; w: turn about the vertical axis (radians).
     @location(3) at: vec4<f32>,
-    // x: size (uniform scale).
+    // x: size (uniform scale); y: how far a tree crown fades (0..1, G11.6).
     @location(4) size: vec4<f32>,
 };
 struct Tuft {
@@ -51,7 +52,28 @@ fn finish(world: vec3<f32>, normal: vec3<f32>, material: vec4<f32>) -> Output {
 
 @vertex fn prop_vertex(input: Input, instance: Instance) -> Output {
     let world = turn(input.position * instance.size.x, instance.at.w) + instance.at.xyz;
-    return finish(world, turn(input.normal, instance.at.w), input.material);
+    var material = input.material;
+    // A tree crown (flag 2) in the camera's way: its fade (size.y) rides on the flag, made negative.
+    if material.w > 1.5 {
+        material.w = -clamp(instance.size.y, 0.0, 1.0);
+    }
+    return finish(world, turn(input.normal, instance.at.w), material);
+}
+
+// The props' picture. A crown in the camera's way is thinned to a fine screen-door pattern (at most
+// 85% of its pixels gone, so a hint of it stays) and the hero shows through; its shadow stays whole.
+@fragment fn prop_fragment(input: Output) -> Lit {
+    var lit = input;
+    if input.material.w < 0.0 {
+        var bayer = array<f32, 16>(0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+        let cell = vec2<u32>(input.position.xy) % vec2<u32>(4u, 4u);
+        let threshold = (bayer[cell.y * 4u + cell.x] + 0.5) / 16.0;
+        if -input.material.w * 0.85 > threshold {
+            discard;
+        }
+        lit.material.w = 0.0;
+    }
+    return shade(lit);
 }
 
 @vertex fn grass_vertex(input: Input, tuft: Tuft) -> Output {
