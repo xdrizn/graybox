@@ -1,12 +1,11 @@
 //! The Pixel art section of the Design panel, for one selected pixel layer: Edit pixels (Pixel
 //! mode), the art size and the scale. While the sprite is edited it also shows the sprite's layers
-//! (pick the one drawn on, show or hide, opacity, add, delete, reorder, merge down) and the palette:
-//! the sprite's own colours, the file's colour styles and colour variables. A click on a swatch
-//! takes it as the first colour, a right click as the second.
+//! (pick the one drawn on, show or hide, opacity, add, delete, reorder, merge down) and the palette
+//! (import a palette file as colour styles, save the sprite's colours as one).
 
-use egui::{Align2, Color32, CornerRadius, Id, Rect, Sense, Stroke, Ui, vec2};
-use figcraft_doc::{Document, NodeId, StyleKind, VariableType, VariableValue};
-use figcraft_pixel::{Rgba, Sprite, canvas, store};
+use egui::{Align2, CornerRadius, Id, Rect, Sense, Ui, vec2};
+use figcraft_doc::{Document, NodeId};
+use figcraft_pixel::{Sprite, store};
 use serde_json::json;
 
 use super::{Mode, current_layer};
@@ -33,9 +32,21 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[Node
     }
     let Some(sprite) = store::load(&n.plugin_data) else { return false };
     let editing = app.pixel.mode == Mode::Edit(*id);
-    let buttons: &[(Icon, &str)] = if super::active(app) { &[] } else { &[(Icon::PixelArt, "Edit pixels (double-click)")] };
-    if widgets::section_header(ui, "Pixel art", buttons, false).is_some() {
-        super::enter(app, *id);
+    // The section folds away from its header (it is big): the chevron or a click on the title.
+    let closed = app.pixel.panel_closed;
+    let fold = if closed { (Icon::ChevronRight, "Show the Pixel art settings") } else { (Icon::Chevron, "Hide the Pixel art settings") };
+    let mut buttons = vec![fold];
+    if !super::active(app) {
+        buttons.push((Icon::PixelArt, "Edit pixels (double-click)"));
+    }
+    match widgets::section_header_resp(ui, "Pixel art", &buttons, false) {
+        (Some(0), _) => app.pixel.panel_closed = !closed,
+        (Some(_), _) => super::enter(app, *id),
+        (None, resp) if resp.clicked() => app.pixel.panel_closed = !closed,
+        _ => {}
+    }
+    if closed {
+        return true;
     }
     let col = widgets::col_width(ui.available_width());
     crate::right::row(ui, 32.0, |ui| {
@@ -57,7 +68,7 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[Node
     super::export::section(app, ui, doc, *id, &sprite, &t);
     if editing {
         layers(app, ui, *id, &sprite, &t);
-        palette(app, ui, doc, *id, &sprite, &t);
+        palette(app, ui, *id, &t);
     }
     true
 }
@@ -272,119 +283,45 @@ fn layer_rows(app: &mut FigApp, ui: &mut Ui, id: NodeId, sprite: &Sprite, curren
     }
 }
 
-/// Swatches with their tooltips.
-type Swatches = Vec<(Rgba, String)>;
-
-/// A row of swatches; returns the one clicked (and whether with the right button).
-fn swatches(ui: &mut Ui, colors: &[(Rgba, String)], t: &Tokens, salt: &str) -> Option<(Rgba, bool)> {
-    let mut hit = None;
-    padded(ui, |ui| {
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
-            for (i, (c, tip)) in colors.iter().enumerate() {
-                let (r, _) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::hover());
-                ui.painter().rect_filled(r, CornerRadius::same(3), Color32::from_gray(0xc8));
-                ui.painter().rect_filled(r, CornerRadius::same(3), Color32::from_rgba_unmultiplied(c[0], c[1], c[2], c[3]));
-                ui.painter().rect_stroke(r, CornerRadius::same(3), Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
-                let resp = ui
-                    .interact(r, ui.scope_id().with((salt, i)), Sense::click())
-                    .on_hover_text(format!("{tip}\nClick: first colour · Right click: second colour"));
-                if resp.clicked() {
-                    hit = Some((*c, false));
-                } else if resp.secondary_clicked() {
-                    hit = Some((*c, true));
-                }
-            }
-        })
-    });
-    hit
-}
-
-/// The file's colour styles and colour variables (their first mode), as swatches.
-fn file_colors(doc: &Document) -> (Swatches, Swatches) {
-    let mut styles = Vec::new();
-    for s in &doc.styles {
-        if let StyleKind::Paint { paints } = &s.kind
-            && let Some(c) = paints.iter().find_map(|p| p.solid_color())
-        {
-            styles.push((c.to_rgba8(), s.name.clone()));
-        }
-    }
-    let mut vars = Vec::new();
-    for v in &doc.variables.variables {
-        if v.kind != VariableType::Color {
-            continue;
-        }
-        // Each collection in its default mode, aliases followed.
-        if let Some(VariableValue::Color(c)) = doc.variables.resolve(&v.id, &std::collections::BTreeMap::new()) {
-            vars.push((c.to_rgba8(), v.name.clone()));
-        }
-        if vars.len() >= 128 {
-            break;
-        }
-    }
-    styles.truncate(128);
-    (styles, vars)
-}
-
-/// The palette: the sprite's own colours (add the first colour, load and save `.gpl` / `.hex`),
-/// then the file's colour styles and variables.
-fn palette(app: &mut FigApp, ui: &mut Ui, doc: &Document, id: NodeId, sprite: &Sprite, t: &Tokens) {
+/// The palette (G16.6): colours come from Graybox's own colour system (the colour picker of the
+/// tool colours offers the file's colour styles and variables), so here a palette file becomes
+/// colour styles, and the sprite's colours can be saved as one.
+fn palette(app: &mut FigApp, ui: &mut Ui, id: NodeId, t: &Tokens) {
     ui.add_space(6.0);
-    let picked = widgets::section_header(ui, "Palette", &[(Icon::Plus, "Add the first colour"), (Icon::Minus, "Take the first colour out")], false);
-    let first = canvas::to_hex(app.pixel.colors[0]);
-    match picked {
-        Some(0) => {
-            app.run("pixel.palette.set", json!({"id": id.0, "add": first}));
-        }
-        Some(_) => {
-            app.run("pixel.palette.set", json!({"id": id.0, "remove": first}));
-        }
-        None => {}
-    }
-    let own: Vec<(Rgba, String)> = sprite.palette.iter().filter_map(|h| canvas::parse_hex(h).map(|c| (c, h.clone()))).collect();
-    let mut hit = None;
-    if own.is_empty() {
-        widgets::note(ui, "No colours yet: + adds the first colour", t.text_secondary);
-    } else {
-        hit = hit.or(swatches(ui, &own, t, "graybox_pixel_pal"));
-    }
+    widgets::section_header(ui, "Palette", &[], false);
     padded(ui, |ui| {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
-            if text_button(ui, "Load…", "Load a palette (.gpl or .hex)", t, true) {
-                load_palette(app, id);
+            if text_button(ui, "Import…", "Make colour styles from a palette file (.gpl or .hex)", t, true) {
+                load_palette(app);
             }
-            if text_button(ui, "Save…", "Save the palette (.gpl)", t, !own.is_empty()) {
+            if text_button(ui, "Save…", "Save the sprite's colours as a palette file (.gpl)", t, true) {
                 save_palette(app, id);
             }
         })
     });
-    let (styles, vars) = file_colors(doc);
-    if !styles.is_empty() {
-        widgets::note(ui, "Colour styles", t.text_secondary);
-        hit = hit.or(swatches(ui, &styles, t, "graybox_pixel_styles"));
-    }
-    if !vars.is_empty() {
-        widgets::note(ui, "Colour variables", t.text_secondary);
-        hit = hit.or(swatches(ui, &vars, t, "graybox_pixel_vars"));
-    }
-    if let Some((c, second)) = hit {
-        app.pixel.colors[usize::from(second)] = c;
-    }
 }
 
-fn load_palette(app: &mut FigApp, id: NodeId) {
-    app.pick_file("Load palette", &["gpl", "hex", "txt"], true, move |app, file| {
+fn load_palette(app: &mut FigApp) {
+    app.pick_file("Import palette", &["gpl", "hex", "txt"], true, move |app, file| {
         use base64::Engine as _;
         let text = if let Some(path) = file["path"].as_str() {
             std::fs::read_to_string(path).ok()
         } else {
             file["data"].as_str().and_then(|d| base64::engine::general_purpose::STANDARD.decode(d).ok()).and_then(|b| String::from_utf8(b).ok())
         };
+        // The file's name (without the extension) names the styles' folder unless the file names it.
+        let stem = file["name"]
+            .as_str()
+            .or_else(|| file["path"].as_str())
+            .and_then(|p| std::path::Path::new(p).file_stem().and_then(|s| s.to_str()).map(str::to_string));
         match text {
             Some(text) if !figcraft_pixel::palette::parse(&text).is_empty() => {
-                app.run("pixel.palette.set", json!({"id": id.0, "text": text}));
+                let mut p = json!({"text": text});
+                if let (Some(stem), Some(o)) = (stem, p.as_object_mut()) {
+                    o.insert("name".into(), json!(stem));
+                }
+                app.run("pixel.palette.import", p);
             }
             _ => app.show_error("That file has no palette colours in it.".to_string()),
         }

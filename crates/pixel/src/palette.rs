@@ -7,6 +7,12 @@ use crate::sprite::MAX_PALETTE;
 /// The colours of a palette file, `.gpl` or `.hex` (told apart by the `GIMP Palette` header), in
 /// order, at most [`MAX_PALETTE`]. Lines that aren't colours are skipped.
 pub fn parse(text: &str) -> Vec<Rgba> {
+    parse_named(text).into_iter().map(|(c, _)| c).collect()
+}
+
+/// [`parse`], with each colour's name when the file gives one (a `.gpl` line's words after the
+/// three numbers, unless they are just its hex).
+pub fn parse_named(text: &str) -> Vec<(Rgba, Option<String>)> {
     let gpl = text.trim_start_matches('\u{feff}').trim_start().starts_with("GIMP Palette");
     let mut out = Vec::new();
     for line in text.lines() {
@@ -15,13 +21,19 @@ pub fn parse(text: &str) -> Vec<Rgba> {
             continue;
         }
         let c = if gpl {
-            let mut parts = line.split_whitespace().map(str::parse::<u16>);
-            match (parts.next(), parts.next(), parts.next()) {
-                (Some(Ok(r)), Some(Ok(g)), Some(Ok(b))) if r <= 255 && g <= 255 && b <= 255 => Some([r as u8, g as u8, b as u8, 255]),
+            let mut words = line.split_whitespace();
+            let mut num = || words.next().and_then(|w| w.parse::<u16>().ok()).filter(|v| *v <= 255);
+            match (num(), num(), num()) {
+                (Some(r), Some(g), Some(b)) => {
+                    let c = [r as u8, g as u8, b as u8, 255];
+                    let name: String = words.collect::<Vec<_>>().join(" ").chars().filter(|ch| !ch.is_control()).take(64).collect();
+                    let plain = name.is_empty() || to_hex(c).trim_start_matches('#').eq_ignore_ascii_case(name.trim_start_matches('#'));
+                    Some((c, (!plain).then_some(name)))
+                }
                 _ => None,
             }
         } else {
-            parse_hex(line)
+            parse_hex(line).map(|c| (c, None))
         };
         if let Some(c) = c {
             out.push(c);
@@ -31,6 +43,13 @@ pub fn parse(text: &str) -> Vec<Rgba> {
         }
     }
     out
+}
+
+/// A `.gpl` palette's `Name:`, when it has one.
+pub fn name(text: &str) -> Option<String> {
+    let line = text.lines().take(8).find_map(|l| l.trim().strip_prefix("Name:"))?;
+    let name: String = line.trim().chars().filter(|c| !c.is_control()).take(64).collect();
+    (!name.is_empty()).then_some(name)
 }
 
 /// `colors` as a GIMP palette called `name`.

@@ -9,10 +9,13 @@ Graybox desenha pixel art direto no canvas, para UI de jogo:
 - **Modo Pixel** (botão "Pixel" no seletor de modos, duplo clique na camada ou "Edit pixels"):
   lápis, borracha, balde, conta-gotas, linha, retângulo, elipse, seleções, mover, espelho, modo
   tile, grade, sombra (Shade) e duas cores (botão direito usa a segunda).
+- **Cores do Graybox**: as duas cores abrem o seletor de cor padrão, com os estilos de cor e as
+  variáveis do arquivo; a cor lembra de que estilo veio, e se o estilo mudar o painel oferece
+  "Update from styles". Paletas `.gpl`/`.hex` viram estilos de cor (Palette > Import…).
 - **UI de jogo**: 9-slice em pixels de arte, camada que cresce sem esticar a arte, Pixel text
   (texto nítido na grade), o componente pronto "Pixel button" (Default/Hover/Pressed) e troca de
   paleta como variante.
-- **Animação**: timeline com frames, duração, tags (idle, hover…), onion skin; a tag toca no
+- **Animação**: timeline (botão na barra ou Alt+T) com frames, duração, tags (idle, hover…), onion skin; a tag toca no
   Prototype e no Play.
 - **Export/Import**: PNG, PNG por frame, sprite sheet + JSON, GIF e Unity (com o Live Link criando
   sprites, clips e Animator). Importa PNG ou sheet cortada em frames.
@@ -31,7 +34,9 @@ a sprite: a grid of art pixels with its own layers, frames, tags and palette. Ea
   the "Pixel button" and "Pixel font" starters in the same pill.
 - The **Pixel art** section of the Design panel: scale, size, what plays, how it grows when resized
   (Middle, Edges, Tile; with 9-slice: Repeat or Stretch, Cuts as padding), Pixel font, Export and
-  Import. While a sprite is edited it also lists the sprite's layers and its palette.
+  Import. While a sprite is edited it also lists the sprite's layers and Palette (Import… makes
+  colour styles from a `.gpl` or `.hex` file; Save… writes the sprite's colours as `.gpl`). The
+  section comes last, after Effects, and folds away with its arrow.
 - The layer's image fill is the frame at rest, so files opened elsewhere still show the art.
 
 ## Pixel mode
@@ -50,15 +55,20 @@ with **Done**, `Esc` or `Enter`.
 | Marquee / Lasso / Magic wand | `M` / `Q` / `W` | `Shift` adds, `Alt` takes away, both keep the overlap |
 | Move | `V` | Arrows move the selected pixels (`Shift`: 10) |
 
-- Two colours: the main button draws the first, the right button the second; `X` swaps them.
+- Two colours: the main button draws the first, the right button the second; `X` swaps them. A
+  click on either opens Graybox's colour picker: a custom colour, the file's colour styles (by
+  folder), colour variables and the colours in this sprite. A colour taken from a style or variable
+  keeps that link in the sprite, so when the style changes **Update from styles** (Pixel colors)
+  repaints those pixels, and Replace colour moves the link to the new colour.
 - Mirror left/right and up/down, with pink handles to drag the axis; Tile mode wraps drawing round
   the edges and shows the sprite repeated around itself; the pixel grid shows when zoomed in.
 - Shift-click draws a line from the last point. `Ctrl+A`, `Ctrl+D`, `Ctrl+Shift+I` select all,
   none, invert; `Ctrl+C`/`X`/`V` copy, cut and paste pixels; `Delete` clears.
-- **Shade**: with the pencil's Shade option on, each pixel you pass over moves one colour along the
-  sprite's palette (main button: the next colour, right button: the one before), once per stroke.
-  Put a ramp in the palette, dark to light, and shade by painting over the art. Without a palette
-  the ramp is the layer's own colours from dark to light.
+- **Shade**: with the pencil's Shade option on, each pixel you pass over moves one colour along a
+  ramp (main button: the next colour, right button: the one before), once per stroke. The ramp is
+  the colour style folder the first colour came from (e.g. `Skin/1`…`Skin/4`), dark to light; with
+  no such folder, the sprite's palette or its own colours from dark to light.
+- The pill fits narrow windows by leaving out the zoom label and folding the mirror buttons into one.
 
 ## Game UI
 
@@ -72,7 +82,8 @@ with **Done**, `Esc` or `Enter`.
 
 ## Animation
 
-In Pixel mode the timeline sits over the pill: frames across (number and duration), the sprite's
+In Pixel mode the timeline sits over the pill once turned on (the pill's timeline button, `Alt+T`,
+or "Show pixel timeline" in Actions; Graybox remembers it; hidden, you draw on the frame shown): frames across (number and duration), the sprite's
 layers down. Add, duplicate, delete and drag frames; `,` and `.` step; Play loops the current tag.
 **New tag** names a run of frames (direction Forward, Reverse or Ping-pong, Repeat). The tag that
 **plays** (panel: Plays) runs in Prototype and Play; a hover or pressed variant that plays another

@@ -103,6 +103,10 @@ pub struct Sprite {
     /// The sprite's own colours, as `#rrggbb` or `#rrggbbaa`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub palette: Vec<String>,
+    /// Where its colours came from (G16.6): `#rrggbb[aa]` → `style:<id>` (a colour style) or
+    /// `var:<id>` (a colour variable), so they can follow the style when it changes.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub links: std::collections::BTreeMap<String, String>,
     /// The id the next layer or frame gets.
     #[serde(default)]
     pub next_id: u32,
@@ -131,6 +135,7 @@ impl Sprite {
             tags: Vec::new(),
             play: None,
             palette: Vec::new(),
+            links: std::collections::BTreeMap::new(),
             next_id: 3,
             resize: Resize::default(),
             slice_fill: SliceFill::default(),

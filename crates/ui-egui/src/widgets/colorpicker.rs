@@ -59,6 +59,11 @@ pub enum PickerTarget {
         control: String,
         pending: Option<String>,
     },
+    /// Graybox: a Pixel mode colour (G16.6): 0 and 1 the tools' first and second colour, 2 the
+    /// colour a Pixel colors swap changes to (`crate::game::pixel::colors`).
+    Pixel {
+        which: usize,
+    },
 }
 
 /// The paints of colour style `id`.
@@ -114,6 +119,7 @@ fn current_paint(app: &FigApp, target: &PickerTarget) -> Option<Paint> {
             _ => None,
         },
         PickerTarget::Style { id, index } => style_paints(doc, id)?.get(*index).cloned(),
+        PickerTarget::Pixel { which } => crate::game::pixel::colors::picker_paint(app, *which),
         PickerTarget::PluginField { plugin, control, pending } => {
             let hex = match pending {
                 Some(hex) => hex.clone(),
@@ -130,7 +136,7 @@ fn current_paint(app: &FigApp, target: &PickerTarget) -> Option<Paint> {
 /// The command and its params that write `paint` to `target`, when the target can take it.
 fn paint_command(app: &FigApp, target: &PickerTarget, paint: &Paint) -> Option<(&'static str, serde_json::Value)> {
     Some(match target {
-        PickerTarget::PluginField { .. } => return None,
+        PickerTarget::PluginField { .. } | PickerTarget::Pixel { .. } => return None,
         PickerTarget::SelectionColor { targets, .. } => ("selection.setPaint", json!({"targets": targets, "paint": paint})),
         PickerTarget::PageBackground => {
             let c = paint.solid_color().unwrap_or(Color::DEFAULT_PAGE);
@@ -170,6 +176,14 @@ fn write(app: &mut FigApp, target: &PickerTarget, paint: &Paint, live: bool) {
             crate::plugins_ui::set_field(app, &plugin, &control, &hex);
         }
         app.ui.picker = Some(PickerTarget::PluginField { plugin, control, pending: live.then_some(hex) });
+        return;
+    }
+    // Graybox: a Pixel mode colour is the editor's, not the document's (G16.6).
+    if let PickerTarget::Pixel { which } = target {
+        crate::game::pixel::colors::picker_write(app, *which, paint);
+        if !live && let Some(c) = paint.solid_color() {
+            remember_recent(app, c);
+        }
         return;
     }
     if live {
@@ -1028,14 +1042,22 @@ pub fn show(app: &mut FigApp, ctx: &egui::Context) {
         // Paint type.
         if !matches!(
             target,
-            PickerTarget::Effect { .. } | PickerTarget::PageBackground | PickerTarget::Variable { .. } | PickerTarget::PluginField { .. }
+            PickerTarget::Effect { .. }
+                | PickerTarget::PageBackground
+                | PickerTarget::Variable { .. }
+                | PickerTarget::PluginField { .. }
+                | PickerTarget::Pixel { .. }
         ) {
             paint_type_row(ui, app, &target, &mut paint);
         }
         // The paint's own blend mode, with the paints and layers under it.
         if !matches!(
             target,
-            PickerTarget::Effect { .. } | PickerTarget::PageBackground | PickerTarget::Variable { .. } | PickerTarget::PluginField { .. }
+            PickerTarget::Effect { .. }
+                | PickerTarget::PageBackground
+                | PickerTarget::Variable { .. }
+                | PickerTarget::PluginField { .. }
+                | PickerTarget::Pixel { .. }
         ) {
             blend_row(ui, app, &target, &mut paint);
         }
@@ -1132,6 +1154,11 @@ pub fn show(app: &mut FigApp, ctx: &egui::Context) {
             if done {
                 finish(app);
             }
+        }
+        // Graybox: a Pixel mode colour also offers the file's colour styles and variables and the
+        // sprite's own colours (G16.6).
+        if let PickerTarget::Pixel { which } = target {
+            crate::game::pixel::colors::picker_rows(app, ui, which, &t);
         }
         // Colours used on this page.
         let doc_colors = page_colors(app, ui);

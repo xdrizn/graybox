@@ -192,14 +192,15 @@ fn a_stroke_released_off_the_canvas_still_draws() {
 #[test]
 fn a_press_that_closes_the_colour_picker_does_not_draw() {
     let (mut u, id) = editing();
-    u.app.pixel.picking = Some(0);
+    // The pill's primary swatch opens Graybox's own colour picker.
+    u.app.open_picker(crate::colorpicker::PickerTarget::Pixel { which: 0 }, None);
     u.frame(vec![]);
     let p = at(&u, 4.0, 4.0);
     u.frame(vec![Event::PointerMoved(p)]);
     press(&mut u, p, PointerButton::Primary, true);
     press(&mut u, p, PointerButton::Primary, false);
     u.frame(vec![]);
-    assert_eq!(u.app.pixel.picking, None, "the picker closed");
+    assert!(u.app.ui.picker.is_none(), "the picker closed");
     assert_eq!(pixel(&mut u, id, 4, 4), None, "and nothing was drawn");
     // The next press draws.
     press(&mut u, p, PointerButton::Primary, true);
@@ -395,6 +396,7 @@ fn the_period_and_comma_keys_step_through_frames_and_the_pencil_draws_on_the_fra
 #[test]
 fn play_runs_the_frames_of_the_current_tag_and_any_click_in_the_timeline_stops_it() {
     let (mut u, id) = editing();
+    u.app.run("pixel.timeline", json!({"on": true}));
     for _ in 0..3 {
         u.app.run("pixel.frame.add", json!({"id": id}));
     }
@@ -435,4 +437,103 @@ fn shade_mode_steps_along_the_palette_with_either_button() {
     key(&mut u, Key::E, false);
     drag(&mut u, (1.0, 1.0), (1.0, 1.0));
     assert_eq!(pixel(&mut u, id, 1, 1), None);
+}
+
+/// The timeline starts hidden (a still sprite takes no room); Alt+T or the pill's button shows it,
+/// and hiding it stops the editor's playback (Prototype and Play are not the editor's).
+#[test]
+fn the_timeline_is_hidden_until_alt_t_shows_it() {
+    let (mut u, id) = editing();
+    assert!(!figcraft_engine::cmd::pixel::timeline_shown(&u.app.session));
+    u.frame(vec![Event::Key { key: Key::T, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::ALT }]);
+    u.frame(vec![Event::Key { key: Key::T, physical_key: None, pressed: false, repeat: false, modifiers: Modifiers::ALT }]);
+    assert!(figcraft_engine::cmd::pixel::timeline_shown(&u.app.session));
+    assert_eq!(u.app.pixel.tool, Tool::Pencil, "Alt+T is not a tool key");
+    u.app.run("pixel.frame.add", json!({"id": id}));
+    super::timeline::toggle_play(&mut u.app);
+    u.frame(vec![]);
+    assert!(u.app.pixel.playing.is_some());
+    u.app.run("pixel.timeline", json!({}));
+    u.frame(vec![]);
+    assert!(u.app.pixel.playing.is_none(), "hidden: the editor stops playing and shows the current frame");
+}
+
+#[test]
+fn the_actions_palette_finds_the_timeline_toggle() {
+    let rows: Vec<String> = crate::menus::command_sections("timeline").iter().flat_map(|(_, rows)| rows.iter().map(|r| r.key.clone())).collect();
+    assert!(rows.contains(&"command:pixel.timeline".to_string()), "{rows:?}");
+}
+
+/// A colour style named `name` with colour `hex`; its link (`style:<id>`).
+fn style(u: &mut Ui, name: &str, hex: &str) -> String {
+    let r = u.app.session.execute("style.create", &json!({"type": "paint", "name": name, "value": hex})).unwrap();
+    format!("style:{}", r["id"].as_str().unwrap())
+}
+
+#[test]
+fn the_standard_picker_edits_the_pixel_colours_and_a_style_painted_with_is_remembered() {
+    let (mut u, id) = editing();
+    // The picker shows the primary colour and writes back to it (a colour set by hand has no link).
+    u.app.pixel.links[0] = Some("style:gone".into());
+    let paint = super::colors::picker_paint(&u.app, 0).unwrap();
+    assert_eq!(paint.solid_color().unwrap().to_rgba8(), [0x1b, 0x1d, 0x29, 255]);
+    let red = figcraft_color::Paint::solid(figcraft_color::Color::from_rgba8(0xff, 0, 0, 255));
+    super::colors::picker_write(&mut u.app, 0, &red);
+    assert_eq!(u.app.pixel.colors[0], [0xff, 0, 0, 255]);
+    assert_eq!(u.app.pixel.links[0], None, "set by hand");
+    // Painted from a colour style, the sprite remembers where the colour came from.
+    let link = style(&mut u, "Dusk/Ember", "#e0522f");
+    u.app.pixel.colors[0] = [0xe0, 0x52, 0x2f, 255];
+    u.app.pixel.links[0] = Some(link.clone());
+    let p = at(&u, 3.0, 3.0);
+    u.frame(vec![Event::PointerMoved(p)]);
+    press(&mut u, p, PointerButton::Primary, true);
+    press(&mut u, p, PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert_eq!(pixel(&mut u, id, 3, 3).as_deref(), Some("#e0522f"));
+    let doc = u.app.session.doc().unwrap();
+    let sprite = store::load(&doc.get(figcraft_doc::NodeId(id)).unwrap().plugin_data).unwrap();
+    assert_eq!(sprite.links.get("#e0522f"), Some(&link));
+    // X swaps the links with the colours.
+    key(&mut u, Key::X, false);
+    assert_eq!(u.app.pixel.links[1], Some(link));
+    assert_eq!(u.app.pixel.links[0], None);
+}
+
+#[test]
+fn shade_steps_along_the_style_folder_of_the_primary_colour() {
+    let (mut u, id) = editing();
+    let dark = style(&mut u, "Ramp/1", "#202040");
+    style(&mut u, "Ramp/3", "#a0a0e0");
+    style(&mut u, "Ramp/2", "#6060a0");
+    style(&mut u, "Other/x", "#ffffff");
+    u.app.pixel.colors[0] = [0x20, 0x20, 0x40, 255];
+    u.app.pixel.links[0] = Some(dark);
+    let ramp = super::colors::shade_ramp(&u.app).unwrap();
+    assert_eq!(ramp, vec!["#202040", "#6060a0", "#a0a0e0"], "the folder, dark to light");
+    // A pixel of the middle colour steps up the folder's ramp, not the sprite's colours.
+    u.app.session.execute("pixel.stroke", &json!({"id": id, "points": [[2, 2]], "color": "#6060a0"})).unwrap();
+    u.app.pixel.shade = true;
+    let p = at(&u, 2.0, 2.0);
+    u.frame(vec![Event::PointerMoved(p)]);
+    press(&mut u, p, PointerButton::Primary, true);
+    press(&mut u, p, PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert_eq!(pixel(&mut u, id, 2, 2).as_deref(), Some("#a0a0e0"));
+}
+
+#[test]
+fn a_tool_colour_taken_from_a_style_follows_it_when_it_changes() {
+    let (mut u, _) = editing();
+    let link = style(&mut u, "Dusk/Ember", "#e0522f");
+    u.app.pixel.colors[0] = [0xe0, 0x52, 0x2f, 255];
+    u.app.pixel.links[0] = Some(link.clone());
+    let sid = link.trim_start_matches("style:").to_string();
+    u.app.session.execute("style.update", &json!({"style": sid, "value": "#3366ff"})).unwrap();
+    u.frame(vec![]);
+    assert_eq!(u.app.pixel.colors[0], [0x33, 0x66, 0xff, 255]);
+    u.app.session.execute("style.delete", &json!({"style": sid})).unwrap();
+    u.frame(vec![]);
+    assert_eq!(u.app.pixel.links[0], None, "a deleted style is forgotten");
+    assert_eq!(u.app.pixel.colors[0], [0x33, 0x66, 0xff, 255], "the colour stays");
 }

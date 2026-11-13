@@ -135,6 +135,8 @@ icons! {
     ReplaceColor,
     /// Graybox: shade mode (three bars rising like a colour ramp).
     Shade,
+    /// Graybox: the animation timeline (a strip of frames over a playhead).
+    Timeline,
     Home,
     Bell,
     Panels,

@@ -8,6 +8,7 @@ use serde_json::json;
 
 use super::{Mode, Tool, art_to_page, decode, leave, step_brush, toggle_shape, zoom_of};
 use crate::FigApp;
+use crate::colorpicker::PickerTarget;
 use crate::icons::Icon;
 use crate::theme::Tokens;
 use crate::toolbar::{DIVIDER, DONE_W, GAP, PAD, TOOL_CELL, divider, done_button, pill, pretty_shortcut, tool_cell};
@@ -28,6 +29,8 @@ enum Opt {
     Contiguous,
     MirrorX,
     MirrorY,
+    /// Both mirror buttons in one (a narrow canvas): off, left-right, up-down, both.
+    Mirror,
     Tile,
     Grid,
     FlipH,
@@ -62,6 +65,31 @@ fn options(tool: Tool) -> Vec<Opt> {
     v
 }
 
+/// The pill's width with options `opts`, and the zoom label or not.
+fn pill_width(opts: &[Opt], zoom: bool) -> f32 {
+    let tools_w = Tool::SLOTS.len() as f32 * (TOOL_CELL + GAP);
+    let opts_w: f32 = opts.iter().map(|o| o.width() + GAP).sum();
+    let zoom_w = if zoom { ZOOM_W + GAP } else { 0.0 };
+    PAD * 2.0 + tools_w + DIVIDER + GAP + TOOL_CELL + GAP + DIVIDER + GAP + opts_w + TOOL_CELL + GAP + zoom_w + DIVIDER + GAP + DONE_W
+}
+
+/// The options and whether the zoom label shows, made to fit `room` (screen points): the zoom
+/// label goes first, then the two mirror buttons become one that steps through them.
+fn fit(mut opts: Vec<Opt>, room: f32) -> (Vec<Opt>, bool) {
+    if pill_width(&opts, true) <= room {
+        return (opts, true);
+    }
+    if pill_width(&opts, false) > room
+        && let Some(i) = opts.iter().position(|o| *o == Opt::MirrorX)
+    {
+        opts.retain(|o| *o != Opt::MirrorY);
+        if let Some(o) = opts.get_mut(i) {
+            *o = Opt::Mirror;
+        }
+    }
+    (opts, false)
+}
+
 /// Pixel mode's pill, when it is on. True when it drew (the app's own pill is then not shown).
 pub(crate) fn toolbar(app: &mut FigApp, ui: &mut Ui) -> bool {
     super::settle(app);
@@ -80,13 +108,16 @@ pub(crate) fn toolbar(app: &mut FigApp, ui: &mut Ui) -> bool {
 
 fn edit_pill(app: &mut FigApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
-    let opts = options(app.pixel.tool);
-    let tools_w = Tool::SLOTS.len() as f32 * (TOOL_CELL + GAP);
-    let opts_w: f32 = opts.iter().map(|o| o.width() + GAP).sum();
-    let width = PAD * 2.0 + tools_w + DIVIDER + GAP + TOOL_CELL + GAP + DIVIDER + GAP + opts_w + ZOOM_W + GAP + DIVIDER + GAP + DONE_W;
+    let (opts, zoom_shown) = fit(options(app.pixel.tool), app.canvas.rect.width() - 16.0);
+    let width = pill_width(&opts, zoom_shown);
     let rect = pill(ui, &mut app.ui.nav, app.canvas.rect, width, &t);
-    // The timeline sits over the pill (G16.4).
-    super::timeline::timeline(app, ui, rect);
+    // The timeline sits over the pill (G16.4) while it is turned on (G16.6).
+    let timeline_on = figcraft_engine::cmd::pixel::timeline_shown(&app.session);
+    if timeline_on {
+        super::timeline::timeline(app, ui, rect);
+    } else {
+        app.pixel.playing = None;
+    }
     let cy = rect.center().y;
     let mut x = rect.min.x + PAD;
     for slot in Tool::SLOTS {
@@ -123,17 +154,24 @@ fn edit_pill(app: &mut FigApp, ui: &mut Ui) {
         option(app, ui, o, r, &t);
         x += o.width() + GAP;
     }
-    // How big an art pixel is on screen.
-    let zoom = pixel_zoom(app);
-    let label = if zoom >= 10.0 { format!("×{zoom:.0}") } else { format!("×{zoom:.1}") };
-    let zr = Rect::from_min_size(pos2(x, cy - TOOL_CELL / 2.0), vec2(ZOOM_W, TOOL_CELL));
-    ui.interact(zr, ui.scope_id().with("pixel_zoom"), Sense::hover()).on_hover_text("Screen pixels per art pixel");
-    ui.painter().text(zr.center(), Align2::CENTER_CENTER, label, crate::theme::regular(11.5), t.text_secondary);
-    x += ZOOM_W + GAP;
+    let r = Rect::from_center_size(pos2(x + TOOL_CELL / 2.0, cy), vec2(TOOL_CELL, TOOL_CELL));
+    let tip = format!("Timeline (frames, tags, onion skin)  {}", pretty_shortcut("Alt+T"));
+    if tool_cell(ui, &t, r, ("pixel_opt", "timeline"), Icon::Timeline, timeline_on, &tip).clicked() {
+        app.run("pixel.timeline", json!({}));
+    }
+    x += TOOL_CELL + GAP;
+    // How big an art pixel is on screen (left out when the canvas is narrow).
+    if zoom_shown {
+        let zoom = pixel_zoom(app);
+        let label = if zoom >= 10.0 { format!("×{zoom:.0}") } else { format!("×{zoom:.1}") };
+        let zr = Rect::from_min_size(pos2(x, cy - TOOL_CELL / 2.0), vec2(ZOOM_W, TOOL_CELL));
+        ui.interact(zr, ui.scope_id().with("pixel_zoom"), Sense::hover()).on_hover_text("Screen pixels per art pixel");
+        ui.painter().text(zr.center(), Align2::CENTER_CENTER, label, crate::theme::regular(11.5), t.text_secondary);
+        x += ZOOM_W + GAP;
+    }
     if done_button(ui, &t, x, cy, &format!("Done  {}", pretty_shortcut("Esc"))) {
         leave(app);
     }
-    color_picker(app, ui, rect, &t);
 }
 
 /// Screen pixels per art pixel of the sprite being edited.
@@ -166,11 +204,9 @@ fn swatches(app: &mut FigApp, ui: &mut Ui, r: Rect, t: &Tokens) {
     let resp1 = ui.interact(front, ui.scope_id().with("pixel_color1"), Sense::click()).on_hover_text("Primary colour  ·  X swaps");
     swatch(ui.painter(), back, app.pixel.colors[1], t.border_strong);
     swatch(ui.painter(), front, app.pixel.colors[0], t.border_strong);
-    if resp1.clicked() {
-        app.pixel.picking = if app.pixel.picking == Some(0) { None } else { Some(0) };
-    } else if resp2.clicked() {
-        app.pixel.picking = if app.pixel.picking == Some(1) { None } else { Some(1) };
-    }
+    // Graybox's own colour picker: custom, the file's colour styles and variables, the sprite's colours.
+    app.picker_control(PickerTarget::Pixel { which: 0 }, &resp1);
+    app.picker_control(PickerTarget::Pixel { which: 1 }, &resp2);
 }
 
 /// One option button.
@@ -248,6 +284,11 @@ fn option(app: &mut FigApp, ui: &mut Ui, o: Opt, r: Rect, t: &Tokens) {
                 Opt::Contiguous => (Icon::LinkOn, e.contiguous, "Only what touches (off: every pixel of that colour)"),
                 Opt::MirrorX => (Icon::FlipH, e.mirror[0], "Mirror left and right (drag the pink handle to move the axis)"),
                 Opt::MirrorY => (Icon::FlipV, e.mirror[1], "Mirror up and down (drag the pink handle to move the axis)"),
+                Opt::Mirror => (
+                    if e.mirror[1] && !e.mirror[0] { Icon::FlipV } else { Icon::FlipH },
+                    e.mirror[0] || e.mirror[1],
+                    "Mirror: click for left-right, up-down, both, off (drag the pink handle to move the axis)",
+                ),
                 Opt::Tile => (Icon::Tiles, e.tile, "Tile mode: drawing wraps round the edges"),
                 _ => (Icon::Grid, e.grid, "Pixel grid"),
             };
@@ -259,89 +300,20 @@ fn option(app: &mut FigApp, ui: &mut Ui, o: Opt, r: Rect, t: &Tokens) {
                     Opt::Contiguous => e.contiguous = !e.contiguous,
                     Opt::MirrorX => e.mirror[0] = !e.mirror[0],
                     Opt::MirrorY => e.mirror[1] = !e.mirror[1],
+                    Opt::Mirror => {
+                        e.mirror = match e.mirror {
+                            [false, false] => [true, false],
+                            [true, false] => [false, true],
+                            [false, true] => [true, true],
+                            [true, true] => [false, false],
+                        }
+                    }
                     Opt::Tile => e.tile = !e.tile,
                     _ => e.grid = !e.grid,
                 }
             }
         }
     }
-}
-
-/// The open colour's picker above the pill: a colour wheel, its hex, and the colours the sprite
-/// already uses.
-fn color_picker(app: &mut FigApp, ui: &mut Ui, pill: Rect, t: &Tokens) {
-    let Some(which) = app.pixel.picking else { return };
-    let which = which.min(1);
-    let used = used_colors(app);
-    let mut color = app.pixel.colors[which];
-    let anchor = pos2(pill.min.x + PAD + 7.0 * (TOOL_CELL + GAP), pill.min.y - 8.0);
-    let area = egui::Area::new(egui::Id::unique("graybox_pixel_picker")).order(egui::Order::Foreground).pivot(Align2::LEFT_BOTTOM).fixed_pos(anchor);
-    let shown = area.show(ui.ctx(), |ui| {
-        egui::Frame::popup(ui.style()).fill(t.panel).show(ui, |ui| {
-            ui.set_width(220.0);
-            ui.label(if which == 0 { "Primary colour" } else { "Secondary colour" });
-            let mut c = c32(color);
-            if egui::color_picker::color_picker_color32(ui, &mut c, egui::color_picker::Alpha::OnlyBlend) {
-                color = c.to_srgba_unmultiplied();
-            }
-            let id = egui::Id::unique(("graybox_pixel_hex", which));
-            let mut hex = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_else(|| canvas::to_hex(color));
-            let field = ui.add(egui::TextEdit::singleline(&mut hex).desired_width(100.0));
-            if field.changed()
-                && let Some(c) = canvas::parse_hex(&hex)
-            {
-                color = c;
-            }
-            if field.has_focus() {
-                ui.data_mut(|d| d.insert_temp(id, hex));
-            } else {
-                ui.data_mut(|d| d.remove::<String>(id));
-            }
-            if !used.is_empty() {
-                ui.add_space(4.0);
-                ui.label("In this sprite");
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
-                    for c in &used {
-                        let (r, resp) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::click());
-                        swatch(ui.painter(), r, *c, t.border);
-                        if resp.on_hover_text(canvas::to_hex(*c)).clicked() {
-                            color = *c;
-                        }
-                    }
-                });
-            }
-        });
-    });
-    app.pixel.colors[which] = color;
-    let outside =
-        ui.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !shown.response.rect.contains(p) && !pill.contains(p)));
-    if outside {
-        app.pixel.closed_picker = true;
-    }
-    if outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        app.pixel.picking = None;
-    }
-}
-
-/// The distinct colours of the frame being edited (at most 64, most used first).
-fn used_colors(app: &mut FigApp) -> Vec<Rgba> {
-    let Mode::Edit(id) = app.pixel.mode else { return Vec::new() };
-    let Some(d) = decode(app, id) else { return Vec::new() };
-    if let Some((k, v)) = &app.pixel.used
-        && *k == d.key
-    {
-        return v.clone();
-    }
-    let mut count: std::collections::HashMap<Rgba, usize> = std::collections::HashMap::new();
-    for p in d.picture(&d.cel).pixels().iter().filter(|p| p[3] > 0) {
-        *count.entry(*p).or_default() += 1;
-    }
-    let mut v: Vec<(Rgba, usize)> = count.into_iter().collect();
-    v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    let v: Vec<Rgba> = v.into_iter().take(64).map(|(c, _)| c).collect();
-    app.pixel.used = Some((d.key, v.clone()));
-    v
 }
 
 /// The pill with no sprite yet: how to make one, and its size.
@@ -450,5 +422,30 @@ fn create_in_view(app: &mut FigApp) {
         app.run("pixel.create", json!({"x": (mid.x - pw / 2.0).round(), "y": (mid.y - ph / 2.0).round(), "width": w, "height": h, "scale": s}));
     if let Some(id) = made.as_ref().and_then(|r| figcraft_engine::params::id(r, "id")) {
         super::enter(app, id);
+    }
+}
+
+#[cfg(test)]
+mod fit_tests {
+    use super::{Opt, Tool, fit, options, pill_width};
+
+    /// On a 1440-point window with both panels open the canvas is about 900 points wide: every
+    /// tool's pill fits. A narrower pill leaves the zoom label out first, then folds the mirror
+    /// buttons into one.
+    #[test]
+    fn the_pill_fits_a_narrow_canvas_without_cutting_off_done() {
+        for tool in Tool::SLOTS.iter().flat_map(|s| s.iter().copied()) {
+            let (opts, _) = fit(options(tool), 888.0);
+            assert!(pill_width(&opts, false) <= 888.0, "{} fits", tool.label());
+        }
+        let pencil = options(Tool::Pencil);
+        let (opts, zoom) = fit(pencil.clone(), pill_width(&pencil, true) - 1.0);
+        assert!(!zoom && opts.contains(&Opt::MirrorX) && opts.contains(&Opt::MirrorY), "the zoom label goes first");
+        let (opts, zoom) = fit(pencil.clone(), pill_width(&pencil, false) - 1.0);
+        assert!(!zoom);
+        assert!(opts.contains(&Opt::Mirror) && !opts.contains(&Opt::MirrorX) && !opts.contains(&Opt::MirrorY));
+        // A wide canvas keeps everything.
+        let (opts, zoom) = fit(pencil, 1600.0);
+        assert!(zoom && opts.contains(&Opt::MirrorX) && opts.contains(&Opt::MirrorY));
     }
 }

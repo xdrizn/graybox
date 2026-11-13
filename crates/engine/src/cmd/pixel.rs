@@ -24,6 +24,8 @@ pub mod font;
 pub(crate) mod io;
 pub(crate) mod kit;
 mod paint;
+mod tools;
+pub use tools::{TIMELINE_PREF, link_color, timeline_shown};
 
 /// The most pointer positions one stroke takes.
 const MAX_STROKE_POINTS: usize = 100_000;
@@ -42,21 +44,21 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "pixel.stroke",
             "Draw pixels",
-            "{id, points: [[x, y], …] (art pixels, joined by lines), color? (default black), size? (1–64), shape? (square|circle), pixelPerfect? (one-pixel lines without L corners), mirror? {x?, y?} (axes in art pixels, .5 = through a pixel's middle), tile? (wrap round the edges), erase?, shade? (steps along the sprite palette instead of painting: 1 the next colour, -1 the one before; without a palette, the art's colours dark to light), layer? (layer id; default the top one), frame? (index, default 0)} → {changed}",
+            "{id, points: [[x, y], …] (art pixels, joined by lines), color? (default black), size? (1–64), shape? (square|circle), pixelPerfect? (one-pixel lines without L corners), mirror? {x?, y?} (axes in art pixels, .5 = through a pixel's middle), tile? (wrap round the edges), erase?, shade? (steps along a ramp of colours instead of painting: 1 the next colour, -1 the one before), ramp? ([colours] dark to light for shade; default the sprite palette, else the art's colours dark to light), link? (style:<id> or var:<id>: the colour style or variable the colour came from, so it can follow it), layer? (layer id; default the top one), frame? (index, default 0)} → {changed}",
             true,
             stroke
         ),
         spec!(
             "pixel.shape",
             "Draw a pixel shape",
-            "{id, kind: line|rect|ellipse, from: [x, y], to: [x, y], filled?, square? (a square or circle box), color?, size?, shape?, mirror?, tile?, erase?, layer?, frame?} → {changed}",
+            "{id, kind: line|rect|ellipse, from: [x, y], to: [x, y], filled?, square? (a square or circle box), color?, size?, shape?, mirror?, tile?, erase?, link?, layer?, frame?} → {changed}",
             true,
             shape
         ),
         spec!(
             "pixel.fill",
             "Fill pixels",
-            "{id, x, y, color?, contiguous? (default true: only what touches), tolerance? (0–255), tile?, layer?, frame?} → {changed}",
+            "{id, x, y, color?, contiguous? (default true: only what touches), tolerance? (0–255), tile?, link?, layer?, frame?} → {changed}",
             true,
             fill
         ),
@@ -102,6 +104,7 @@ pub fn specs() -> Vec<CommandSpec> {
     list.extend(kit::specs());
     list.extend(font::specs());
     list.extend(paint::specs());
+    list.extend(tools::specs());
     list
 }
 
@@ -357,14 +360,27 @@ fn stroke(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(bad(cmd, "`shade` and `erase` don't go together: shade steps colours, erase clears them"));
     }
     let perfect = boolean(p, "pixelPerfect").unwrap_or(false);
+    let link = tools::link_param(cmd, s.doc()?, p)?;
+    // The colours Shade steps along (G16.6: the app gives the colour style folder the colour came from).
+    let given: Option<Vec<Rgba>> = match get(p, "ramp") {
+        None | Some(Value::Null) => None,
+        Some(v) => Some(
+            v.as_array()
+                .and_then(|a| a.iter().take(256).map(rgba_of).collect())
+                .ok_or_else(|| bad(cmd, "`ramp` must be a list of colours, dark to light"))?,
+        ),
+    };
     let path = figcraft_pixel::paint::freehand(&points, perfect);
     let changed = edit_cel(s, id, &sprite, cel, |c| {
         if step == 0 {
             return figcraft_pixel::paint::paint(c, &path, &ink);
         }
-        let ramp = figcraft_pixel::paint::shade_ramp(&sprite.palette, c);
+        let ramp = given.unwrap_or_else(|| figcraft_pixel::paint::shade_ramp(&sprite.palette, c));
         figcraft_pixel::paint::shade(c, &path, &ink, &ramp, step)
     })?;
+    if changed > 0 && step == 0 && !ink.erase {
+        tools::record(s.doc_mut()?, id, ink.color, link.as_deref());
+    }
     Ok(json!({"changed": changed}))
 }
 
@@ -406,7 +422,11 @@ fn shape(s: &mut Session, p: &Value) -> Result<Value> {
     let path =
         shape_path(kind, a, b, boolean(p, "filled").unwrap_or(false), square).ok_or_else(|| bad(cmd, "`kind` must be line, rect or ellipse"))?;
     let ink = ink_of(cmd, p)?;
+    let link = tools::link_param(cmd, s.doc()?, p)?;
     let changed = edit_cel(s, id, &sprite, cel, |c| figcraft_pixel::paint::paint(c, &path, &ink))?;
+    if changed > 0 && !ink.erase {
+        tools::record(s.doc_mut()?, id, ink.color, link.as_deref());
+    }
     Ok(json!({"changed": changed}))
 }
 
@@ -423,7 +443,11 @@ fn fill(s: &mut Session, p: &Value) -> Result<Value> {
     let color = if ink.erase { figcraft_pixel::CLEAR } else { ink.color };
     let tolerance = num(p, "tolerance").filter(|f| f.is_finite()).map_or(0, |f| f.clamp(0.0, 255.0) as u8);
     let contiguous = boolean(p, "contiguous").unwrap_or(true);
+    let link = tools::link_param(cmd, s.doc()?, p)?;
     let changed = edit_cel(s, id, &sprite, cel, |c| figcraft_pixel::paint::fill(c, at, color, contiguous, tolerance, ink.tile))?;
+    if changed > 0 && !ink.erase {
+        tools::record(s.doc_mut()?, id, color, link.as_deref());
+    }
     Ok(json!({"changed": changed}))
 }
 

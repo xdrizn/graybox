@@ -206,10 +206,11 @@ pub struct Editor {
     /// The picture on screen and what it was made from.
     pub(crate) texture: Option<(egui::TextureHandle, u64)>,
     pub(crate) checker: Option<egui::TextureHandle>,
-    /// Which colour's picker is open (0 primary, 1 secondary).
-    pub(crate) picking: Option<usize>,
-    /// A press outside closed the colour picker (that press doesn't draw).
-    pub(crate) closed_picker: bool,
+    /// The colour style or variable each colour came from (0 primary, 1 secondary, 2 the Pixel
+    /// colors swap), as `style:<id>` or `var:<id>`: painting records it on the sprite (G16.6).
+    pub(crate) links: [Option<String>; 3],
+    /// The Pixel colors swap open in the colour picker.
+    pub(crate) swap: Option<colors::Swap>,
     /// The colours the frame being edited uses, and the decode key they were counted for.
     pub(crate) used: Option<(u64, Vec<figcraft_pixel::Rgba>)>,
     /// What Copy took: the pixels and where their top left was.
@@ -235,6 +236,8 @@ pub struct Editor {
     pub(crate) onion_tex: Vec<(u64, egui::TextureHandle)>,
     /// The Export and Import settings (G16.5).
     pub(crate) export: export::Prefs,
+    /// The Pixel art section of the Design panel is folded away.
+    pub(crate) panel_closed: bool,
 }
 
 impl Default for Editor {
@@ -261,8 +264,8 @@ impl Default for Editor {
             decoded: None,
             texture: None,
             checker: None,
-            picking: None,
-            closed_picker: false,
+            links: [None, None, None],
+            swap: None,
             used: None,
             clipboard: None,
             to_system: None,
@@ -277,6 +280,7 @@ impl Default for Editor {
             onion: false,
             onion_tex: Vec::new(),
             export: export::Prefs::default(),
+            panel_closed: false,
         }
     }
 }
@@ -342,7 +346,9 @@ pub(crate) fn leave(app: &mut FigApp) {
     app.pixel.playing = None;
     app.pixel.decoded = None;
     app.pixel.hover = None;
-    app.pixel.picking = None;
+    if matches!(app.ui.picker, Some(crate::colorpicker::PickerTarget::Pixel { which: 0 | 1 })) {
+        crate::colorpicker::close(app);
+    }
 }
 
 /// The `pixel.mode` request a command made.
@@ -371,6 +377,8 @@ pub(crate) fn settle(app: &mut FigApp) {
             leave(app);
             return;
         }
+        // Colours taken from a style follow it (G16.6).
+        colors::follow_links(app);
         // Another layer selected (Layers panel, select all, undo): another sprite is edited in
         // its place; anything else ends Pixel mode.
         let sel = app.session.selection();

@@ -338,6 +338,15 @@ fn draw_pixel_art(p: &P, icon: Icon) {
             p.fill_rect(6.5, 6.5, 9.5, 14.0, 0.0);
             p.fill_rect(11.0, 2.5, 14.0, 14.0, 0.0);
         }
+        // Graybox: three frames in a strip, the middle one current, over a playhead line.
+        Timeline => {
+            p.rect(1.5, 2.5, 14.5, 9.5, 1.0);
+            p.line(5.8, 2.5, 5.8, 9.5);
+            p.line(10.2, 2.5, 10.2, 9.5);
+            p.fill_rect(6.5, 3.2, 9.5, 8.8, 0.0);
+            p.line(1.5, 12.5, 14.5, 12.5);
+            p.fill_rect(6.5, 11.0, 9.5, 14.0, 1.0);
+        }
         _ => {}
     }
 }
@@ -703,7 +712,7 @@ fn draw(p: &P, icon: Icon) {
             p.line(5.0, 7.5, 9.0, 7.5);
         }
         // Graybox: the pixel art icons (G16).
-        PixelArt | PixelPerfect | Tiles | Marquee | MagicWand | Outline | ReplaceColor | Shade => draw_pixel_art(p, icon),
+        PixelArt | PixelPerfect | Tiles | Marquee | MagicWand | Outline | ReplaceColor | Shade | Timeline => draw_pixel_art(p, icon),
         // Graybox: a page with lines of text (the Documents tab).
         Document => {
             p.poly(&[(3.5, 2.5), (9.5, 2.5), (12.5, 5.5), (12.5, 13.5), (3.5, 13.5)], true);

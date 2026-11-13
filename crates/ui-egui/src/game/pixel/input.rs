@@ -86,8 +86,9 @@ fn edit(app: &mut FigApp, ui: &egui::Ui, resp: &egui::Response, pos: Pos2, id: f
     let at = art_at(app, id, &d.sprite, pos);
     app.pixel.hover = at.filter(|_| resp.hovered());
     let Some(at) = at else { return resp.hovered() };
-    // A press that closes the colour picker only closes it.
-    let swallow = std::mem::take(&mut app.pixel.closed_picker) || app.pixel.picking.is_some();
+    // A press that closes the colour picker only closes it (the picker is drawn after the canvas,
+    // so it is still open here on that press).
+    let swallow = app.ui.picker.is_some();
     // Alt holds the eyedropper with any drawing tool (with a selection tool it subtracts).
     let tool = if mods.alt && app.pixel.gesture.is_none() && !app.pixel.tool.selects() { Tool::Eyedropper } else { app.pixel.tool };
     if (pressed || pressed2) && resp.hovered() && app.pixel.gesture.is_none() && !swallow {
@@ -218,6 +219,9 @@ fn press(app: &mut FigApp, id: figcraft_doc::NodeId, d: &super::Decoded, tool: T
                 o.insert("color".into(), json!(canvas::to_hex(app.pixel.colors[usize::from(secondary)])));
                 o.insert("contiguous".into(), json!(app.pixel.contiguous));
                 o.insert("tile".into(), json!(app.pixel.tile));
+                if let Some(link) = app.pixel.links.get(usize::from(secondary)).cloned().flatten() {
+                    o.insert("link".into(), json!(link));
+                }
             }
             app.run("pixel.fill", p);
         }
@@ -225,7 +229,10 @@ fn press(app: &mut FigApp, id: figcraft_doc::NodeId, d: &super::Decoded, tool: T
             // What the frame shows there; a transparent pixel picks transparency.
             let picture = d.picture(&d.cel);
             if let Some(c) = picture.get(at.0, at.1) {
-                app.pixel.colors[usize::from(secondary)] = c;
+                let i = usize::from(secondary);
+                app.pixel.colors[i] = c;
+                // The colour style it was painted from, if the sprite remembers one (G16.6).
+                app.pixel.links[i] = d.sprite.links.get(&canvas::to_hex(c)).cloned();
             }
         }
     }
@@ -246,6 +253,10 @@ fn ink_params(app: &FigApp, p: &mut Value, secondary: bool, erase: bool) {
         o.insert("shape".into(), json!(if i.brush.shape == figcraft_pixel::BrushShape::Circle { "circle" } else { "square" }));
         o.insert("tile".into(), json!(i.tile));
         o.insert("erase".into(), json!(erase));
+        // The colour style or variable the colour came from, kept on the sprite (G16.6).
+        if let Some(link) = app.pixel.links.get(usize::from(secondary)).cloned().flatten().filter(|_| !erase) {
+            o.insert("link".into(), json!(link));
+        }
         let mut mirror = serde_json::Map::new();
         if let Some(x2) = i.symmetry.x2 {
             mirror.insert("x".into(), json!(x2 as f64 / 2.0));
@@ -271,6 +282,9 @@ fn commit_stroke(app: &mut FigApp, id: figcraft_doc::NodeId, d: &super::Decoded,
         let step = super::shade_step(&app.pixel, secondary, erase);
         if step != 0 {
             o.insert("shade".into(), json!(step));
+            if let Some(ramp) = super::colors::shade_ramp(app) {
+                o.insert("ramp".into(), json!(ramp));
+            }
         }
     }
     app.pixel.last = points.last().copied();
@@ -329,12 +343,18 @@ pub(crate) fn key(app: &mut FigApp, ev: &Event) -> bool {
     }
     let Event::Key { key, pressed: true, repeat, modifiers, .. } = ev else { return false };
     // Esc with a colour picker open closes the picker only.
-    if *key == Key::Escape && app.pixel.picking.is_some() {
-        app.pixel.picking = None;
+    if *key == Key::Escape && crate::colorpicker::close_if_open(app) {
         return true;
     }
     if modifiers.command || modifiers.ctrl {
         return editing && !*repeat && command_key(app, *key, modifiers.shift);
+    }
+    // Alt+T shows or hides the timeline (G16.6).
+    if modifiers.alt && *key == Key::T {
+        if !*repeat {
+            app.run("pixel.timeline", json!({}));
+        }
+        return true;
     }
     let selected = editing && selection(app).is_some();
     // Arrows move the selected pixels (Shift: ten at a time); without a selection they nudge the layer.
@@ -378,7 +398,10 @@ pub(crate) fn key(app: &mut FigApp, ev: &Event) -> bool {
         return true;
     }
     match key {
-        Key::X => app.pixel.colors.swap(0, 1),
+        Key::X => {
+            app.pixel.colors.swap(0, 1);
+            app.pixel.links.swap(0, 1);
+        }
         // The timeline (G16.4): previous and next frame (Enter stays Done, as in vector edit).
         Key::Comma if editing => super::timeline::step(app, false),
         Key::Period if editing => super::timeline::step(app, true),

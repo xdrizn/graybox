@@ -287,10 +287,6 @@ fn design(app: &mut FigApp, ui: &mut Ui) {
     }
     widgets::separator(ui);
     if !points_selected {
-        // Graybox: the Pixel art section of a selected pixel layer, above Layout (G16).
-        if crate::game::pixel::section(app, ui, &shown, &sel) {
-            widgets::separator(ui);
-        }
         crate::layout_panel::layout_section(app, ui, &shown, &sel);
         widgets::separator(ui);
         // Graybox: 9-slice, under Layout.
@@ -316,6 +312,11 @@ fn design(app: &mut FigApp, ui: &mut Ui) {
     widgets::separator(ui);
     effects(app, ui, &shown, &sel);
     widgets::separator(ui);
+    // Graybox: the Pixel art section of a selected pixel layer (or Pixel text), after Effects so
+    // the usual sections stay on top (G16).
+    if !points_selected && crate::game::pixel::section(app, ui, &shown, &sel) {
+        widgets::separator(ui);
+    }
     crate::selection_colors::section(app, ui, &shown, &sel);
     // Graybox: the colours pixel layers are drawn with, to swap one everywhere (G16).
     if crate::game::pixel::colors::section(app, ui, &shown, &sel) {

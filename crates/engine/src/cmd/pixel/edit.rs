@@ -46,7 +46,7 @@ pub(super) fn specs() -> Vec<CommandSpec> {
         spec!(
             "pixel.replaceColor",
             "Replace a pixel colour",
-            "{id | ids (several pixel layers), from, to (colours), tolerance? (0–255), everywhere? (default true: every layer and frame; false: the one cel, within the selection)} → {changed}",
+            "{id | ids (several pixel layers), from, to (colours), link? (style:<id> or var:<id> that `to` came from), tolerance? (0–255), everywhere? (default true: every layer and frame; false: the one cel, within the selection)} → {changed}",
             true,
             replace_color
         ),
@@ -210,6 +210,8 @@ fn replace_color(s: &mut Session, p: &Value) -> Result<Value> {
     let colour = |key: &str| get(p, key).and_then(rgba_of).ok_or_else(|| bad(cmd, format!("`{key}` must be a colour")));
     let (from, to) = (colour("from")?, colour("to")?);
     let tol = tolerance(p);
+    // The colour style or variable `to` came from (G16.6): it replaces `from`'s link.
+    let link = super::tools::link_param(cmd, s.doc()?, p)?;
     // Several pixel layers at once (Pixel colors): `ids`, every layer and frame of each.
     if let Some(list) = get(p, "ids").filter(|v| !v.is_null()) {
         let ids: Vec<NodeId> = list
@@ -224,6 +226,7 @@ fn replace_color(s: &mut Session, p: &Value) -> Result<Value> {
         for id in ids {
             let sprite = sprite_of(cmd, s.doc()?, id)?;
             changed += replace_everywhere(s, id, &sprite, from, to, tol)?;
+            super::tools::relink(s.doc_mut()?, id, from, to, link.as_deref());
         }
         return Ok(json!({"changed": changed}));
     }
@@ -234,7 +237,9 @@ fn replace_color(s: &mut Session, p: &Value) -> Result<Value> {
         let changed = edit_cel(s, id, &sprite, cel, |c| transform::replace_color(c, None, from, to, tol))?;
         return Ok(json!({"changed": changed}));
     }
-    Ok(json!({"changed": replace_everywhere(s, id, &sprite, from, to, tol)?}))
+    let changed = replace_everywhere(s, id, &sprite, from, to, tol)?;
+    super::tools::relink(s.doc_mut()?, id, from, to, link.as_deref());
+    Ok(json!({"changed": changed}))
 }
 
 /// Replaces `from` with `to` in every cel of pixel layer `id` (Selection colours does this).
@@ -489,7 +494,12 @@ fn palette_export(s: &mut Session, p: &Value) -> Result<Value> {
     let cmd = "pixel.palette.export";
     let id = req_id(cmd, p, "id")?;
     let sprite = sprite_of(cmd, s.doc()?, id)?;
-    let colors: Vec<Rgba> = sprite.palette.iter().filter_map(|c| canvas::parse_hex(c)).collect();
+    let mut colors: Vec<Rgba> = sprite.palette.iter().filter_map(|c| canvas::parse_hex(c)).collect();
+    if colors.is_empty() {
+        // No palette of its own (colours come from the file's styles, G16.6): the colours it is
+        // drawn with, in the order they first appear.
+        colors = used_colors(s.doc()?.get(id)?, &sprite);
+    }
     let name = s.doc()?.get(id)?.name.clone();
     let text = match get(p, "format").and_then(Value::as_str).unwrap_or("gpl") {
         "gpl" => palette::to_gpl(&name, &colors),
@@ -497,4 +507,27 @@ fn palette_export(s: &mut Session, p: &Value) -> Result<Value> {
         _ => return Err(bad(cmd, "`format` must be gpl or hex")),
     };
     Ok(json!({"text": text}))
+}
+
+/// The distinct colours of every cel of `n`'s sprite, in the order they first appear (at most 256).
+fn used_colors(n: &figcraft_doc::Node, sprite: &Sprite) -> Vec<Rgba> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for l in &sprite.layers {
+        for f in &sprite.frames {
+            if !n.plugin_data.contains_key(&store::cel_key(l.id, f.id)) {
+                continue;
+            }
+            let Some(cel) = store::cel(&n.plugin_data, sprite, l.id, f.id) else { continue };
+            for p in cel.pixels().iter().filter(|p| p[3] > 0) {
+                if out.len() >= 256 {
+                    return out;
+                }
+                if seen.insert(*p) {
+                    out.push(*p);
+                }
+            }
+        }
+    }
+    out
 }

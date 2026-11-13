@@ -13,6 +13,7 @@ mod font;
 mod io;
 mod kit;
 mod perf;
+mod tools;
 
 fn ex(s: &mut Session, command: &str, params: Value) -> Value {
     s.execute(command, &params).unwrap()

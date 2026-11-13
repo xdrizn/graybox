@@ -581,6 +581,23 @@
     the sheet's first frame. Font names stay unique in a file ("Pixel Font 2"). Shade's ramp is
     the sprite palette in its own order (as Aseprite's shading ink uses a palette range), main
     button forward. A bitmap font export for Unity was left out (time).
+  - G16.6 follow-ups Adriel asked for (2026-11-12):
+    - **D6 changed: one colour system.** The pill's two colours and a Pixel colors swap open
+      Graybox's own colour picker (`PickerTarget::Pixel {which}`: custom colour, then the file's
+      colour styles by folder, colour variables, and "In this sprite"); the local pixel palette is
+      gone from the panel (Palette: Import… makes colour styles from a `.gpl` / `.hex`,
+      `pixel.palette.import`; Save… writes the sprite's colours). A colour picked from a style or
+      variable keeps its link: painting records `colour → style:<id> | var:<id>` in the sprite
+      (`Sprite::links`), Replace colour moves the link, and when a style changes the Pixel colors
+      section offers "Update from styles" (`pixel.styles.follow`). Shade steps along the primary
+      colour's style folder (or variable group), dark to light, else the sprite's colours
+      (`pixel.stroke {ramp}`). The old `palette` field still reads and `pixel.palette.*` still work.
+    - The Pixel art section comes last in the Design panel (after Effects) and folds away.
+    - The timeline over the pill is off until turned on: a pill button (lit while on), Alt+T, or
+      "Show pixel timeline" in Actions (`pixel.timeline {on?}`, kept in the app's View prefs, not
+      the file). Hidden, the sprite shows the frame being edited; Prototype and Play still play.
+    - The pill no longer fits a ~900-point canvas with the Timeline button added: when narrow it
+      leaves the zoom label out, then folds the two mirror buttons into one that steps through them.
 - G11.4 movement (recommended option each time):
   - No physics engine: one cylinder against the world's axis-aligned boxes (two passes) plus the
     heightfield; a few hundred boxes per step is cheap at 60 Hz and the same on wasm.
@@ -979,7 +996,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   - `crates/ui-egui/src/toolbar.rs`: `show` gives the bar to `game::pixel::toolbar` in Pixel mode;
     the mode switcher has a fifth mode "Pixel" (widths and Play position follow); `pill`, `divider`,
     `tool_cell`, `done_button`, `pretty_shortcut` and the size constants became `pub(crate)`.
-  - `crates/ui-egui/src/panels/right.rs`: `game::pixel::section` above Layout.
+  - `crates/ui-egui/src/panels/right.rs`: `game::pixel::section` after Effects (above Layout
+    until G16.6).
   - `crates/ui-egui/src/icons.rs` and `icons/draw.rs`: `PixelArt`, `PixelPerfect`, `Tiles` (drawn in code).
   - G16.2: `panels/right.rs`: `game::pixel::colors::section` after Selection colours;
     `shortcuts.rs`: `game::pixel::paste_events` after the key filter (an image paste while a sprite
@@ -996,6 +1014,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   - G16.6: `crates/text/src/fontdb.rs`: `replace_font_bytes` and `FontDb::replace_bytes` (a font
     made in the app takes its family's slot instead of joining it), re-exported in
     `crates/text/src/lib.rs`; `icons.rs` / `icons/draw.rs`: `Shade` (in `draw_pixel_art`).
+    Follow-ups: `widgets/colorpicker.rs`: `PickerTarget::Pixel {which}` (`current_paint`, `write`,
+    no paint-type or blend rows, `game::pixel::colors::picker_rows` before "On this page");
+    `icons.rs` / `icons/draw.rs`: `Timeline`.
 
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.
