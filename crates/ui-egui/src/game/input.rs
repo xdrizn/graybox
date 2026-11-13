@@ -1,6 +1,6 @@
 //! Bindings read the same egui input on desktop and web; simulation receives device-independent input.
 use egui::{InputState, Key, PointerButton};
-use figcraft_doc::game::GameSettings;
+use figcraft_doc::game::{AIM_KEYS, GameSettings, SHOULDER_KEYS};
 use figcraft_game::Input;
 
 fn key(i: &InputState, name: &str, pressed: bool) -> bool {
@@ -66,6 +66,8 @@ pub(crate) fn read(i: &InputState, settings: &GameSettings, held: u32, pressed: 
         respawn: edge("respawn"),
         roll: edge_or(i, settings, "roll", ROLL_KEYS, pressed),
         weapon: WEAPON_KEYS.iter().position(|key| i.key_pressed(*key)).map_or(0, |index| index as u8 + 1),
+        aim: captured && bound_or(i, settings, "aim", &AIM_KEYS, held, false),
+        shoulder: captured && bound_or(i, settings, "shoulder", &SHOULDER_KEYS, pressed, true),
     }
 }
 
@@ -80,5 +82,37 @@ fn edge_or(i: &InputState, settings: &GameSettings, name: &str, defaults: &[&str
         action(i, settings, name, buttons, true)
     } else {
         defaults.iter().any(|key| binding(i, key, buttons, true))
+    }
+}
+
+/// `name` held (or pressed) as the file binds it, or `defaults` for files made before the action
+/// existed, less any key the file already gives another action or one of its own inputs.
+fn bound_or(i: &InputState, settings: &GameSettings, name: &str, defaults: &[&str], buttons: u32, pressed: bool) -> bool {
+    if settings.bindings.contains_key(name) {
+        return action(i, settings, name, buttons, pressed);
+    }
+    free_defaults(settings, defaults).any(|key| binding(i, key, buttons, pressed))
+}
+
+/// The keys of `defaults` that the file does not already use for an action or an input.
+fn free_defaults<'a>(settings: &'a GameSettings, defaults: &'a [&'a str]) -> impl Iterator<Item = &'a str> + 'a {
+    let taken = move |key: &str| settings.bindings.values().chain(settings.inputs.values()).any(|keys| keys.iter().any(|k| k == key));
+    defaults.iter().copied().filter(move |key| !taken(key))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn older_files_aim_on_the_default_keys_they_do_not_use_themselves() {
+        let mut settings = GameSettings::default();
+        settings.bindings.remove("aim");
+        settings.bindings.remove("shoulder");
+        assert_eq!(free_defaults(&settings, &AIM_KEYS).collect::<Vec<_>>(), AIM_KEYS);
+        settings.inputs.insert("zoom".into(), vec!["MouseRight".into()]);
+        settings.bindings.insert("heal".into(), vec!["MouseExtra1".into()]);
+        assert_eq!(free_defaults(&settings, &AIM_KEYS).collect::<Vec<_>>(), ["Gamepad LT"]);
+        assert_eq!(free_defaults(&settings, &SHOULDER_KEYS).collect::<Vec<_>>(), ["MouseExtra2", "Gamepad RS"]);
     }
 }

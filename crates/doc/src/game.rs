@@ -6,7 +6,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::NodeId;
 
-pub const ACTIONS: [&str; 11] = ["forward", "backward", "left", "right", "run", "jump", "crouch", "shoot", "reload", "heal", "respawn"];
+/// Gameplay actions. `aim` (hold) and `shoulder` (press) are the third-person bow's aim mode and its
+/// shoulder swap (G11.6); files made before them use their default keys.
+pub const ACTIONS: [&str; 13] =
+    ["forward", "backward", "left", "right", "run", "jump", "crouch", "shoot", "reload", "heal", "respawn", "aim", "shoulder"];
+/// The default keys of `aim` and `shoulder`, also played by files that bind neither.
+pub const AIM_KEYS: [&str; 2] = ["MouseRight", "Gamepad LT"];
+pub const SHOULDER_KEYS: [&str; 3] = ["MouseExtra1", "MouseExtra2", "Gamepad RS"];
 /// Menu bindings of early files. Opening a menu is a prototype interaction now, so they are dropped on load.
 const LEGACY_ACTIONS: [&str; 3] = ["inventory", "pause", "map"];
 pub const EVENT_NAMES: [&str; 13] = [
@@ -240,6 +246,10 @@ pub struct GameSettings {
     /// The game Play runs (missing in older files: the first-person one).
     #[serde(default, skip_serializing_if = "GameKind::is_fps")]
     pub kind: GameKind,
+    /// The third-person game draws no crosshair of its own in aim mode (the designed UI draws one,
+    /// following the `mirando` variable).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hide_crosshair: bool,
 }
 
 #[derive(Deserialize)]
@@ -263,6 +273,7 @@ struct StoredGameSettings {
     unity_dir: String,
     unity_frames: BTreeSet<NodeId>,
     kind: GameKind,
+    hide_crosshair: bool,
 }
 
 impl Default for StoredGameSettings {
@@ -285,6 +296,7 @@ impl Default for StoredGameSettings {
             unity_dir: settings.unity_dir,
             unity_frames: settings.unity_frames,
             kind: settings.kind,
+            hide_crosshair: settings.hide_crosshair,
         }
     }
 }
@@ -310,6 +322,7 @@ impl TryFrom<StoredGameSettings> for GameSettings {
             unity_dir: stored.unity_dir,
             unity_frames: stored.unity_frames,
             kind: stored.kind,
+            hide_crosshair: stored.hide_crosshair,
         };
         settings.validate()?;
         Ok(settings)
@@ -330,6 +343,8 @@ impl Default for GameSettings {
             ("reload", &["R", "Gamepad X"][..]),
             ("heal", &["H", "Gamepad Down"][..]),
             ("respawn", &["Enter", "Gamepad Y"][..]),
+            ("aim", &AIM_KEYS[..]),
+            ("shoulder", &SHOULDER_KEYS[..]),
         ]
         .into_iter()
         .map(|(action, keys)| (action.to_string(), keys.iter().map(|key| (*key).to_string()).collect()))
@@ -350,6 +365,7 @@ impl Default for GameSettings {
             unity_dir: String::new(),
             unity_frames: BTreeSet::new(),
             kind: GameKind::Fps,
+            hide_crosshair: false,
         }
     }
 }

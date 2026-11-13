@@ -104,10 +104,12 @@ pub enum ClipId {
     Die,
     WeaponDraw,
     WeaponSheathe,
+    /// Aim mode (G11.6): the bow up, an arrow on the string.
+    BowAim,
 }
 
 impl ClipId {
-    pub const ALL: [ClipId; 26] = [
+    pub const ALL: [ClipId; 27] = [
         ClipId::Idle,
         ClipId::Walk,
         ClipId::Jog,
@@ -134,6 +136,7 @@ impl ClipId {
         ClipId::Die,
         ClipId::WeaponDraw,
         ClipId::WeaponSheathe,
+        ClipId::BowAim,
     ];
 
     pub fn index(self) -> usize {
@@ -169,6 +172,7 @@ impl ClipId {
             ClipId::Die => "die",
             ClipId::WeaponDraw => "weaponDraw",
             ClipId::WeaponSheathe => "weaponSheathe",
+            ClipId::BowAim => "bowAim",
         }
     }
 

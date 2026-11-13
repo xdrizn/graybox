@@ -251,29 +251,6 @@ fn husks_give_up_on_a_dead_hero_and_walk_home() {
 }
 
 #[test]
-fn a_drawn_bow_shoots_an_arrow_that_hits_a_dummy_and_a_tap_shoots_nothing() {
-    let mut tps = facing_first(|foe| foe.kind == FoeKind::Dummy);
-    before_first(&mut tps, 10.0);
-    // Aim at the dummy's middle (the hero may stand higher or lower on the hill).
-    let rise = tps.foes[0].position.y + 1.0 - (tps.hero.position.y + 1.45);
-    tps.camera.pitch = rise.atan2(10.0);
-    run(&mut tps, Input { weapon: 4, ..Input::default() }, 1.0 / 60.0);
-    run(&mut tps, Input::default(), 0.8);
-    run(&mut tps, Input { shoot: true, ..Input::default() }, 2.0 / 60.0);
-    run(&mut tps, Input::default(), 0.5);
-    assert!(tps.arrows.is_empty(), "a tap shoots nothing");
-    let full = tps.foes[0].health;
-    tps.drain_events();
-    run(&mut tps, Input { shoot: true, ..Input::default() }, 0.6);
-    run(&mut tps, Input::default(), 1.0 / 60.0);
-    assert_eq!(tps.arrows.len(), 1);
-    assert!(tps.drain_events().contains(&GameEvent::Shot));
-    run(&mut tps, Input::default(), 1.0);
-    assert_eq!(tps.foes[0].health, full - ARROW_DAMAGE, "the arrow hit");
-    assert!(tps.arrows.is_empty(), "spent on the hit");
-}
-
-#[test]
 fn an_arrow_into_the_ground_sticks_and_is_gone_later() {
     let mut tps = Tps::new();
     tps.foes.clear();

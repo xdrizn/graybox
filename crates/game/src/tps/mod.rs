@@ -10,6 +10,7 @@
 //! - G11.4 movement and camera: `controller.rs`, `collide.rs`, `camera.rs`.
 //! - G11.5 combat: `combat.rs` (weapons and strikes), `damage.rs` (health and events), `foes.rs`
 //!   (dummies and husks), `arrows.rs`, plus the events and variables of this module.
+mod aim;
 mod animator;
 mod arrows;
 mod camera;
@@ -52,6 +53,8 @@ pub use world::{HALF_EXTENT, World};
 
 #[cfg(test)]
 mod animation_tests;
+#[cfg(test)]
+mod bow_tests;
 #[cfg(test)]
 mod combat_tests;
 #[cfg(test)]
@@ -138,6 +141,7 @@ impl Tps {
             self.input.jump = false;
             self.input.roll = false;
             self.input.weapon = 0;
+            self.input.shoulder = false;
             self.pending = Presses::default();
             if self.dead() {
                 // A death screen that pauses the game still lets the hero fall to the ground.
@@ -145,6 +149,7 @@ impl Tps {
                 for _ in 0..steps {
                     controller::step(&mut self.hero, &Input::default(), self.camera.yaw, &self.world, Presses::default(), &mut self.events, DT);
                     self.hero.animate(false, DT);
+                    self.camera.follow(self.hero.combat.aiming(), DT);
                 }
                 return steps;
             }
@@ -152,6 +157,9 @@ impl Tps {
         }
         self.camera.turn(self.input.look);
         self.input.look = [0.0; 2];
+        if std::mem::take(&mut self.input.shoulder) {
+            self.camera.swap_shoulder();
+        }
         let held = self.input.shoot;
         self.pending.jump |= std::mem::take(&mut self.input.jump);
         self.pending.roll |= std::mem::take(&mut self.input.roll);
@@ -169,14 +177,18 @@ impl Tps {
             let previewing = self.hero.animator.previewing().is_some();
             let input = if previewing { Input { forward: 0.0, strafe: 0.0, ..self.input } } else { self.input };
             let presses = if previewing { Presses::default() } else { presses };
-            let mut field = combat::Field { foes: &mut self.foes, arrows: &mut self.arrows, events: &mut self.events, aim: self.camera.direction() };
-            combat::step(&mut self.hero, presses, held && !previewing, &mut field, DT);
+            // The crosshair point (a ray march) only when a bow shot can start or leave this step.
+            let bow = self.hero.animator.weapon() == Weapon::Bow && (presses.attack || self.hero.combat.shooting());
+            let aim = if bow { self.aim_point() } else { self.hero.position };
+            let mut field = combat::Field { foes: &mut self.foes, arrows: &mut self.arrows, events: &mut self.events, aim };
+            combat::step(&mut self.hero, presses, input.aim && !previewing, &mut field, DT);
             controller::step(&mut self.hero, &input, self.camera.yaw, &self.world, presses, &mut self.events, DT);
             if !previewing {
                 foes::step(&mut self.foes, &mut self.hero, &self.world, &mut self.events, DT);
                 arrows::step(&mut self.arrows, &mut self.foes, &self.world, &mut self.events, DT);
             }
             self.hero.animate(input.crouch, DT);
+            self.camera.follow(self.hero.combat.aiming(), DT);
         }
         steps
     }
@@ -185,7 +197,7 @@ impl Tps {
     pub fn frame(&self) -> Frame {
         let hero = self.hero.pose(self.clock.alpha() as f32);
         let alpha = self.clock.alpha() as f32;
-        let (eye, target) = self.camera.eye_and_target(hero.position, &self.world);
+        let (eye, target) = self.camera.eye_and_target_at(hero.position, &self.world, alpha);
         let mut frame = Frame {
             hero,
             eye,
@@ -204,6 +216,12 @@ impl Tps {
             frame.arrow_count += 1;
         }
         frame
+    }
+
+    /// The point under the middle of the screen (G11.6): what the crosshair is on, where arrows go.
+    pub fn aim_point(&self) -> Vec3 {
+        let (eye, target) = self.camera.eye_and_target(self.hero.position, &self.world);
+        aim::point(&self.world, &self.foes, eye, target)
     }
 
     /// Debug pose viewer: show `clip` over and over on the hero standing still (`None` ends it).

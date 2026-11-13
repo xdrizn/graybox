@@ -125,3 +125,32 @@ fn a_game_bar_can_follow_stamina() {
     assert_eq!(s.doc().unwrap().game.bars.values().next().map(String::as_str), Some("stamina"));
     assert!(s.execute("game.bar.set", &json!({"node": bar, "variable": "mana"})).is_err());
 }
+
+#[test]
+fn the_crosshair_can_be_hidden_saved_and_undone() {
+    let mut s = Session::new();
+    assert!(!s.doc().unwrap().game.hide_crosshair, "shown by default");
+    assert_eq!(ex(&mut s, "game.crosshair.set", json!({"visible": false}))["visible"], false);
+    assert!(s.doc().unwrap().game.hide_crosshair);
+    let bytes = file_bytes(s.ds().unwrap()).unwrap();
+    let (doc, _) = load_bytes(&bytes, "hidden.figcraft").unwrap();
+    assert!(doc.game.hide_crosshair, "kept in the file");
+    ex(&mut s, "edit.undo", json!({}));
+    assert!(!s.doc().unwrap().game.hide_crosshair);
+    for params in [json!({}), json!({"visible": "no"}), json!({"visible": 1})] {
+        assert!(s.execute("game.crosshair.set", &params).is_err(), "{params}");
+    }
+}
+
+#[test]
+fn the_bow_aim_and_shoulder_have_default_keys_and_older_files_still_load() {
+    let defaults = GameSettings::default();
+    assert_eq!(defaults.bindings.get("aim").map(Vec::len), Some(2));
+    assert!(defaults.bindings["shoulder"].contains(&"MouseExtra1".to_string()));
+    assert!(defaults.validate().is_ok());
+    let mut s = Session::new();
+    ex(&mut s, "game.bind", json!({"action": "shoulder", "keys": ["Gamepad Left"]}));
+    assert_eq!(s.doc().unwrap().game.bindings["shoulder"], ["Gamepad Left"]);
+    // A key already on another action is refused.
+    assert!(s.execute("game.bind", &json!({"action": "aim", "keys": ["W"]})).is_err());
+}

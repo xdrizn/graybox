@@ -28,6 +28,10 @@ pub struct Input {
     pub roll: bool,
     /// Third person: a weapon picked this frame (1 sword, 2 spear, 3 club, 4 bow; 0 is no press).
     pub weapon: u8,
+    /// Third person (G11.6): the aim button held (the bow's aim mode, over the shoulder).
+    pub aim: bool,
+    /// Third person: a press that swaps the shoulder the camera looks over.
+    pub shoulder: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]

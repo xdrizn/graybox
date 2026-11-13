@@ -359,6 +359,17 @@ impl Animator {
         }
     }
 
+    /// Play `id` from `time` seconds in (the bow drawn from the nocked pose of aim mode).
+    pub fn play_from(&mut self, id: ClipId, time: f32) {
+        self.play(id);
+        let time = if time.is_finite() { time.clamp(0.0, clip(id).duration) } else { 0.0 };
+        match (&mut self.base, &mut self.overlay) {
+            (_, Some(overlay)) if overlay.playing.clip == id => overlay.playing.time = time,
+            (Base::Clip(playing), _) if playing.clip == id => playing.time = time,
+            _ => {}
+        }
+    }
+
     /// Back to moving (from a held clip such as a fall to the ground or the bow aim).
     pub fn stop(&mut self) {
         self.begin_fade(0.2);
@@ -573,7 +584,7 @@ impl Animator {
             ClipId::Sword1 | ClipId::Sword2 | ClipId::Sword3 => Some((Weapon::Sword, true)),
             ClipId::SpearThrust => Some((Weapon::Spear, true)),
             ClipId::ClubSwing => Some((Weapon::Club, true)),
-            ClipId::BowDraw | ClipId::BowShoot => Some((Weapon::Bow, true)),
+            ClipId::BowDraw | ClipId::BowShoot | ClipId::BowAim => Some((Weapon::Bow, true)),
             ClipId::WeaponDraw => Some((self.weapon_or_sword(), false)),
             ClipId::WeaponSheathe => Some((self.weapon_or_sword(), true)),
             _ => None,

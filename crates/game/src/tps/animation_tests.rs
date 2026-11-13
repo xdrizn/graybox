@@ -28,7 +28,7 @@ fn run(animator: &mut Animator, drive: Drive, seconds: f32, dt: f32) -> (f32, f3
 #[test]
 fn the_rig_and_every_clip_stay_within_limits() {
     const { assert!(BONES <= MAX_BONES, "too many bones") };
-    assert_eq!(ClipId::ALL.len(), 26);
+    assert_eq!(ClipId::ALL.len(), 27);
     for id in ClipId::ALL {
         let clip = clip(id);
         assert_eq!(clip.id, id, "the library holds {id:?} in its place");

@@ -186,6 +186,7 @@ action game, original, made in code. One session per phase, each ends committed 
 - [x] G11.5 Combat and the bridge: weapons, bow, dummies and husks, damage, game variables and events.
   Needs G11.4. (No third-person starter HUD: Adriel's own UI uses the variables and events.)
 - [ ] G11.6 Polish and performance: browser at 60 fps, memory and size budgets, feel tuning, installed copy.
+  (Done: the bow's hip shot, aim mode over the shoulder, crosshair and shoulder swap.)
 
 ### G13 — Documents (owner's request, 2026-11-12)
 Spec: [`specs/2026-11-12-documents-design.md`](specs/2026-11-12-documents-design.md) (decisions P1–P10).

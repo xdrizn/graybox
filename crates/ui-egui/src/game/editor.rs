@@ -2,12 +2,16 @@
 //! layout: every field takes the panel's width.
 
 use egui::{Id, Ui};
-use figcraft_doc::game::{ACTIONS, EVENT_NAMES, MENU_ACTIONS};
+use figcraft_doc::game::{ACTIONS, EVENT_NAMES, GameSettings, MENU_ACTIONS};
 use serde_json::json;
 
 use crate::right::{menu_check, menu_popup};
 use crate::theme::Tokens;
 use crate::{FigApp, widgets};
+
+/// The default keys, built once (files made before an action existed play these).
+static DEFAULT_BINDINGS: std::sync::LazyLock<std::collections::BTreeMap<String, Vec<String>>> =
+    std::sync::LazyLock::new(|| GameSettings::default().bindings);
 
 /// Controls (key and controller bindings for the test scene).
 pub fn controls(app: &mut FigApp, ui: &mut Ui) {
@@ -33,19 +37,22 @@ pub fn controls(app: &mut FigApp, ui: &mut Ui) {
                 }
             });
         });
+        // Files made before an action existed play it on its default keys: show those.
+        let defaults = &*DEFAULT_BINDINGS;
         let rows = ACTIONS.iter().map(|a| (*a, &doc.game.bindings)).chain(MENU_ACTIONS.iter().map(|a| (*a, &doc.game.menu_bindings)));
         for (action, bindings) in rows {
             if action == MENU_ACTIONS[0] {
                 widgets::label(ui, "Menus (navigable menus in Play)", tokens.text_secondary);
             }
-            let current = bindings.get(action).map(|keys| keys.join(", ")).unwrap_or_default();
+            let keys = bindings.get(action).or_else(|| defaults.get(action));
+            let current = keys.map(|keys| keys.join(", ")).unwrap_or_default();
             widgets::label(ui, action_label(action), tokens.text);
             if let Some(value) =
                 widgets::text_field_named(ui, Id::unique(("game_binding", uid, action)), &current, ui.available_width(), action_label(action))
             {
                 app.run("game.bind", json!({"action": action, "keys": split_keys(&value)}));
             }
-            if let Some(keys) = bindings.get(action) {
+            if let Some(keys) = keys {
                 let labels: Vec<_> = keys.iter().filter_map(|key| controller_label(key, playstation)).collect();
                 if !labels.is_empty() {
                     widgets::label(ui, &labels.join(" / "), tokens.text_secondary);
@@ -187,6 +194,8 @@ fn action_label(action: &str) -> &str {
         "reload" => "Reload",
         "heal" => "Heal",
         "respawn" => "Respawn",
+        "aim" => "Aim (third person, bow)",
+        "shoulder" => "Swap shoulder (aiming)",
         "menu-up" => "Menu up",
         "menu-down" => "Menu down",
         "menu-left" => "Menu left",

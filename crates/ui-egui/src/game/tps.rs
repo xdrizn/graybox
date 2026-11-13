@@ -11,7 +11,7 @@ use figcraft_game::tps::{Action, ClipId, STAMINA_MAX, Tps, Weapon};
 use serde_json::{Value, json};
 
 /// The line at the bottom of Play while the third-person game runs.
-pub(crate) const HELP: &str = "WASD: move  ·  mouse: camera  ·  Space: jump  ·  Shift: run  ·  C: crouch  ·  Ctrl: roll  ·  click: attack  ·  1–4: weapon  ·  F10 / Del: editor";
+pub(crate) const HELP: &str = "WASD: move  ·  mouse: camera  ·  Space: jump  ·  Shift: run  ·  C: crouch  ·  Ctrl: roll  ·  click: attack  ·  1–4: weapon  ·  right click: aim (bow)  ·  mouse 4 / 5: shoulder  ·  F10 / Del: editor";
 /// The same while the clip preview (debug builds) shows a clip.
 const PREVIEW_HELP: &str = "Clip preview  ·  F6 / Shift+F6: next / previous clip  ·  F7: end  ·  mouse: camera  ·  F10 / Del: editor";
 
@@ -73,15 +73,38 @@ pub(crate) fn advance(play: &mut Play, dt: f64) -> Option<u32> {
     Some(tps.advance(dt))
 }
 
-/// Draw the game being played below the screens.
-pub(crate) fn paint(ui: &egui::Ui, rect: egui::Rect, play: &Play, theme: &renderer::SceneTheme) {
+/// Draw the game being played below the screens. `crosshair`: the third-person game draws its own
+/// in aim mode (off when the file's UI draws one).
+pub(crate) fn paint(ui: &egui::Ui, rect: egui::Rect, play: &Play, theme: &renderer::SceneTheme, crosshair: bool) {
     match &play.tps {
         Some(tps) => {
             renderer::paint_tps(ui, rect, tps, theme);
+            if crosshair {
+                paint_crosshair(ui.painter(), rect, tps);
+            }
             preview_label(ui, rect, tps);
         }
         None => renderer::paint(ui, rect, &play.game, theme),
     }
+}
+
+/// G11.6: a small neutral dot in the middle of the screen while aiming (where arrows go), fading
+/// in and out with the camera. Light with a dark ring, so it shows on sky and on grass.
+fn paint_crosshair(painter: &egui::Painter, rect: egui::Rect, tps: &Tps) {
+    let shown = crosshair_strength(tps);
+    if shown < 0.05 {
+        return;
+    }
+    let alpha = |a: f32| (a * shown.clamp(0.0, 1.0) * 255.0).round() as u8;
+    let centre = rect.center();
+    painter.circle_filled(centre, 3.5, egui::Color32::from_black_alpha(alpha(0.45)));
+    painter.circle_filled(centre, 2.0, egui::Color32::from_white_alpha(alpha(0.95)));
+}
+
+/// How much the crosshair shows (0..1): only in aim mode, as far as the camera has come in.
+fn crosshair_strength(tps: &Tps) -> f32 {
+    let shown = if tps.hero.combat.aiming() { tps.camera.aim_blend() } else { 0.0 };
+    if shown.is_finite() { shown.clamp(0.0, 1.0) } else { 0.0 }
 }
 
 /// The name of the clip the preview shows, top left (debug).
@@ -274,6 +297,35 @@ mod tests {
         assert_eq!(bar_share(&play, "stamina"), Some(0.5));
         assert_eq!(bar_share(&play, "municao"), Some(1.0), "no ammo: full");
         assert!(variables(&play).unwrap().texts.contains(&("arma", "Bow")));
+    }
+
+    #[test]
+    fn aiming_the_bow_shows_the_crosshair_and_sets_mirando() {
+        let mut play = Play::new();
+        sync(&mut play, GameKind::ThirdPerson);
+        play.frame(0.0);
+        play.game.input.weapon = 4;
+        play.frame(1.0 / 60.0);
+        play.game.input.weapon = 0;
+        let mut time = 1.0 / 60.0;
+        let mut run = |play: &mut Play, seconds: f64| {
+            for _ in 0..(seconds * 60.0).round() as usize {
+                time += 1.0 / 60.0;
+                play.frame(time);
+            }
+        };
+        run(&mut play, 1.0);
+        let tps = play.tps.as_ref().unwrap();
+        assert_eq!(crosshair_strength(tps), 0.0, "no crosshair outside aim mode");
+        assert!(variables(&play).unwrap().flags.contains(&("mirando", false)));
+        play.game.input.aim = true;
+        run(&mut play, 0.8);
+        assert!(crosshair_strength(play.tps.as_ref().unwrap()) > 0.95);
+        assert!(variables(&play).unwrap().flags.contains(&("mirando", true)));
+        assert_eq!(inspect(&play).unwrap()["aiming"], true);
+        play.game.input.aim = false;
+        run(&mut play, 1.0 / 60.0);
+        assert_eq!(crosshair_strength(play.tps.as_ref().unwrap()), 0.0, "gone the moment aim ends");
     }
 
     #[test]

@@ -281,12 +281,14 @@ fn the_sword_chains_three_strikes_and_keys_pick_weapons() {
     run(&mut tps, Input::default(), 1.5);
     assert_eq!(tps.hero.combat.striking(), None);
 
-    // The bow: hold to draw, let go to shoot.
+    // The bow: aim mode while aim is held; a click shoots.
     run(&mut tps, Input { weapon: 4, ..Input::default() }, 1.0);
-    run(&mut tps, Input { shoot: true, ..Input::default() }, 0.5);
+    run(&mut tps, Input { aim: true, ..Input::default() }, 0.5);
     assert!(tps.hero.combat.aiming());
     run(&mut tps, Input::default(), 1.0 / 60.0);
     assert!(!tps.hero.combat.aiming());
+    run(&mut tps, Input { shoot: true, ..Input::default() }, 1.0 / 60.0);
+    assert!(tps.hero.combat.shooting(), "a click shoots from the hip");
 }
 
 #[test]

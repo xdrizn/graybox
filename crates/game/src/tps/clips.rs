@@ -47,6 +47,7 @@ fn build(id: ClipId) -> Clip {
         ClipId::Die => die(),
         ClipId::WeaponDraw => weapon_draw(),
         ClipId::WeaponSheathe => weapon_sheathe(),
+        ClipId::BowAim => bow_ready(),
     }
 }
 
@@ -1129,29 +1130,38 @@ fn bow_aim(k: Key) -> Key {
         .b(HandR, [0.0, 0.0, 0.0])
 }
 
+/// Raise the bow, the right hand comes to the string.
+fn bow_raise(k: Key) -> Key {
+    k.b(Chest, [0.0, -15.0, 0.0])
+        .b(Head, [0.0, 15.0, 0.0])
+        .b(UpperArmL, [60.0, 0.0, -30.0])
+        .b(ForearmL, [20.0, 0.0, 0.0])
+        .b(UpperArmR, [40.0, 0.0, 30.0])
+        .b(ForearmR, [80.0, 0.0, 0.0])
+}
+
+/// Nock: bow arm out, string hand at the grip.
+fn bow_nock(k: Key) -> Key {
+    k.b(Spine, [-2.0, -8.0, 0.0])
+        .b(Chest, [0.0, -30.0, 0.0])
+        .b(Head, [2.0, 36.0, 0.0])
+        .b(UpperArmL, [90.0, 0.0, -50.0])
+        .b(UpperArmR, [80.0, 0.0, 10.0])
+        .b(ForearmR, [40.0, 0.0, 0.0])
+}
+
+/// When the bow's draw reaches the nocked pose (aim mode draws from there).
+pub(crate) const BOW_NOCKED: f32 = 0.25;
+
 fn bow_draw() -> Clip {
-    let keys = vec![
-        // Raise the bow, the right hand comes to the string.
-        Key::at(0.0)
-            .ease(Ease::Out)
-            .b(Chest, [0.0, -15.0, 0.0])
-            .b(Head, [0.0, 15.0, 0.0])
-            .b(UpperArmL, [60.0, 0.0, -30.0])
-            .b(ForearmL, [20.0, 0.0, 0.0])
-            .b(UpperArmR, [40.0, 0.0, 30.0])
-            .b(ForearmR, [80.0, 0.0, 0.0]),
-        // Nock: bow arm out, string hand at the grip.
-        Key::at(0.25)
-            .ease(Ease::InOut)
-            .b(Spine, [-2.0, -8.0, 0.0])
-            .b(Chest, [0.0, -30.0, 0.0])
-            .b(Head, [2.0, 36.0, 0.0])
-            .b(UpperArmL, [90.0, 0.0, -50.0])
-            .b(UpperArmR, [80.0, 0.0, 10.0])
-            .b(ForearmR, [40.0, 0.0, 0.0]),
-        bow_aim(Key::at(0.6)),
-    ];
+    let keys = vec![bow_raise(Key::at(0.0)).ease(Ease::Out), bow_nock(Key::at(BOW_NOCKED)).ease(Ease::InOut), bow_aim(Key::at(0.6))];
     Clip::new(ClipId::BowDraw, 0.6, Mode::Hold, keys).layer(Layer::Upper).fades(0.12, 0.2)
+}
+
+/// Aim mode (G11.6): the bow raised with an arrow on the string, ready to draw.
+fn bow_ready() -> Clip {
+    let keys = vec![bow_raise(Key::at(0.0)).ease(Ease::Out), bow_nock(Key::at(BOW_NOCKED))];
+    Clip::new(ClipId::BowAim, BOW_NOCKED, Mode::Hold, keys).layer(Layer::Upper).fades(0.12, 0.2)
 }
 
 fn bow_shoot() -> Clip {

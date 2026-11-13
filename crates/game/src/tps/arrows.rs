@@ -34,6 +34,18 @@ pub struct ArrowPose {
     pub direction: Vec3,
 }
 
+/// The way to shoot from `from` so the arrow comes down on `at` (aimed a little high for the drop);
+/// `fallback` when `at` is too close to tell.
+pub(crate) fn toward(from: Vec3, at: Vec3, fallback: Vec3) -> Vec3 {
+    let gap = at - from;
+    let length = gap.length();
+    if !length.is_finite() || length < 0.5 {
+        return fallback;
+    }
+    let time = length / ARROW_SPEED;
+    (gap / time + Vec3::Y * (0.5 * ARROW_GRAVITY * time)).normalize_or(fallback)
+}
+
 pub(crate) fn shoot(arrows: &mut Vec<Arrow>, from: Vec3, direction: Vec3, events: &mut Events) {
     let direction = direction.normalize_or_zero();
     if !from.is_finite() || direction == Vec3::ZERO {

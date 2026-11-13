@@ -38,6 +38,14 @@ pub(crate) fn picker(app: &mut FigApp, ui: &mut Ui) {
             }
         }
     });
+    if selected == GameKind::ThirdPerson {
+        // G11.6: the bow's crosshair. Hide it when the designed UI draws its own from `mirando`.
+        let shown = app.session.doc().is_ok_and(|doc| !doc.game.hide_crosshair);
+        if widgets::checkbox(ui, shown, "Crosshair when aiming") {
+            app.run("game.crosshair.set", json!({"visible": !shown}));
+        }
+        widgets::label(ui, "Turn it off when your UI draws its own crosshair from the mirando variable.", t.text_secondary);
+    }
 }
 
 /// Called after every command the UI runs: a new design file asks which game it plays. Not in this

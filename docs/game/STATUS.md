@@ -167,6 +167,39 @@
   Not checked: colour emoji (egui's font is monochrome), emoji in a document card or PDF title (G13.4).
   Code review (high) caught and fixed: the picker was keyed by the row's place, so a list that changed
   while it was open could send the pick to another page (now keyed by the page or document).
+- G11.6, the bow (2026-11-13, Adriel's changes): a click shoots from the hip, holding aim goes over the
+  shoulder with a crosshair in the middle of the screen, and the shoulder button swaps sides.
+  - Hip shot: a left click alone with the bow turns the hero to where the camera looks and shoots after
+    a quick 0.18 s draw (no aim mode, no crosshair).
+  - Aim mode (`tps/combat.rs`, new action `aim`: right click, controller LT): only with the bow chosen;
+    the camera eases in over the right shoulder (1.9 m behind, 1.5 m up, 0.65 m to the side: the hero on
+    the left of the screen), the hero walks at aim pace facing the camera, the bow up with an arrow
+    nocked (new clip `bowAim`). A click there draws from the nocked pose (0.35 s) and shoots; a click
+    during the follow-through shoots next. Letting go of aim mid-draw drops the shot; a roll, a climb or
+    a fall ends aim mode and it comes back after.
+  - Shoulder swap (new action `shoulder`: mouse 4 and 5, controller RS): the camera eases across to the
+    other shoulder (`tps/camera.rs`, interpolated between steps like the hero). Both are in the controls
+    panel; files made before them play the default keys, less any key the file already uses.
+  - Where arrows go (`tps/aim.rs`): a ray from the camera through the middle of the screen, starting past
+    the hero, to the first foe, solid or ground (80 m); the arrow leaves the hand aimed a little high so
+    its drop brings it onto that point.
+  - The crosshair: a small light dot with a dark ring, drawn by the game under the screens, only in aim
+    mode, fading with the camera. `mirando` is true in aim mode. "Crosshair when aiming" under the Game
+    picker (command `game.crosshair.set {visible}`, undoable, saved in the file) hides it for a UI that
+    draws its own.
+  - Code review (high) caught and fixed: aiming right after a hip click lost that shot; old files fired
+    the default aim keys over their own inputs; the crosshair ray ran every step; the controls panel
+    rebuilt the default settings every frame. Each has a test or a guard.
+  - Tests: `tps/bow_tests.rs` (hip shot, aim mode, crosshair hits near and far, easing in and out,
+    shoulder swap, no aim without the bow, roll, junk camera), `engine/src/game_kind_tests.rs` (the
+    crosshair command, the new keys), `game/tps.rs` (crosshair and `mirando`), `game/input.rs` (default
+    keys).
+  - Checked in the real app on a scratch file: aim mode over the right shoulder, the crosshair on a
+    dummy and the arrow hitting it (45 → 20), the swap to the left shoulder (by the controller's RS:
+    the control channel cannot send mouse 4/5), the camera easing back, a hip shot.
+  - Still to check: in the browser, that mouse 4/5 do not also move the page back or forward (eframe
+    already stops the right-click menu). Over the right shoulder the raised bow is mostly hidden by the
+    hero's head (seen clearly from the left shoulder): a pose tweak for the feel pass.
 - G11.5, rest (2026-11-13, "continue todos os trabalhos"): foes, damage, arrows, and the variables
   and events the designed UI uses.
   - Foes (`tps/foes.rs`): three training dummies in a row 8 m in front of the start and five husks
@@ -734,6 +767,11 @@
     slide along solids. Health lives in the simulation; the Game variables carry it to the UI.
   - Arrows fly parallel to the camera from the shoulder. The aim dot sits on the hero's back until G11.6
     puts the camera over the shoulder; then the arrow aims at the point under the dot.
+- G11.6 bow (Adriel's spec; recommended option where it left a choice):
+  - Aim mode needs the bow: right click does nothing with a melee weapon.
+  - Mouse 4 and mouse 5 both swap (a toggle), so the controller needs one button for it.
+  - The crosshair point is computed in the simulation and arrows aim at it, so the dot never lies, even
+    with the shoulder offset. The game draws only the dot; the designed UI can replace it.
 - G11.2 world (Adriel was away; the recommended option each time):
   - The ground is a heightfield with alternating triangle splits, and the walking height is looked up in
     those same triangles, so what you see is what you stand on. Only integer hashing and smoothstep make
@@ -1076,6 +1114,7 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     first-person bar on stamina stays full), `game::tps::variables` in `publish` (the first-person values
     as fixed arrays too), `game::tps::dead` in the help line. `crates/ui-egui/src/game/screen_ui.rs`
     (ours): the Stamina bar choice.
+  - G11.6, same file: `game::tps::paint` takes the crosshair flag (`!doc.game.hide_crosshair`).
   - `crates/ui-egui/src/game/mod.rs` (ours): `Play::tps`, hooks in `frame` and `inspect`, the Game picker
     first in `prototype_section`.
 - Documents (G13.1; `crates/doc/src/docs.rs`, `crates/engine/src/cmd/docs.rs`, `crates/ui-egui/src/game/docs/` are ours):
@@ -1174,9 +1213,10 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 
 ## Next
 - G11 (third-person game; spec [`specs/2026-11-11-third-person-design.md`](specs/2026-11-11-third-person-design.md)).
-  Milestone G11 is in `PLAN.md`. G11.2 to G11.5 are done; next G11.6: the camera easing back behind the
-  hero, the bow over the shoulder (the arrow aimed at the point under the dot), crowns in the camera's
-  way, feel tuning, budgets and the browser check.
+  Milestone G11 is in `PLAN.md`. G11.2 to G11.5 are done, and the bow of G11.6 (hip shot, aim
+  mode over the shoulder, crosshair, shoulder swap); next in G11.6: the camera easing back behind the
+  hero, crowns in the camera's way, feel tuning (the bow hidden by the head over the right shoulder),
+  budgets and the browser check (mouse 4/5 there).
 - Navigable menus phase 2: tab bars (LB/RB) switching the menu below; spatial focus for layers
   without auto layout. To check: Tab sent through the control channel did not open the starter
   Inventory in Play (the controller's View did).

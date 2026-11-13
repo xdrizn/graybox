@@ -139,7 +139,7 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui, mut p: Presenter, now: f64) {
             );
             ui.painter().rect_filled(rect, 0, fill);
         } else if let Some(play) = &p.game {
-            game::tps::paint(ui, rect, play, &game::renderer::SceneTheme::default());
+            game::tps::paint(ui, rect, play, &game::renderer::SceneTheme::default(), p.design.as_ref().is_none_or(|d| !d.game.hide_crosshair));
         }
         super::player::player(&mut p, ui, rect, now, FULL);
         help(&p, ui, rect);
