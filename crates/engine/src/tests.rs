@@ -509,14 +509,14 @@ fn every_command_survives_junk_params() {
                 | "file.revert"
                 // Graybox: writes screens into a folder.
                 | "game.unity.export"
+                // Graybox: writes a document as a PDF or Markdown file (G13.3).
+                | "doc.export"
                 // Graybox: writes pixel art files into a folder.
                 | "pixel.export"
                 // Takes no params and walks the font folders: one walk per junk is slow.
                 | "text.rescanFonts"
         ) {
             continue;
-                // Graybox: writes a document as a PDF or Markdown file (G13.3).
-                | "doc.export"
         }
         for j in &junk {
             // Each junk object as given (names the command doesn't take are refused) and cut down
