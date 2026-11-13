@@ -72,8 +72,10 @@ pub(super) struct State {
     /// The tree row being dragged.
     pub drag: Option<DocId>,
     pub pending: Option<Pending>,
-    /// A field that takes the keyboard next frame.
+    /// A field that takes the keyboard next frame, and where its cursor goes (in characters; the end
+    /// when `None`).
     pub focus: Option<Target>,
+    pub caret: Option<usize>,
 }
 
 thread_local! {

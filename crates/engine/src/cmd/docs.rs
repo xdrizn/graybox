@@ -55,10 +55,29 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "doc.block.turn_into",
             "Turn block into",
-            "{doc, id, version?, kind (a name like heading2, or an object like {type: callout, icon})} (the text stays)",
+            "{doc, id, version?, kind (a name like heading2, or an object like {type: callout, icon}), text? (new plain text, as when a Markdown shortcut drops its marks; else the text stays)}",
             true,
             |s, p| edit(s, p, turn_into)
         ),
+        spec!(
+            "doc.block.split",
+            "Split block",
+            "{doc, id, version?, at (the cursor, in characters)} (Enter: the words after the cursor go to a new block after it) → {id (the new block), focus (the block the keyboard goes to)}",
+            true,
+            |s, p| edit(s, p, split_block)
+        ),
+        spec!(
+            "doc.block.merge",
+            "Join block to the one above",
+            "{doc, id, version?} (Backspace at the start: its words join the block above) → {id (the block above), at (where the cursor goes)}",
+            true,
+            |s, p| edit(s, p, merge_block)
+        ),
+        spec!("doc.block.duplicate", "Duplicate block", "{doc, id, version?} (with what is inside it, right after it) → {id}", true, |s, p| edit(
+            s,
+            p,
+            duplicate_block
+        )),
         spec!("doc.block.move", "Move block", "{doc, id, version?, parent? (a block id; omit or null for the top), index?}", true, |s, p| edit(
             s, p, move_block
         )),
@@ -428,14 +447,46 @@ fn turn_into(s: &mut Session, p: &Value) -> Result<Value> {
         .get("kind")
         .and_then(BlockKind::from_value)
         .ok_or_else(|| bad(cmd, "kind is required: a name like heading2, bulleted, checklist, or an object like {type: callout}"))?;
+    let words = text(cmd, p, "text")?;
     s.doc_mut()?
         .docs
         .update_block(doc, version, id, |b| {
             b.kind = kind;
+            if let Some(t) = &words {
+                b.set_plain_text(t);
+            }
             Ok(())
         })
         .map_err(|e| refuse(cmd, e))?;
     Ok(json!({"ok": true}))
+}
+
+fn split_block(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.block.split";
+    let doc = doc_id(cmd, p, "doc")?;
+    let id = BlockId(uint(cmd, p, "id")?);
+    let version = opt_version(cmd, p)?;
+    let at = usize::try_from(uint(cmd, p, "at")?).unwrap_or(usize::MAX);
+    let split = s.doc_mut()?.docs.split_block(doc, version, id, at).map_err(|e| refuse(cmd, e))?;
+    Ok(json!({"id": split.new.0, "focus": split.focus.0}))
+}
+
+fn merge_block(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.block.merge";
+    let doc = doc_id(cmd, p, "doc")?;
+    let id = BlockId(uint(cmd, p, "id")?);
+    let version = opt_version(cmd, p)?;
+    let merge = s.doc_mut()?.docs.merge_block(doc, version, id).map_err(|e| refuse(cmd, e))?;
+    Ok(json!({"id": merge.into.0, "at": merge.at}))
+}
+
+fn duplicate_block(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.block.duplicate";
+    let doc = doc_id(cmd, p, "doc")?;
+    let id = BlockId(uint(cmd, p, "id")?);
+    let version = opt_version(cmd, p)?;
+    let copy = s.doc_mut()?.docs.duplicate_block(doc, version, id).map_err(|e| refuse(cmd, e))?;
+    Ok(json!({"id": copy.0}))
 }
 
 fn move_block(s: &mut Session, p: &Value) -> Result<Value> {

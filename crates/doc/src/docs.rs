@@ -22,6 +22,9 @@ use serde_json::{Value, json};
 
 use crate::NodeId;
 
+mod edit;
+pub use edit::{Merge, Split, split_runs};
+
 /// Most documents a file holds.
 pub const MAX_DOCS: usize = 5_000;
 /// Deepest nesting of documents inside documents (a root is 1).

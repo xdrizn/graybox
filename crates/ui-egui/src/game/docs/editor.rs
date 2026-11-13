@@ -1,84 +1,24 @@
-//! The document editor: an open document shown in place of the canvas. G13.1 is the basic one: an
-//! editable title and a list of text and heading blocks you can type into (Enter adds a block,
-//! Backspace on an empty one removes it, the handle on the left turns a block into another kind or
-//! deletes it). G13.2 grows this module into the full Notion-like editor.
+//! The document editor: an open document shown in place of the canvas, with its title, its version
+//! bar and its blocks (drawn and edited in `blocks.rs`). Typing is kept here and sent as one command
+//! after a pause, so a burst of typing is one undo step.
 
-use egui::{Align, Align2, Color32, CornerRadius, Id, Key, Layout, Modifiers, Rect, Sense, Ui, UiBuilder, pos2, vec2};
-use figcraft_doc::docs::{Block, BlockId, BlockKind, DocId};
-use serde_json::{Value, json};
+use egui::{Align, Align2, CornerRadius, Id, Key, Layout, Modifiers, Rect, Sense, Ui, UiBuilder, pos2, vec2};
+use figcraft_doc::docs::{Block, DocId};
+use serde_json::json;
 
+use super::blocks::{self, Look, View};
 use super::state::{self, Pending, State, Target};
 use super::versions::{self, Ver};
 use super::{compare, sign};
-use crate::a11y::{self, Tip};
+use crate::a11y;
 use crate::i18n::tr;
 use crate::theme::{Tokens, regular, semibold};
-use crate::{FigApp, LeftTab, widgets};
+use crate::{FigApp, LeftTab};
 
 /// How wide the text column is at most.
 const COLUMN: f32 = 760.0;
 /// Seconds of quiet after typing before the text is sent as a command.
 const IDLE: f64 = 0.6;
-
-/// How a block is drawn in this first editor.
-enum Look {
-    Paragraph,
-    Heading(u8),
-    Divider,
-    /// A signature slot (G13.7): the role it is for; the text is the name.
-    Signature(String),
-    /// A kind this editor cannot draw yet: its name, shown dim.
-    Other(String),
-}
-
-/// A block, copied out of the file so drawing does not hold the file.
-struct View {
-    id: BlockId,
-    depth: usize,
-    look: Look,
-    text: String,
-    color: Option<Color32>,
-    size: Option<f32>,
-}
-
-fn flatten(blocks: &[Block], depth: usize, out: &mut Vec<View>) {
-    for b in blocks {
-        let look = match &b.kind {
-            BlockKind::Heading { level } => Look::Heading((*level).clamp(1, 4)),
-            BlockKind::Divider => Look::Divider,
-            BlockKind::Signature { role } => Look::Signature(role.clone()),
-            k if k.has_text() => Look::Paragraph,
-            k => Look::Other(k.name()),
-        };
-        out.push(View { id: b.id, depth, look, text: b.plain_text(), color: b.style.color.as_deref().and_then(parse_hex), size: b.style.size });
-        flatten(&b.children, depth + 1, out);
-    }
-}
-
-/// `#RGB`, `#RRGGBB` or `#RRGGBBAA` as a colour.
-pub(super) fn parse_hex(s: &str) -> Option<Color32> {
-    let h = s.strip_prefix('#')?;
-    let digit = |i: usize| h.get(i..=i).and_then(|d| u8::from_str_radix(d, 16).ok());
-    let byte = |i: usize| h.get(i..i + 2).and_then(|d| u8::from_str_radix(d, 16).ok());
-    match h.len() {
-        3 | 4 => {
-            let (r, g, b) = (digit(0)? * 17, digit(1)? * 17, digit(2)? * 17);
-            Some(Color32::from_rgba_unmultiplied(r, g, b, if h.len() == 4 { digit(3)? * 17 } else { 255 }))
-        }
-        6 | 8 => Some(Color32::from_rgba_unmultiplied(byte(0)?, byte(2)?, byte(4)?, if h.len() == 8 { byte(6)? } else { 255 })),
-        _ => None,
-    }
-}
-
-fn font_size(look: &Look, own: Option<f32>) -> f32 {
-    own.unwrap_or(match look {
-        Look::Heading(1) => 28.0,
-        Look::Heading(2) => 22.0,
-        Look::Heading(3) => 18.0,
-        Look::Heading(_) => 15.0,
-        _ => 14.0,
-    })
-}
 
 /// Draw the open document where the canvas goes. False when no document is open (the canvas shows).
 pub(super) fn show(app: &mut FigApp, ui: &mut Ui) -> bool {
@@ -104,15 +44,20 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui) -> bool {
 fn page(app: &mut FigApp, ui: &mut Ui, st: &mut State, doc: DocId, uid: u64) {
     let t = Tokens::get(ui.ctx());
     let area = ui.max_rect();
+    // The editor is drawn in the canvas' place: keyboard navigation counts it as the canvas, so Tab
+    // in a block nests the block instead of moving the keyboard to the panels.
+    a11y::area(&mut app.ui.nav, a11y::Region::Canvas, area);
     ui.painter().rect_filled(area, CornerRadius::ZERO, t.canvas);
     let (title, icon, ver, mut blocks) = {
         let Some(d) = app.session.doc().ok().and_then(|d| d.docs.get(doc)) else { return };
         // The version on screen: the one picked in the version menu, else the last.
         let picked = st.viewing.filter(|(o, _)| *o == doc).and_then(|(_, n)| d.version(n));
         let Some(v) = picked.or_else(|| d.current()) else { return };
-        let mut blocks = Vec::new();
-        flatten(&v.blocks, 0, &mut blocks);
-        (d.title.clone(), d.icon.clone(), Ver::of(ui.ctx(), uid, d, v), blocks)
+        let ver = Ver::of(ui.ctx(), uid, d, v);
+        let mut blocks: Vec<View> = Vec::new();
+        // A version that cannot change shows the content of every toggle.
+        blocks::flatten(&v.blocks, 0, None, !ver.editable(), &mut blocks);
+        (d.title.clone(), d.icon.clone(), ver, blocks)
     };
     // What was typed and not yet sent shows in place of what the file has.
     if let Some(p) = st.pending.as_ref().filter(|p| p.doc == doc)
@@ -142,9 +87,8 @@ fn page(app: &mut FigApp, ui: &mut Ui, st: &mut State, doc: DocId, uid: u64) {
             ui.allocate_rect(Rect::from_min_max(col.min, pos2(col.max.x, c.min_rect().max.y + 120.0)), Sense::hover());
             return;
         }
-        let ids: Vec<BlockId> = blocks.iter().map(|b| b.id).collect();
-        for (i, v) in blocks.iter().enumerate() {
-            block_ui(app, &mut c, st, &t, doc, v, i, &ids, col, &ver, now);
+        for i in 0..blocks.len() {
+            blocks::block_ui(app, &mut c, st, &t, doc, &blocks, i, col, &ver, now);
         }
         versions::signatures(app, &mut c, st, &t, doc, &ver);
         tail_ui(app, &mut c, st, &t, doc, &blocks, editable);
@@ -152,7 +96,7 @@ fn page(app: &mut FigApp, ui: &mut Ui, st: &mut State, doc: DocId, uid: u64) {
             // Enter in the title: the first block takes the keyboard, made first if there is none.
             match blocks.first() {
                 Some(first) => st.focus = Some(Target::Block(first.id)),
-                None => add_block(app, st, doc, None, "paragraph"),
+                None => blocks::add_block(app, st, doc, None, "paragraph"),
             }
         }
         ui.allocate_rect(Rect::from_min_max(col.min, pos2(col.max.x, c.min_rect().max.y + 120.0)), Sense::hover());
@@ -250,7 +194,7 @@ fn title_ui(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, doc: DocI
 }
 
 /// Remember text typed in a field. Text typed in another field first goes out as a command.
-fn queue(app: &mut FigApp, st: &mut State, doc: DocId, target: Target, text: String, now: f64) {
+pub(super) fn queue(app: &mut FigApp, st: &mut State, doc: DocId, target: Target, text: String, now: f64) {
     if let Some(p) = st.pending.take_if(|p| p.doc != doc || p.target != target) {
         commit(app, &p);
     }
@@ -294,134 +238,6 @@ fn settle(app: &mut FigApp, ctx: &egui::Context, st: &mut State, doc: DocId, now
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn block_ui(
-    app: &mut FigApp,
-    ui: &mut Ui,
-    st: &mut State,
-    t: &Tokens,
-    doc: DocId,
-    v: &View,
-    index: usize,
-    ids: &[BlockId],
-    col: Rect,
-    ver: &Ver,
-    now: f64,
-) {
-    let editable = ver.editable();
-    // Nested blocks step in by 16 points a level (at most 8 levels, so it fits the text margin).
-    let indent = v.depth as f32 * 16.0;
-    ui.add_space(2.0);
-    let top = ui.cursor().min.y;
-    match &v.look {
-        Look::Divider => {
-            let (r, _) = ui.allocate_exact_size(vec2(col.width(), 20.0), Sense::hover());
-            ui.painter().line_segment([pos2(r.min.x + indent, r.center().y), pos2(r.max.x, r.center().y)], egui::Stroke::new(1.0, t.border_strong));
-        }
-        Look::Signature(role) => versions::signature_block(app, ui, t, doc, ver, v.id, &v.text, role, indent),
-        Look::Other(name) => {
-            let (r, _) = ui.allocate_exact_size(vec2(col.width() - indent, 30.0), Sense::hover());
-            let r = Rect::from_min_max(pos2(r.min.x + indent, r.min.y), r.max);
-            ui.painter().rect_filled(r, CornerRadius::same(5), t.field);
-            ui.painter().text(pos2(r.min.x + 10.0, r.center().y), Align2::LEFT_CENTER, name, regular(11.0), t.text_tertiary);
-        }
-        look => {
-            text_block(app, ui, st, t, doc, v, look, index, ids, col, indent, editable, now);
-        }
-    }
-    let bottom = ui.cursor().min.y;
-    handle(app, ui, t, doc, v, Rect::from_min_max(pos2(col.min.x - 36.0, top), pos2(col.max.x, bottom)), editable);
-}
-
-#[allow(clippy::too_many_arguments)]
-fn text_block(
-    app: &mut FigApp,
-    ui: &mut Ui,
-    st: &mut State,
-    t: &Tokens,
-    doc: DocId,
-    v: &View,
-    look: &Look,
-    index: usize,
-    ids: &[BlockId],
-    col: Rect,
-    indent: f32,
-    editable: bool,
-    now: f64,
-) {
-    let id = Id::unique(("gbx_doc_block", doc.0, v.id.0));
-    let size = font_size(look, v.size);
-    let font = if matches!(look, Look::Heading(_)) { semibold(size) } else { regular(size) };
-    let mut text = v.text.clone();
-    let focused = ui.memory(|m| m.has_focus(id));
-    let mut enter = false;
-    let mut backspace_on_empty = false;
-    if focused && editable {
-        enter = ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Enter));
-        backspace_on_empty = v.text.is_empty() && ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Backspace));
-    }
-    let out = egui::TextEdit::multiline(&mut text)
-        .id(id)
-        .frame(egui::Frame::NONE)
-        .font(font)
-        .text_color(v.color.unwrap_or(t.text))
-        .desired_width(col.width() - indent)
-        .desired_rows(1)
-        .interactive(editable)
-        .margin(egui::Margin { left: indent as i8, right: 0, top: 3, bottom: 3 })
-        .show(ui);
-    let resp = out.response;
-    a11y::text(&resp, tr("Text"), &text);
-    if st.focus == Some(Target::Block(v.id)) {
-        resp.request_focus();
-        // The cursor goes to the end of the text.
-        let mut state = out.state;
-        let end = egui::text::CCursor::new(text.chars().count());
-        state.cursor.set_char_range(Some(egui::text::CCursorRange::one(end)));
-        state.store(ui.ctx(), id);
-        st.focus = None;
-    }
-    if resp.changed() {
-        queue(app, st, doc, Target::Block(v.id), text.clone(), now);
-    }
-    if enter {
-        // The words typed so far go out first so the new block lands after them.
-        if let Some(p) = st.pending.take() {
-            commit(app, &p);
-        }
-        let current = app.session.doc().ok().and_then(|d| d.docs.get(doc)).and_then(|d| d.current());
-        let kind = match current.and_then(|c| c.block(v.id)) {
-            Some(b) if matches!(b.kind, BlockKind::Bulleted | BlockKind::Numbered | BlockKind::Checklist { .. }) => b.kind.name(),
-            _ => "paragraph".to_string(),
-        };
-        // Right after this block, among the blocks it sits with (which may be inside another block).
-        let after = current.and_then(|c| c.locate(v.id)).map(|(parent, at)| (parent, at + 1));
-        add_block(app, st, doc, after, &kind);
-    }
-    if backspace_on_empty {
-        // An empty block goes, and the one above takes the keyboard.
-        app.run("doc.block.delete", json!({"doc": doc.0, "id": v.id.0}));
-        if let Some(prev) = index.checked_sub(1).and_then(|p| ids.get(p)) {
-            st.focus = Some(Target::Block(*prev));
-        }
-    }
-}
-
-/// Add a block of `kind` at `place` (inside which block, at which index; the end of the top when
-/// `None`) and give it the keyboard.
-fn add_block(app: &mut FigApp, st: &mut State, doc: DocId, place: Option<(Option<BlockId>, usize)>, kind: &str) {
-    let mut params = json!({"doc": doc.0, "kind": kind});
-    if let Some((parent, index)) = place {
-        params["index"] = json!(index);
-        if let Some(p) = parent {
-            params["parent"] = json!(p.0);
-        }
-    }
-    if let Some(id) = app.run("doc.block.insert", params).and_then(|r| r.get("id").and_then(Value::as_u64)) {
-        st.focus = Some(Target::Block(BlockId(id)));
-    }
-}
-
 /// Under the last block: a click there starts a new one (or goes to the empty last one).
 fn tail_ui(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, doc: DocId, blocks: &[View], editable: bool) {
     if !editable {
@@ -437,55 +253,7 @@ fn tail_ui(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, doc: DocId
     if resp.clicked() {
         match blocks.last() {
             Some(last) if matches!(last.look, Look::Paragraph) && last.text.is_empty() => st.focus = Some(Target::Block(last.id)),
-            _ => add_block(app, st, doc, None, "paragraph"),
+            _ => blocks::add_block(app, st, doc, None, "paragraph"),
         }
     }
-}
-
-/// The handle on the left of a block: it shows while the pointer is on the block; its menu turns the
-/// block into another kind or deletes it.
-fn handle(app: &mut FigApp, ui: &mut Ui, t: &Tokens, doc: DocId, v: &View, row: Rect, editable: bool) {
-    if !editable {
-        return;
-    }
-    let id = Id::unique(("gbx_doc_handle", doc.0, v.id.0));
-    let menu_id = id.with("menu");
-    let open = egui::Popup::is_id_open(ui.ctx(), menu_id);
-    let hover = ui.rect_contains_pointer(row) || open;
-    if !hover {
-        return;
-    }
-    let r = Rect::from_min_size(pos2(row.min.x + 6.0, row.min.y + 3.0), vec2(22.0, 24.0));
-    let resp = ui.interact(r, id, Sense::click()).tip(tr("Turn into, delete"));
-    if resp.hovered() || open {
-        ui.painter().rect_filled(r, CornerRadius::same(4), t.hover);
-    }
-    // Six dots, two by three.
-    for dx in [-3.0, 3.0] {
-        for dy in [-5.0, 0.0, 5.0] {
-            ui.painter().circle_filled(r.center() + vec2(dx, dy), 1.3, t.icon_secondary);
-        }
-    }
-    crate::right::menu_popup(&resp).id(menu_id).show(|ui| {
-        use crate::right::menu_item;
-        ui.set_min_width(190.0);
-        widgets::label(ui, tr("Turn into"), Tokens::get(ui.ctx()).text_secondary);
-        for (label, kind) in [
-            (tr("Text"), "paragraph"),
-            (tr("Heading 1"), "heading1"),
-            (tr("Heading 2"), "heading2"),
-            (tr("Heading 3"), "heading3"),
-            (tr("Signature"), "signature"),
-        ] {
-            if menu_item(ui, label, "") {
-                app.run("doc.block.turn_into", json!({"doc": doc.0, "id": v.id.0, "kind": kind}));
-                ui.close();
-            }
-        }
-        ui.add_space(4.0);
-        if menu_item(ui, tr("Delete"), "") {
-            app.run("doc.block.delete", json!({"doc": doc.0, "id": v.id.0}));
-            ui.close();
-        }
-    });
 }

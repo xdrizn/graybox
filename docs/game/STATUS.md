@@ -285,6 +285,40 @@
     block added in its place; a slot without a name printed "Name" in bold.
   - Not done: local times, page furniture in Portuguese, the `/` menu (G13.2), signing through a link
     (G15).
+- G13.2, first part (2026-11-13): the blocks look and edit like Notion's.
+  - Each kind draws its mark on the line of its words: a bullet (dot, ring, square by depth), the number
+    of its run (a block of another kind starts the count again), a checkbox that ticks (a done task is
+    struck through and dim), a toggle arrow that opens and closes (its content hides), a callout with its
+    icon on a tinted card, a quote bar, a decision card with who, when and why, a link with its address.
+    An empty block says what it is ("Heading 2", "List", "To-do"...).
+  - Markdown marks typed at the start of a block turn it, and the mark goes: `#` to `####`, `-` `*` `+`,
+    `1.` `1)`, `[]` `[ ]` `[x]`, `>` `"`, and `---` (a divider; writing goes on in a new line below).
+  - Enter splits at the cursor (selected words go first); a list, task, toggle or quote goes on as the
+    same kind, a heading is followed by text; Enter on an empty list item ends the list (out one level,
+    else text). Shift+Enter breaks the line inside the block. Backspace at the start turns a list item,
+    heading, quote or callout into text, then takes a nested block out a level, then joins it to the
+    block above (the cursor lands at the joint); an empty decision or link turns into text, a filled one
+    stays. Tab nests under the block above (opening it if it is a closed toggle), Shift+Tab takes it out;
+    the arrows cross from block to block at the first and last character. Each is one undo step.
+  - A handle (six dots) left of the hovered block opens a menu: Duplicate, Delete, Turn into (13
+    kinds), the colour of the words and the background (9 colours that read on both themes, or none).
+  - Model: `crates/doc/src/docs/edit.rs` (ours): `split_block`, `merge_block`, `duplicate_block`; the
+    words that move keep their block's colours, a new empty line starts plain. Commands `doc.block.split`,
+    `doc.block.merge`, `doc.block.duplicate`; `doc.block.turn_into` takes `text?`. UI:
+    `crates/ui-egui/src/game/docs/blocks.rs` (the editor page in `editor.rs` now only lays them out). The
+    editor counts as the canvas for keyboard navigation, so Tab nests a block instead of moving to the
+    panels. Tests: `docs/edit/tests.rs`, `docs_cmd_tests.rs`, `game/docs/blocks_tests.rs` (raw keys).
+  - Checked in the real app on a scratch session: the kinds, typing `## ` and `[] `, Enter twice to end a
+    list, Tab, the handle menu, a background colour. Screenshots sent to Adriel.
+  - Code review (high, two rounds) caught and fixed: Enter split where the cursor was a frame earlier;
+    an empty heading turned into text on Enter; Backspace emptied a decision or link into text; Tab
+    nested under a divider; the new block lost its colour; a split at the deepest level made a block
+    too deep; Shift+Enter split instead of breaking the line and Shift+arrows left the block; Enter kept
+    selected words; an empty decision could not be removed with Backspace; an empty new line took the
+    heading's colour and size.
+  - Next parts: the `/` menu, drag to move, the formatting bar, images, embeds, tables, links and
+    mentions, selecting several blocks, Font in the handle menu. Delete at the end does not join the next
+    block yet.
 - G11.6, the bow (2026-11-13, Adriel's changes): a click shoots from the hip, holding aim goes over the
   shoulder with a crosshair in the middle of the screen, and the shoulder button swaps sides.
   - Hip shot: a left click alone with the bow turns the hero to where the camera looks and shoots after
@@ -1288,6 +1322,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     for `doc.version.*`. Locales: the version, signature, compare and decision-log strings
     ("Version {n} · {state}" replaces "Version {n} · draft" and "Version {n} · closed, it can no longer
     change").
+  - G13.2: no new hook. Locales: the block editor strings ("Turn into, duplicate, colour, delete"
+    replaces "Turn into, delete"; "Heading {n}", "List", "To-do", "Decision", "Who", "When", "Why",
+    "Brown", "Purple"...).
 - Nested pages (G9; `crates/doc/src/page_tree.rs`, `crates/engine/src/cmd/page_tree.rs`,
   `crates/ui-egui/src/game/tree_list.rs` and `page_list.rs` are ours):
   - `crates/doc/src/lib.rs`: `pub mod page_tree;`, `Document::page_tree` (serde default, skipped when

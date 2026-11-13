@@ -5,6 +5,7 @@
 //!
 //! Hooks in upstream files are listed in `docs/game/STATUS.md` (Upstream hooks).
 
+mod blocks;
 mod compare;
 mod editor;
 mod export;
@@ -68,6 +69,8 @@ pub(crate) fn open(app: &mut FigApp, id: u64) {
     app.ui.open_left_panel();
 }
 
+#[cfg(test)]
+mod blocks_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

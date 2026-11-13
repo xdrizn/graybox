@@ -231,6 +231,9 @@ fn junk_parameters_are_refused_not_panicked_on() {
         "doc.block.turn_into",
         "doc.block.move",
         "doc.block.delete",
+        "doc.block.split",
+        "doc.block.merge",
+        "doc.block.duplicate",
     ] {
         for j in &junk {
             let _ = s.execute(cmd, j);
@@ -247,4 +250,60 @@ fn a_huge_index_just_means_last() {
     ex(&mut s, "doc.block.insert", json!({"doc": d, "text": "a"}));
     ex(&mut s, "doc.block.insert", json!({"doc": d, "text": "b", "index": 4_000_000_000_u64}));
     assert_eq!(blocks(&mut s, d)[1]["text"][0]["text"], "b");
+}
+
+fn texts(s: &mut Session, doc: u64) -> Vec<String> {
+    blocks(s, doc).iter().map(|b| b["text"].as_array().map_or(String::new(), |r| r.iter().filter_map(|x| x["text"].as_str()).collect())).collect()
+}
+
+#[test]
+fn enter_splits_a_block_in_one_step_that_one_undo_takes_back() {
+    let mut s = Session::new();
+    let d = id_of(&ex(&mut s, "doc.create", json!({})));
+    let b = id_of(&ex(&mut s, "doc.block.insert", json!({"doc": d, "kind": "bulleted", "text": "Hello world"})));
+    let undo = s.ds().unwrap().history.undo.len();
+    let out = ex(&mut s, "doc.block.split", json!({"doc": d, "id": b, "at": 5}));
+    assert_eq!(texts(&mut s, d), ["Hello", " world"]);
+    assert_eq!(blocks(&mut s, d)[1]["kind"]["type"], "bulleted");
+    assert_eq!(out["focus"], out["id"]);
+    assert_eq!(s.ds().unwrap().history.undo.len(), undo + 1);
+    ex(&mut s, "edit.undo", json!({}));
+    assert_eq!(texts(&mut s, d), ["Hello world"]);
+}
+
+#[test]
+fn backspace_at_the_start_joins_a_block_to_the_one_above_and_says_where_the_cursor_goes() {
+    let mut s = Session::new();
+    let d = id_of(&ex(&mut s, "doc.create", json!({})));
+    let a = id_of(&ex(&mut s, "doc.block.insert", json!({"doc": d, "text": "Hello"})));
+    let b = id_of(&ex(&mut s, "doc.block.insert", json!({"doc": d, "text": " world"})));
+    let out = ex(&mut s, "doc.block.merge", json!({"doc": d, "id": b}));
+    assert_eq!((out["id"].as_u64(), out["at"].as_u64()), (Some(a), Some(5)));
+    assert_eq!(texts(&mut s, d), ["Hello world"]);
+    // Nothing above the first block: refused, nothing changes.
+    assert!(s.execute("doc.block.merge", &json!({"doc": d, "id": a})).is_err());
+}
+
+#[test]
+fn duplicate_copies_a_block_right_after_it() {
+    let mut s = Session::new();
+    let d = id_of(&ex(&mut s, "doc.create", json!({})));
+    let a = id_of(&ex(&mut s, "doc.block.insert", json!({"doc": d, "kind": "callout", "text": "Note"})));
+    ex(&mut s, "doc.block.insert", json!({"doc": d, "text": "end"}));
+    let copy = id_of(&ex(&mut s, "doc.block.duplicate", json!({"doc": d, "id": a})));
+    assert_ne!(copy, a);
+    assert_eq!(texts(&mut s, d), ["Note", "Note", "end"]);
+    assert_eq!(blocks(&mut s, d)[1]["kind"]["type"], "callout");
+}
+
+#[test]
+fn a_markdown_shortcut_turns_the_block_and_drops_the_marks_in_one_step() {
+    let mut s = Session::new();
+    let d = id_of(&ex(&mut s, "doc.create", json!({})));
+    let b = id_of(&ex(&mut s, "doc.block.insert", json!({"doc": d, "text": "## "})));
+    let undo = s.ds().unwrap().history.undo.len();
+    ex(&mut s, "doc.block.turn_into", json!({"doc": d, "id": b, "kind": "heading2", "text": ""}));
+    assert_eq!(blocks(&mut s, d)[0]["kind"], json!({"type": "heading", "level": 2}));
+    assert_eq!(texts(&mut s, d), [""]);
+    assert_eq!(s.ds().unwrap().history.undo.len(), undo + 1);
 }

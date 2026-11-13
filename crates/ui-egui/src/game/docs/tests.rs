@@ -170,6 +170,8 @@ fn enter_in_a_nested_block_adds_its_sibling_inside_the_same_parent() {
     }
     let at = text_center(&shapes(&mut u), "kid");
     click(&mut u, at);
+    // Enter splits the block at the cursor (G13.2): at the end, the new block is empty.
+    u.frame(vec![Event::Key { key: egui::Key::End, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }]);
     u.frame(vec![Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }]);
     u.frame(vec![]);
     let v = u.app.session.doc().unwrap().docs.get(DocId(a)).unwrap().current().unwrap().clone();
