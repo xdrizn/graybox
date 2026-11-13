@@ -113,6 +113,36 @@
   hand; the widow fix could leave an orphan; the PDF was laid out twice; list numbers of 10 and more
   wrapped onto two lines; the Markdown result reported `pages: null`. Skipped: a card pasted into another
   file follows a document of the same id there.
+- G11.5, rest (2026-11-13, "continue todos os trabalhos"): foes, damage, arrows, and the variables
+  and events the designed UI uses.
+  - Foes (`tps/foes.rs`): three training dummies in a row 8 m in front of the start and five husks
+    around the valley (placed on dry, flat, open ground). A husk sees the hero at 16 m, walks over
+    (1.5 m/s, never into the river, at most 26 m from home), winds up 0.7 s with its arms raised, then
+    hits for 15 with a push if the hero is still in reach in front of it; a hit staggers it and loses
+    the wind-up. Dummies wobble. Broken foes fly apart and come back (dummies 4 s, husks 14 s); husks
+    walk home while the hero is dead. The hero is pushed out of foes (no walking through them).
+  - Strikes land once each in the middle of the swing (sword 18/18/28, spear 26 reaching 2.9 m, club 36
+    with a big push). The bow, drawn 0.35 s or more, shoots an arrow (`tps/arrows.rs`) where the camera
+    looks: 32 m/s with a little drop, 25 damage, stuck in solids and the ground for 6 s, at most 16.
+  - Health (`tps/damage.rs`): 100; a fall over 4 m without a roll hurts 6 per metre; a hit knocks back
+    and flinches (not over a weapon draw or the drawn bow); at 0 the hero falls and lies there (the fall
+    plays even when a death screen pauses the game); Enter respawns at the start, weapon kept.
+  - Events and variables: `vida-mudou`, `tomou-dano`, `vida-zero`, `renasceu`, `atirou`,
+    `inimigo-morreu`. A third-person file's Game collection adds `stamina`, `staminaMax`, `escalando` and
+    `mirando` (`arma` starts as "Sword"); Play publishes vida, vidaMax, ultimoDano, stamina, staminaMax,
+    agachado, escalando, mirando, atacante and arma (`game/tps.rs` `variables`). Game bars can follow
+    `stamina`.
+  - No third-person starter HUD (Adriel's choice: his own UI reads the variables and events).
+  - Drawn (`renderer/tps/foes.rs`): faceted husks with two orange slit eyes (their only emissive), straw
+    dummies on posts, a white flash and a lean on a hit, pieces when broken, arrows with a fletch.
+  - Code review (high) caught and fixed: the hero walked through dummies; a hit during a weapon draw left
+    the weapon on the back (and dropped the drawn bow's pose); a first-person stamina bar followed the
+    reserve ammo; broken arm pieces sank into the ground; a death screen that pauses froze the hero
+    standing; publishing the variables allocated every frame. Each has a test.
+  - Tests: `tps/combat_tests.rs`, `renderer/tps/tests.rs` (foes and arrows), `game/tps.rs` (the bridge),
+    `engine/src/game_kind_tests.rs` (the variables, a stamina bar).
+  - Checked in the real app on a scratch file: a HUD bound to the variables, a dummy broken by the sword, a husk hitting
+    (100 → 85), the death screen with the hero lying down, Enter respawning, an arrow hitting a dummy.
 - G11.5, first part (2026-11-12, with G11.4, same request from Adriel): weapons and strikes.
   - Weapons (`tps/combat.rs`): 1–4 pick sword, spear, club, bow (drawn from the back; the same key again
     puts it away; also in the air; a key pressed mid-strike counts when the strike ends); click strikes
@@ -645,6 +675,11 @@
     wheel switching wait for G11.5's bindings.
   - The sword combo counts a click after 35% of the current strike; a strike blocks jump, roll and
     climbing until it ends.
+- G11.5 foes and the bridge (recommended option each time):
+  - Foes are cylinders pushed apart after moving, no pathfinding: husks walk straight at the hero and
+    slide along solids. Health lives in the simulation; the Game variables carry it to the UI.
+  - Arrows fly parallel to the camera from the shoulder. The aim dot sits on the hero's back until G11.6
+    puts the camera over the shoulder; then the arrow aims at the point under the dot.
 - G11.2 world (Adriel was away; the recommended option each time):
   - The ground is a heightfield with alternating triangle splits, and the walking height is looked up in
     those same triangles, so what you see is what you stand on. Only integer hashing and smoothstep make
@@ -982,6 +1017,11 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     (draws it), and the help line for third person.
   - G11.3, same `show`: `game::tps::debug_keys` after `sync` (clip preview keys, debug builds) and the
     help line now comes from `game::tps::help(play)`.
+  - G11.5, same file: `game::tps::respawn_on_request` after the first-person respawn,
+    `game::tps::drain_events` for the events, `game::tps::bar_share` first in `bar_widths` (a
+    first-person bar on stamina stays full), `game::tps::variables` in `publish` (the first-person values
+    as fixed arrays too), `game::tps::dead` in the help line. `crates/ui-egui/src/game/screen_ui.rs`
+    (ours): the Stamina bar choice.
   - `crates/ui-egui/src/game/mod.rs` (ours): `Play::tps`, hooks in `frame` and `inspect`, the Game picker
     first in `prototype_section`.
 - Documents (G13.1; `crates/doc/src/docs.rs`, `crates/engine/src/cmd/docs.rs`, `crates/ui-egui/src/game/docs/` are ours):
@@ -1077,9 +1117,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 
 ## Next
 - G11 (third-person game; spec [`specs/2026-11-11-third-person-design.md`](specs/2026-11-11-third-person-design.md)).
-  Milestone G11 is in `PLAN.md`. G11.2, G11.3 and G11.4 are done (with weapon switching and strikes);
-  next the rest of G11.5: dummies and husks to hit, damage and health, arrows, game variables and
-  events, the third-person HUD. G11.6: camera easing, bow over the shoulder, crowns in the camera's way.
+  Milestone G11 is in `PLAN.md`. G11.2 to G11.5 are done; next G11.6: the camera easing back behind the
+  hero, the bow over the shoulder (the arrow aimed at the point under the dot), crowns in the camera's
+  way, feel tuning, budgets and the browser check.
 - Navigable menus phase 2: tab bars (LB/RB) switching the menu below; spatial focus for layers
   without auto layout. To check: Tab sent through the control channel did not open the starter
   Inventory in Play (the controller's View did).

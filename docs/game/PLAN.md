@@ -183,9 +183,8 @@ action game, original, made in code. One session per phase, each ends committed 
 - [x] G11.4 Movement and camera: controller (walk to climb), orbit camera with collision, bindings,
   interpolation. Needs G11.2 and G11.3. (Camera easing, bow over-the-shoulder and crowns in the camera's
   way moved to G11.6.)
-- [ ] G11.5 Combat and the bridge: weapons, bow, dummies and husks, damage, game variables and events,
-  third-person starter HUD. Needs G11.4. (Weapon switching and every strike done with G11.4; targets,
-  damage, arrows, variables, events and the HUD to do.)
+- [x] G11.5 Combat and the bridge: weapons, bow, dummies and husks, damage, game variables and events.
+  Needs G11.4. (No third-person starter HUD: Adriel's own UI uses the variables and events.)
 - [ ] G11.6 Polish and performance: browser at 60 fps, memory and size budgets, feel tuning, installed copy.
 
 ### G13 — Documents (owner's request, 2026-11-12)
