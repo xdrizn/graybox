@@ -841,6 +841,9 @@
       layer sliced before it became a component (instances resized keep the corners); now tested,
       and the section says "Applies to this layer; instances of the component resize with it" on
       a component or a layer inside one.
+    - Mirror axes: the pink handles grab from 13 points away and turn the pointer into a resize
+      arrow (Pixel mode tells the canvas it set its own pointer, `pixel::has_cursor`); with both
+      axes on, a ring where they cross drags both. Handles win over the board's sides.
     - The pixel Text tool (text drawn into pixels) was started and cancelled by Adriel before it was
       committed; Pixel text and pixel fonts stay as they were.
   - Jog is the default speed (5 m/s), a light stick walks slower, Shift runs (8.5), crouch (2.4) only

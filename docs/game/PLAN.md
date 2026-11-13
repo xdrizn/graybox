@@ -223,6 +223,8 @@ Pixel layers edited in place in a Pixel mode, Aseprite-style standard tools, sma
 - [x] G16.4 Animation: timeline, durations, onion skin, tags, playback in Prototype and Play.
 - [x] G16.5 Export and import: exporter trait, PNG, sheet and JSON, Unity with Live Link, PNG and sheet import.
 - [x] G16.6 Polish: pixel fonts, shade, Claude MCP tools, performance, guide, installed copy.
+- [x] G16.7 Pixel feedback: the board's size in Pixel mode and the layer hugging its art in Design,
+  9-slice above Export and with components, easy mirror handles.
 
 
 ### G17 — 3D rotation of frames (owner's request, 2026-11-13)

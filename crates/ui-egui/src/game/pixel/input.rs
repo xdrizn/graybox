@@ -11,8 +11,12 @@ use serde_json::{Value, json};
 use super::{Gesture, Mode, Tool, art_at, art_to_page, art_to_screen, decode, enter, ink, is_pixel_layer, leave, settle, step_brush};
 use crate::FigApp;
 
-/// Screen points within which a press takes a mirror axis's handle.
-const AXIS_GRAB: f32 = 7.0;
+/// Screen points within which a press takes a mirror axis's handle (G16.7: easy to grab).
+const AXIS_GRAB: f32 = 13.0;
+/// Screen points round the point where both mirror axes cross within which a press moves both.
+const CROSS_GRAB: f32 = 9.0;
+/// Which mirror axes [`Gesture::Axis`] moves: 0 the vertical one, 1 the horizontal one, or both.
+pub(super) const BOTH_AXES: usize = 2;
 
 /// Pixel mode's share of the canvas pointer at `pos`. True when it took the pointer (the canvas's
 /// own tools then leave it alone). Off, it only listens for a double-click on a pixel layer.
@@ -96,9 +100,13 @@ fn edit(app: &mut FigApp, ui: &egui::Ui, resp: &egui::Response, pos: Pos2, id: f
     let swallow = app.ui.picker.is_some();
     // Alt holds the eyedropper with any drawing tool (with a selection tool it subtracts).
     let tool = if mods.alt && app.pixel.gesture.is_none() && !app.pixel.tool.selects() { Tool::Eyedropper } else { app.pixel.tool };
+    let axis = if resp.hovered() && app.pixel.gesture.is_none() { axis_under(app, id, &d.sprite, pos) } else { None };
+    if let Some(which) = axis {
+        super::set_cursor(app, ui.ctx(), axis_cursor(which));
+    }
     if (pressed || pressed2) && resp.hovered() && app.pixel.gesture.is_none() && !swallow {
         let secondary = pressed2 && !pressed;
-        if let Some(axis) = axis_under(app, id, &d.sprite, pos) {
+        if let Some(axis) = axis {
             app.pixel.gesture = Some(Gesture::Axis(axis));
         } else {
             press(app, id, &d, tool, at, secondary, mods);
@@ -125,14 +133,16 @@ fn edit(app: &mut FigApp, ui: &egui::Ui, resp: &egui::Response, pos: Pos2, id: f
             }
         }
         Some(Gesture::Axis(which)) => {
+            super::set_cursor(app, ui.ctx(), axis_cursor(which));
             if down {
                 let xf = art_to_page(app, id, &d.sprite);
                 if let Some(xf) = xf.filter(|x| x.determinant().abs() > 1e-12) {
                     let p = xf.inverse() * app.to_page(pos);
                     // Snapped to half pixels, kept inside the sprite.
-                    let (v, max) = if which == 0 { (p.x, d.sprite.width) } else { (p.y, d.sprite.height) };
-                    if v.is_finite() {
-                        app.pixel.axis[which] = (v * 2.0).round().clamp(0.0, f64::from(max) * 2.0) as i64;
+                    for (axis, v, max) in [(0, p.x, d.sprite.width), (1, p.y, d.sprite.height)] {
+                        if (which == axis || which == BOTH_AXES) && v.is_finite() {
+                            app.pixel.axis[axis] = (v * 2.0).round().clamp(0.0, f64::from(max) * 2.0) as i64;
+                        }
                     }
                 }
             } else {
@@ -314,22 +324,25 @@ fn commit_shape(app: &mut FigApp, id: figcraft_doc::NodeId, d: &super::Decoded, 
     app.run("pixel.shape", p);
 }
 
-/// The mirror axis whose handle (past the sprite's top or left edge, or along the line itself) is
-/// under `pos`.
-fn axis_under(app: &FigApp, id: figcraft_doc::NodeId, sprite: &figcraft_pixel::Sprite, pos: Pos2) -> Option<usize> {
+/// The mirror axis whose handle (past the sprite's top or left edge) is under `pos`, or
+/// [`BOTH_AXES`] where both axes cross.
+pub(super) fn axis_under(app: &FigApp, id: figcraft_doc::NodeId, sprite: &figcraft_pixel::Sprite, pos: Pos2) -> Option<usize> {
     let xf = art_to_page(app, id, sprite)?;
-    for which in 0..2 {
-        if !app.pixel.mirror.get(which).copied().unwrap_or(false) {
-            continue;
-        }
-        let v = app.pixel.axis.get(which).copied().unwrap_or(0) as f64 / 2.0;
-        let handle = if which == 0 { art_to_screen(app, xf, v, 0.0) } else { art_to_screen(app, xf, 0.0, v) };
-        let outward = if which == 0 { egui::vec2(0.0, -14.0) } else { egui::vec2(-14.0, 0.0) };
-        if pos.distance(handle + outward) <= AXIS_GRAB + 3.0 {
-            return Some(which);
-        }
+    let on = |which: usize| app.pixel.mirror.get(which).copied().unwrap_or(false);
+    let v = |which: usize| app.pixel.axis.get(which).copied().unwrap_or(0) as f64 / 2.0;
+    if on(0) && on(1) && pos.distance(art_to_screen(app, xf, v(0), v(1))) <= CROSS_GRAB {
+        return Some(BOTH_AXES);
     }
-    None
+    (0..2).filter(|w| on(*w)).find(|w| pos.distance(super::draw::axis_knob(app, xf, *w, v(*w))) <= AXIS_GRAB)
+}
+
+/// The pointer over (or dragging) mirror axis `which`.
+fn axis_cursor(which: usize) -> egui::CursorIcon {
+    match which {
+        0 => egui::CursorIcon::ResizeHorizontal,
+        1 => egui::CursorIcon::ResizeVertical,
+        _ => egui::CursorIcon::Move,
+    }
 }
 
 /// A key pressed in Pixel mode: true when it was Pixel mode's (the app's shortcuts leave it alone).

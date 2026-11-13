@@ -144,7 +144,8 @@ pub(super) fn pointer(
         }
         return true;
     }
-    if app.pixel.gesture.is_some() || !resp.hovered() {
+    // A mirror axis's handle sits just past the top and left sides: it comes first.
+    if app.pixel.gesture.is_some() || !resp.hovered() || super::input::axis_under(app, id, sprite, pos).is_some() {
         return false;
     }
     let Some(sides) = side_at(app, id, sprite, pos) else { return false };

@@ -355,10 +355,21 @@ fn axes(app: &FigApp, painter: &egui::Painter, xf: Affine, w: f64, h: f64, t: &T
             (art_to_screen(app, xf, 0.0, v), art_to_screen(app, xf, w, v))
         };
         painter.add(Shape::dashed_line(&[a, b], line, 6.0, 4.0));
-        let outward = if which == 0 { egui::vec2(0.0, -14.0) } else { egui::vec2(-14.0, 0.0) };
-        painter.line_segment([a, a + outward], line);
-        painter.circle(a + outward, 5.0, color, Stroke::new(1.5, t.panel));
+        let knob = axis_knob(app, xf, which, v);
+        painter.line_segment([a, knob], line);
+        painter.circle(knob, 6.0, color, Stroke::new(1.5, t.panel));
     }
+    // Where both cross, a ring to drag both at once (G16.7).
+    if app.pixel.mirror == [true, true] {
+        let cross = art_to_screen(app, xf, app.pixel.axis[0] as f64 / 2.0, app.pixel.axis[1] as f64 / 2.0);
+        painter.circle(cross, 5.0, t.panel, Stroke::new(2.0, color));
+    }
+}
+
+/// Where mirror axis `which` (at `v` art pixels) has its handle on screen: 14 points past the
+/// sprite's top edge (the vertical axis) or left edge (the horizontal one).
+pub(super) fn axis_knob(app: &FigApp, xf: Affine, which: usize, v: f64) -> Pos2 {
+    if which == 0 { art_to_screen(app, xf, v, 0.0) + egui::vec2(0.0, -14.0) } else { art_to_screen(app, xf, 0.0, v) + egui::vec2(-14.0, 0.0) }
 }
 
 /// The selection's outline, marching (white and black dashes that move), where it is or where the

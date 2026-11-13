@@ -556,6 +556,41 @@ fn drag_screen(u: &mut Ui, a: Pos2, b: Pos2) -> (egui::CursorIcon, egui::CursorI
     (hover, during)
 }
 
+#[test]
+fn a_mirror_axis_handle_is_easy_to_grab_and_shows_a_resize_cursor() {
+    let (mut u, id) = editing();
+    u.app.pixel.mirror = [true, false];
+    u.frame(vec![]);
+    assert_eq!(u.app.pixel.axis[0], 16, "it starts in the middle (8 art pixels, doubled)");
+    // The handle sits 14 points above the board's top edge on the axis: a press 10 points off its
+    // centre still takes it.
+    let knob = u.app.to_screen(64.0, 0.0) + egui::vec2(10.0, -14.0);
+    let to = u.app.to_screen(80.0, 0.0) + egui::vec2(0.0, -14.0);
+    let (hover, during) = drag_screen(&mut u, knob, to);
+    assert_eq!(u.app.pixel.axis[0], 20, "moved 2 art pixels right (doubled)");
+    assert_eq!(hover, egui::CursorIcon::ResizeHorizontal);
+    assert_eq!(during, egui::CursorIcon::ResizeHorizontal);
+    assert_eq!(pixel(&mut u, id, 8, 0), None, "dragging the axis draws nothing");
+}
+
+#[test]
+fn where_both_mirror_axes_cross_a_drag_moves_both() {
+    let (mut u, id) = editing();
+    u.app.pixel.mirror = [true, true];
+    u.frame(vec![]);
+    let cross = u.app.to_screen(64.0, 64.0);
+    let to = u.app.to_screen(48.0, 72.0);
+    let (hover, _) = drag_screen(&mut u, cross, to);
+    assert_eq!(u.app.pixel.axis, [12, 18], "2 art pixels left and 1 down (doubled)");
+    assert_eq!(hover, egui::CursorIcon::Move);
+    // Away from the crossing, the pencil still draws next to the axes.
+    let p = at(&u, 3.0, 3.0);
+    press(&mut u, p, PointerButton::Primary, true);
+    press(&mut u, p, PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert!(pixel(&mut u, id, 3, 3).is_some());
+}
+
 /// The texts painted in the next frame.
 fn painted_texts(u: &mut Ui) -> Vec<String> {
     fn walk(shape: &egui::Shape, out: &mut Vec<String>) {

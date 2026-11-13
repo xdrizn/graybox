@@ -281,7 +281,7 @@ pub(super) fn input(app: &mut FigApp, ui: &mut Ui, resp: &egui::Response) -> boo
     // Graybox: Pixel mode takes the pointer while it is on, and a double-click on a pixel layer
     // turns it on (G16).
     if crate::game::pixel::input(app, ui, resp, pos) {
-        // Its own pointer (over a board side) stays: no tool cursor over it.
+        // Its own pointer (a mirror axis handle, a board side) stays: no tool cursor over it.
         return !crate::game::pixel::has_cursor(app);
     }
     // A handle drag whose button went up ends first, wherever on the canvas the pointer is: over a

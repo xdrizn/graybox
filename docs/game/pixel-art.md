@@ -73,8 +73,10 @@ with **Done**, `Esc` or `Enter`.
   folder), colour variables and the colours in this sprite. A colour taken from a style or variable
   keeps that link in the sprite, so when the style changes **Update from styles** (Pixel colors)
   repaints those pixels, and Replace colour moves the link to the new colour.
-- Mirror left/right and up/down, with pink handles to drag the axis; Tile mode wraps drawing round
-  the edges and shows the sprite repeated around itself; the pixel grid shows when zoomed in.
+- Mirror left/right and up/down, with pink handles past the top and left sides to drag each axis
+  (the pointer turns into a resize arrow over them); with both on, the ring where they cross drags
+  both at once. Tile mode wraps drawing round the edges and shows the sprite repeated around
+  itself; the pixel grid shows when zoomed in.
 - Shift-click draws a line from the last point. `Ctrl+A`, `Ctrl+D`, `Ctrl+Shift+I` select all,
   none, invert; `Ctrl+C`/`X`/`V` copy, cut and paste pixels; `Delete` clears.
 - **Shade**: with the pencil's Shade option on, each pixel you pass over moves one colour along a
