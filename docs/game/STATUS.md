@@ -1011,6 +1011,37 @@
   Image with a "Label" Text child, an Animator playing "hover"). Seen, not changed: "Cuts as
   padding" applies when the cuts are set, so turning auto layout on after 9-slice keeps padding 0
   until the cuts are set again or the option toggled.
+- G16.8 (2026-11-13): four things Adriel asked for, one commit each.
+  - **Pixel button and pixel fonts dropped.** He never asked for either. Gone: the two starters in
+    the new-sprite pill, the Pixel font section and the Font menu in the Design panel, the glyph
+    sheet itself (`crates/pixel/src/font.rs`), the `pixel.font.*` commands
+    (`engine/src/cmd/pixel/font.rs`), the `pixel.button` command and `pixel.text {font}`, the
+    per-frame font refresh (`game/fonts.rs`), their tests, the guide entries and the pixel-font
+    parts of `pixel-art.md` and the spec. **Pixel text on ordinary text layers stays** — that one he
+    wants. An old file that holds a glyph sheet still opens: the key is ignored, the art is an
+    ordinary sprite, and a text layer set in the old font falls back to a normal one
+    (`pixel_tests.rs::an_old_file_with_a_glyph_sheet_opens_as_an_ordinary_sprite`).
+  - **The open sprite is titled above its board** (`game/pixel/title.rs`): while a sprite is open,
+    its name sits just above the board's top-left corner in the canvas accent colour, like a frame's
+    label. It is pushed onto the engine's own `tools::labels`, so clicking it selects the layer and
+    dragging it moves the whole sprite with the canvas's existing rules. Closed, there is no title:
+    the layer goes on hugging its pixels, which he likes.
+  - **The art no longer jumps when a sprite inside an auto layout is drawn on.** Cause found by
+    repro, not by reading: hugging (`board::retrim`) moves the layer on the page to keep the art
+    still, and an auto layout puts it straight back, so the shown box changed while the position did
+    not — the art shifted on every stroke, and closed it was cut to the wrong box, which read as
+    "the edit came back old" or "Esc undid it". Fix: a layer an auto layout places shows the **whole
+    board** (no trim, nothing moved); a layer marked absolute hugs as before. Tests:
+    `pixel_tests/trim.rs` (two) and `game/pixel/tests.rs` (in a layout across open-draw-leave, an
+    edit surviving Esc and reopening, undo taking back only that edit).
+  - **The brush shape sits with the brush size** (`game/pixel/pill.rs`): one field reading
+    `− n +`, a hairline, then two cells (square, circle) with the chosen one lit on an accent tint,
+    tooltips on both halves. `[` / `]` and the shape shortcut still work. He had not found the old
+    separate toggle.
+  - Checked in the real app on a scratch file (a 16 × 16 "Coin" in a horizontal auto layout next to a
+    rectangle): the title over the board, the whole board shown inside the row, a pixel drawn at
+    (0, 0) leaving `absoluteBounds` at exactly 188, 116, 96 × 96, the art still there after Esc and
+    after reopening, and the new brush field in the pill.
 
 ## Decisions
 - G16 pixel art, details the spec left open (chosen as a pixel artist would expect):
@@ -1123,6 +1154,17 @@
       axes on, a ring where they cross drags both. Handles win over the board's sides.
     - The pixel Text tool (text drawn into pixels) was started and cancelled by Adriel before it was
       committed; Pixel text and pixel fonts stay as they were.
+  - G16.8 pixel feedback from Adriel (2026-11-13):
+    - Pixel fonts and the Pixel button starter are **dropped, not hidden**: the model, the commands
+      and their files are gone, so nothing carries their weight. Old files keep opening (an unknown
+      plugin-data key is ignored and a missing font family falls back), but they do not come back.
+    - **A sprite an auto layout places is its whole board.** Hugging and a layout cannot both decide
+      where a layer sits, and the artist already sized the board, so inside a layout the slot is the
+      board. Outside one, hugging is unchanged; `absolute` on the layer brings hugging back.
+    - The sprite's title is a canvas label, not a new widget: it joins `ToolState::labels`, so
+      select and drag behave exactly as a frame's own name does, with no new command.
+    - The brush shape joins the size field rather than keeping its own button (Aseprite reads that
+      way, and he looked for it there); the shortcuts stay so nobody loses them.
 - G11.4 movement (recommended option each time):
   - No physics engine: one cylinder against the world's axis-aligned boxes (two passes) plus the
     heightfield; a few hundred boxes per step is cheap at 60 Hz and the same on wasm.
@@ -1592,9 +1634,7 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     frames to the clock (Prototype and Play redraw when a frame is due).
   - G16.5: `engine/src/tests.rs`: `pixel.export` in the junk-sweep skip list (it writes files);
     `crates/pixel/Cargo.toml` (ours) uses the workspace `image` for GIFs.
-  - G16.6: `crates/text/src/fontdb.rs`: `replace_font_bytes` and `FontDb::replace_bytes` (a font
-    made in the app takes its family's slot instead of joining it), re-exported in
-    `crates/text/src/lib.rs`; `icons.rs` / `icons/draw.rs`: `Shade` (in `draw_pixel_art`).
+  - G16.6: `icons.rs` / `icons/draw.rs`: `Shade` (in `draw_pixel_art`).
     Follow-ups: `widgets/colorpicker.rs`: `PickerTarget::Pixel {which}` (`current_paint`, `write`,
     no paint-type or blend rows, `game::pixel::colors::picker_rows` before "On this page");
     `icons.rs` / `icons/draw.rs`: `Timeline`.
@@ -1602,6 +1642,10 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     in art pixels, in Pixel mode); `panels/right.rs`: the 9-slice section moved above Export;
     `canvas/input.rs`: the Pixel mode hook returns `!game::pixel::has_cursor` (its own pointer
     over a mirror handle or a board side stays).
+  - G16.8: no new hook, and one **removed**: pixel fonts are gone, so `crates/text/src/fontdb.rs`
+    `replace_font_bytes` / `FontDb::replace_bytes` and their re-export in `crates/text/src/lib.rs`
+    were deleted (upstream text is untouched again). The sprite's title reuses the engine's own
+    `tools::labels` list from our module, so the canvas needed no change.
 - G17 (3D rotation of layers): workspace `Cargo.toml` (`figcraft-tilt`), `xtask/src/layers.rs`
   (`tilt` at L0), `crates/doc/Cargo.toml` (depends on `figcraft-tilt`), `crates/doc/src/lib.rs`
   (`pub mod tilt`); `crates/doc/src/geometry.rs` `hit_rec` and `layers_at` (the point goes back

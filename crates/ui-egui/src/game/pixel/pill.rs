@@ -13,15 +13,17 @@ use crate::icons::Icon;
 use crate::theme::Tokens;
 use crate::toolbar::{DIVIDER, DONE_W, GAP, PAD, TOOL_CELL, divider, done_button, pill, pretty_shortcut, tool_cell};
 
-/// The brush size field's width.
+/// The brush size field's width (the − n + part).
 const SIZE_W: f32 = 64.0;
+/// Each of the two brush shape cells joined to it (G16.8: square or round, where the size is set).
+const SHAPE_CELL: f32 = 22.0;
 /// The zoom label's width.
 const ZOOM_W: f32 = 40.0;
 
 /// An option button in the pill.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Opt {
-    Shape,
+    /// The brush: its size (− n +) and its shape (square or round) joined into one control.
     Size,
     Perfect,
     Shade,
@@ -41,7 +43,7 @@ enum Opt {
 
 impl Opt {
     fn width(self) -> f32 {
-        if self == Opt::Size { SIZE_W } else { TOOL_CELL }
+        if self == Opt::Size { SIZE_W + 2.0 * SHAPE_CELL } else { TOOL_CELL }
     }
 }
 
@@ -49,9 +51,9 @@ impl Opt {
 fn options(tool: Tool) -> Vec<Opt> {
     let mut v = Vec::new();
     match tool {
-        Tool::Pencil => v.extend([Opt::Shape, Opt::Size, Opt::Perfect, Opt::Shade]),
-        Tool::Eraser | Tool::Line | Tool::Replace => v.extend([Opt::Shape, Opt::Size]),
-        Tool::Rect | Tool::Ellipse => v.extend([Opt::Shape, Opt::Size, Opt::Filled]),
+        Tool::Pencil => v.extend([Opt::Size, Opt::Perfect, Opt::Shade]),
+        Tool::Eraser | Tool::Line | Tool::Replace => v.push(Opt::Size),
+        Tool::Rect | Tool::Ellipse => v.extend([Opt::Size, Opt::Filled]),
         Tool::Bucket | Tool::Wand => v.push(Opt::Contiguous),
         Tool::Eyedropper | Tool::Marquee | Tool::Lasso | Tool::Move => {}
     }
@@ -174,6 +176,24 @@ fn edit_pill(app: &mut FigApp, ui: &mut Ui) {
     }
 }
 
+/// Where the brush control's two shape cells sit on screen (square, round), so the tests can click
+/// them as a person would. None when the tool in hand has no brush.
+#[cfg(test)]
+pub(super) fn shape_cells(app: &FigApp) -> Option<[Rect; 2]> {
+    let (opts, zoom_shown) = fit(options(app.pixel.tool), app.canvas.rect.width() - 16.0);
+    let rect = crate::toolbar::pill_rect(app.canvas.rect, pill_width(&opts, zoom_shown));
+    let cy = rect.center().y;
+    let mut x = rect.min.x + PAD + Tool::SLOTS.len() as f32 * (TOOL_CELL + GAP) + DIVIDER + GAP + TOOL_CELL + GAP + DIVIDER + GAP;
+    for o in opts {
+        if o == Opt::Size {
+            let left = x + SIZE_W + 1.0;
+            return Some([0.0, 1.0].map(|i| Rect::from_min_size(pos2(left + i * SHAPE_CELL, cy - TOOL_CELL / 2.0), vec2(SHAPE_CELL, TOOL_CELL))));
+        }
+        x += o.width() + GAP;
+    }
+    None
+}
+
 /// Screen pixels per art pixel of the sprite being edited.
 fn pixel_zoom(app: &mut FigApp) -> f32 {
     let Mode::Edit(id) = app.pixel.mode else { return 1.0 };
@@ -209,59 +229,76 @@ fn swatches(app: &mut FigApp, ui: &mut Ui, r: Rect, t: &Tokens) {
     app.picker_control(PickerTarget::Pixel { which: 1 }, &resp2);
 }
 
+/// The brush control (G16.8): its size (− n +, scroll or drag sideways) and, joined to it in the
+/// same field, the two shapes — a square and a round brush, the one in hand lit. The owner looked
+/// for the shape where he sets the size, as in Aseprite, so that is where it is.
+fn brush_control(app: &mut FigApp, ui: &mut Ui, r: Rect, t: &Tokens) {
+    let field = r.shrink2(vec2(0.0, 3.0));
+    ui.painter().rect_filled(field, CornerRadius::same(5), t.field);
+    let size_r = Rect::from_min_size(r.min, vec2(SIZE_W, r.height()));
+    let resp = ui.interact(size_r, ui.scope_id().with("pixel_size"), Sense::click_and_drag()).on_hover_text("Brush size  ·  [ and ]");
+    let minus = Rect::from_min_size(size_r.min, vec2(18.0, r.height()));
+    let plus = Rect::from_min_size(pos2(size_r.max.x - 18.0, r.min.y), vec2(18.0, r.height()));
+    let font = crate::theme::regular(12.0);
+    ui.painter().text(minus.center(), Align2::CENTER_CENTER, "−", font.clone(), t.icon_secondary);
+    ui.painter().text(plus.center(), Align2::CENTER_CENTER, "+", font.clone(), t.icon_secondary);
+    ui.painter().text(size_r.center(), Align2::CENTER_CENTER, format!("{}", app.pixel.brush.size), font, t.text);
+    if resp.clicked()
+        && let Some(p) = resp.interact_pointer_pos()
+    {
+        step_brush(&mut app.pixel, p.x > size_r.center().x);
+    }
+    let scroll = if resp.hovered() { ui.input(|i| i.smooth_scroll_delta.y) } else { 0.0 };
+    if scroll != 0.0 {
+        step_brush(&mut app.pixel, scroll > 0.0);
+    }
+    if resp.dragged() {
+        let dx = resp.drag_delta().x;
+        let acc = ui.data_mut(|d| {
+            let a = d.get_temp_mut_or_default::<f32>(egui::Id::unique("pixel_size_drag"));
+            *a += dx;
+            let steps = (*a / 6.0).trunc();
+            *a -= steps * 6.0;
+            steps as i32
+        });
+        for _ in 0..acc.unsigned_abs() {
+            step_brush(&mut app.pixel, acc > 0);
+        }
+    }
+    // A hairline between the size and the shapes, so they read as two halves of one control.
+    let line = Stroke::new(1.0, t.border);
+    ui.painter().line_segment([pos2(size_r.max.x, field.min.y + 4.0), pos2(size_r.max.x, field.max.y - 4.0)], line);
+    for (i, shape) in [BrushShape::Square, BrushShape::Circle].into_iter().enumerate() {
+        let cell = Rect::from_min_size(pos2(size_r.max.x + 1.0 + i as f32 * SHAPE_CELL, r.min.y), vec2(SHAPE_CELL, r.height()));
+        let on = app.pixel.brush.shape == shape;
+        let tip = if shape == BrushShape::Square { "Square brush" } else { "Round brush" };
+        let resp = ui
+            .interact(cell, ui.scope_id().with(("pixel_shape", i)), Sense::click())
+            .on_hover_text(format!("Brush shape: {tip}\nThe pencil, eraser, line and shapes draw with it"));
+        let lit = cell.shrink2(vec2(2.0, 5.0));
+        if on {
+            ui.painter().rect_filled(lit, CornerRadius::same(4), crate::theme::canvas_accent(ui.ctx()).gamma_multiply(0.22));
+        } else if resp.hovered() {
+            ui.painter().rect_filled(lit, CornerRadius::same(4), t.hover);
+        }
+        let col = if on { t.icon } else { t.icon_secondary };
+        let c = cell.center();
+        if shape == BrushShape::Circle {
+            ui.painter().circle_filled(c, 5.5, col);
+        } else {
+            ui.painter().rect_filled(Rect::from_center_size(c, vec2(10.0, 10.0)), CornerRadius::ZERO, col);
+        }
+        if resp.clicked() && !on {
+            toggle_shape(&mut app.pixel);
+        }
+    }
+}
+
 /// One option button.
 fn option(app: &mut FigApp, ui: &mut Ui, o: Opt, r: Rect, t: &Tokens) {
     let e = &mut app.pixel;
     match o {
-        Opt::Size => {
-            let resp = ui.interact(r, ui.scope_id().with("pixel_size"), Sense::click_and_drag()).on_hover_text("Brush size  [ ]");
-            ui.painter().rect_filled(r.shrink2(vec2(0.0, 3.0)), CornerRadius::same(5), t.field);
-            let minus = Rect::from_min_size(r.min, vec2(18.0, r.height()));
-            let plus = Rect::from_min_size(pos2(r.max.x - 18.0, r.min.y), vec2(18.0, r.height()));
-            let font = crate::theme::regular(12.0);
-            ui.painter().text(minus.center(), Align2::CENTER_CENTER, "−", font.clone(), t.icon_secondary);
-            ui.painter().text(plus.center(), Align2::CENTER_CENTER, "+", font.clone(), t.icon_secondary);
-            ui.painter().text(r.center(), Align2::CENTER_CENTER, format!("{}", e.brush.size), font, t.text);
-            if resp.clicked()
-                && let Some(p) = resp.interact_pointer_pos()
-            {
-                step_brush(e, p.x > r.center().x);
-            }
-            let scroll = if resp.hovered() { ui.input(|i| i.smooth_scroll_delta.y) } else { 0.0 };
-            if scroll != 0.0 {
-                step_brush(e, scroll > 0.0);
-            }
-            if resp.dragged() {
-                let dx = resp.drag_delta().x;
-                let acc = ui.data_mut(|d| {
-                    let a = d.get_temp_mut_or_default::<f32>(egui::Id::unique("pixel_size_drag"));
-                    *a += dx;
-                    let steps = (*a / 6.0).trunc();
-                    *a -= steps * 6.0;
-                    steps as i32
-                });
-                for _ in 0..acc.unsigned_abs() {
-                    step_brush(e, acc > 0);
-                }
-            }
-        }
-        Opt::Shape => {
-            let round = e.brush.shape == BrushShape::Circle;
-            let resp =
-                ui.interact(r, ui.scope_id().with("pixel_shape"), Sense::click()).on_hover_text(if round { "Round brush" } else { "Square brush" });
-            if resp.hovered() {
-                ui.painter().rect_filled(r, CornerRadius::same(5), t.hover);
-            }
-            let c = r.center();
-            if round {
-                ui.painter().circle_filled(c, 6.0, t.icon);
-            } else {
-                ui.painter().rect_filled(Rect::from_center_size(c, vec2(11.0, 11.0)), CornerRadius::ZERO, t.icon);
-            }
-            if resp.clicked() {
-                toggle_shape(e);
-            }
-        }
+        Opt::Size => brush_control(app, ui, r, t),
         Opt::FlipH | Opt::FlipV | Opt::Rotate | Opt::Outline => {
             let outline = json!({"color": canvas::to_hex(e.colors[0])});
             let (icon, tip, command, params) = match o {

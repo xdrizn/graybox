@@ -225,13 +225,17 @@ Pixel layers edited in place in a Pixel mode, Aseprite-style standard tools, sma
   brush, mirror with an axis, grid, undo.
 - [x] G16.2 Selection, transform and colour: marquee, lasso, wand, move, outline, replace colour,
   palette tied to styles and variables, Selection colours, sprite layers.
-- [x] G16.3 Smart resize, pixel 9-slice, insets as padding, Pixel text, Pixel button starter, tile mode,
+- [x] G16.3 Smart resize, pixel 9-slice, insets as padding, Pixel text, tile mode,
   components and palette-swap variants.
 - [x] G16.4 Animation: timeline, durations, onion skin, tags, playback in Prototype and Play.
 - [x] G16.5 Export and import: exporter trait, PNG, sheet and JSON, Unity with Live Link, PNG and sheet import.
-- [x] G16.6 Polish: pixel fonts, shade, Claude MCP tools, performance, guide, installed copy.
+- [x] G16.6 Polish: shade, Claude MCP tools, performance, guide, installed copy.
 - [x] G16.7 Pixel feedback: the board's size in Pixel mode and the layer hugging its art in Design,
   9-slice above Export and with components, easy mirror handles.
+- [x] G16.8 Pixel feedback (2026-11-13): the Pixel button starter and pixel fonts dropped (never
+  asked for; Pixel text on ordinary text layers stays), the open sprite titled above its board like a
+  frame, the art no longer jumping when a sprite inside an auto layout is drawn on, the brush shape
+  picked next to the brush size.
 
 ### G17 — 3D rotation of frames (owner's request, 2026-11-13)
 Spec: [`specs/2026-11-13-frames-3d-design.md`](specs/2026-11-13-frames-3d-design.md). Diegetic, tilted HUD

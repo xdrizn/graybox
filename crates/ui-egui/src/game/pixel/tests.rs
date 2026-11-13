@@ -793,3 +793,41 @@ fn a_sprite_in_an_auto_layout_keeps_its_place_across_opening_drawing_and_leaving
     assert_eq!(placed(&u), before, "leaving moves nothing, and it is still in the auto layout");
     assert_eq!(pixel(&mut u, id, 4, 4).as_deref(), Some("#ff0000"), "the art it had is untouched");
 }
+
+/// The brush shape sits where the brush size is set, as in Aseprite (G16.8): two cells joined to
+/// the size field, square and round, the one in hand lit. The size keys still work.
+#[test]
+fn the_brush_shape_sits_with_the_brush_size_and_can_be_picked() {
+    use figcraft_pixel::paint::BrushShape;
+    let (mut u, _) = editing();
+    assert_eq!(u.app.pixel.tool, Tool::Pencil);
+    assert_eq!(u.app.pixel.brush.shape, BrushShape::Square, "it starts square");
+    let cells = super::pill::shape_cells(&u.app).expect("the pencil has a brush control");
+    let [square, round] = cells;
+    assert!(round.min.x > square.min.x && (round.min.x - square.max.x).abs() < 1.0, "the two cells sit side by side: {cells:?}");
+    // Picking the round brush.
+    let p = round.center();
+    press(&mut u, p, PointerButton::Primary, true);
+    press(&mut u, p, PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert_eq!(u.app.pixel.brush.shape, BrushShape::Circle);
+    // Clicking the one in hand again leaves it alone.
+    press(&mut u, p, PointerButton::Primary, true);
+    press(&mut u, p, PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert_eq!(u.app.pixel.brush.shape, BrushShape::Circle);
+    // And back to the square.
+    let p = square.center();
+    press(&mut u, p, PointerButton::Primary, true);
+    press(&mut u, p, PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert_eq!(u.app.pixel.brush.shape, BrushShape::Square);
+    // The size keys still size the brush, and the shape is kept.
+    key(&mut u, Key::CloseBracket, false);
+    key(&mut u, Key::CloseBracket, false);
+    assert_eq!((u.app.pixel.brush.size, u.app.pixel.brush.shape), (3, BrushShape::Square));
+    // The eyedropper has no brush, so no shape cells.
+    key(&mut u, Key::I, false);
+    u.frame(vec![]);
+    assert!(super::pill::shape_cells(&u.app).is_none());
+}
