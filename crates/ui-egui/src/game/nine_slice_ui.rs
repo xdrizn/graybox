@@ -1,4 +1,4 @@
-//! Graybox: the 9-slice section of the Design panel (under Layout) and its cuts on the canvas.
+//! Graybox: the 9-slice section of the Design panel (just above Export) and its cuts on the canvas.
 //! The section's + turns 9-slice on (− turns it off) and shows the four cuts as fields; on the
 //! canvas the selected layer shows its cuts as dashed lines, each one dragged to move it.
 
@@ -176,5 +176,49 @@ fn dashed(painter: &egui::Painter, a: Pos2, z: Pos2, stroke: Stroke) {
         let e = (s + dash).min(len);
         painter.line_segment([a + dir * s, a + dir * e], stroke);
         s += dash + gap;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use figcraft_engine::Session;
+    use serde_json::json;
+
+    use crate::layers_drag_tests::Ui;
+
+    /// The top of each text painted in the next frame.
+    fn painted(u: &mut Ui) -> Vec<(String, f32)> {
+        fn walk(shape: &egui::Shape, out: &mut Vec<(String, f32)>) {
+            match shape {
+                egui::Shape::Text(t) => out.push((t.galley.text().to_string(), t.visual_bounding_rect().min.y)),
+                egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+                _ => {}
+            }
+        }
+        let mut frame = u.frame_output(vec![]);
+        let mut out = Vec::new();
+        for c in &frame.shapes {
+            walk(&c.shape, &mut out);
+        }
+        frame.textures_delta.clear();
+        out
+    }
+
+    /// G16.7: the 9-slice section sits just above Export, below Effects (it was under Layout).
+    #[test]
+    fn the_9_slice_section_sits_just_above_export() {
+        let mut s = Session::new();
+        let f = s.execute("frame.create", &json!({"x": 0, "y": 0, "width": 100, "height": 60})).unwrap()["id"].as_u64().unwrap();
+        s.execute("game.nineSlice.set", &json!({"ids": [f], "enabled": true})).unwrap();
+        s.execute("export.add", &json!({"ids": [f]})).unwrap();
+        s.execute("select.set", &json!({"ids": [f]})).unwrap();
+        let mut u = Ui::new(s);
+        u.screen = egui::vec2(1440.0, 2400.0);
+        u.frame(vec![]);
+        let texts = painted(&mut u);
+        let y = |name: &str| texts.iter().find(|(t, _)| t == name).map(|(_, y)| *y).unwrap_or_else(|| panic!("{name} in {texts:?}"));
+        assert!(y("Layout") < y("Effects"));
+        assert!(y("Effects") < y("9-slice"), "below Effects");
+        assert!(y("9-slice") < y("Export"), "above Export");
     }
 }

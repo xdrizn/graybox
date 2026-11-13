@@ -836,6 +836,7 @@
       the layer (`art_to_page` offsets by the trim). The Pixel art section reads "Board: W × H art
       pixels". A 9-sliced layer or an instance is not a board (no sides to drag, no W/H in art
       pixels).
+    - The 9-slice section sits just above Export (it was under Layout).
     - The pixel Text tool (text drawn into pixels) was started and cancelled by Adriel before it was
       committed; Pixel text and pixel fonts stay as they were.
   - Jog is the default speed (5 m/s), a light stick walks slower, Shift runs (8.5), crouch (2.4) only
@@ -1064,8 +1065,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - 9-slice (`crates/doc/src/nine_slice.rs`, `pub mod` in doc `lib.rs`; stored as plugin data
   `graybox.nineSlice`): `crates/render/src/draw.rs` `draw_layer` (now `pub(crate)`) calls
   `nine_slice::draw` (new, `mod` in render `lib.rs`); `cmd/props.rs` `resize_node` keeps a sliced
-  layer's children put; `game.nineSlice.set` in `cmd/game.rs`; UI: `panels/right.rs` (section under
-  Layout), `canvas.rs` (cuts drawn), `canvas/input.rs` (cuts dragged) → `game::nine_slice_ui`.
+  layer's children put; `game.nineSlice.set` in `cmd/game.rs`; UI: `panels/right.rs` (section just
+  above Export since G16.7), `canvas.rs` (cuts drawn), `canvas/input.rs` (cuts dragged) →
+  `game::nine_slice_ui`.
 - Pseudo-localization: `crates/engine/src/pseudo.rs` (new, `pub mod`); `canvas/render.rs` draws
   `game::pseudo_view::view(doc)`; `canvas.rs` banner; switch in `game::prototype_section`.
 - Unity export: `crates/engine/src/unity_export.rs` (new), `game.unity.export` in `cmd/game.rs`
@@ -1211,8 +1213,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     no paint-type or blend rows, `game::pixel::colors::picker_rows` before "On this page");
     `icons.rs` / `icons/draw.rs`: `Timeline`.
   - G16.7: `panels/layout_panel.rs` `dimensions`: `game::pixel::board::dims_row` (a board's W and H
-    in art pixels, in Pixel mode); `canvas/input.rs`: the Pixel mode hook returns
-    `!game::pixel::has_cursor` (its own pointer over a mirror handle or a board side stays).
+    in art pixels, in Pixel mode); `panels/right.rs`: the 9-slice section moved above Export;
+    `canvas/input.rs`: the Pixel mode hook returns `!game::pixel::has_cursor` (its own pointer
+    over a mirror handle or a board side stays).
 
 - The G1–G6 commit 32b0bc22 changed more upstream files (present/*, toolbar, theme, services,
   prefs, proto model…) without listing them here; to list.

@@ -85,7 +85,8 @@ with **Done**, `Esc` or `Enter`.
 
 - **9-slice** on a pixel layer cuts on whole art pixels; the corners stay and the edges and middle
   repeat (or stretch) by whole pixels, so a button frame grows without blurring. On a frame with
-  auto layout the cuts can be its padding. The cuts are measured on the trimmed art.
+  auto layout the cuts can be its padding. The cuts are measured on the trimmed art. The 9-slice
+  section sits just above Export.
 - **Pixel text**: any text layer, drawn sharp on the art-pixel grid of the pixel art around it.
 - **Pixel button**: a component set with Default, Hover and Pressed states that grows with its label.
 - **Palette swap**: in Pixel colors, pick a colour, then **As variant** makes a new variant

@@ -293,10 +293,6 @@ fn design(app: &mut FigApp, ui: &mut Ui) {
     if !points_selected {
         crate::layout_panel::layout_section(app, ui, &shown, &sel);
         widgets::separator(ui);
-        // Graybox: 9-slice, under Layout.
-        if crate::game::nine_slice_ui::section(app, ui, &shown, &sel) {
-            widgets::separator(ui);
-        }
     }
     if vector_edit_none && arc_section(app, ui, &shown, &sel) || points_section(app, ui, &shown, &sel) {
         widgets::separator(ui);
@@ -328,6 +324,10 @@ fn design(app: &mut FigApp, ui: &mut Ui) {
     }
     if crate::selection_cache::every(&shown, &sel, |n| n.kind.is_frame_like()) {
         grids(app, ui, &shown, &sel);
+        widgets::separator(ui);
+    }
+    // Graybox: 9-slice, just above Export (G16.7: it used to sit under Layout).
+    if !points_selected && crate::game::nine_slice_ui::section(app, ui, &shown, &sel) {
         widgets::separator(ui);
     }
     crate::export_panel::section(app, ui, &shown, &sel);
