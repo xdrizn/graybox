@@ -200,6 +200,10 @@ pub struct Editor {
     pub(crate) filled: bool,
     pub(crate) contiguous: bool,
     pub(crate) grid: bool,
+    /// The sprite's background while it is edited (G16.8): off, the checkerboard behind the art
+    /// goes and the canvas shows through, so a reference under the sprite can be drawn over. Only
+    /// how the board is shown: the pixels, the export and the layer outside Pixel mode are the same.
+    pub(crate) background: bool,
     /// The layer drawn on (id) and the frame (index); None: the top layer.
     pub(crate) layer: Option<u32>,
     pub(crate) frame: usize,
@@ -264,6 +268,7 @@ impl Default for Editor {
             filled: false,
             contiguous: true,
             grid: true,
+            background: true,
             layer: None,
             frame: 0,
             gesture: None,

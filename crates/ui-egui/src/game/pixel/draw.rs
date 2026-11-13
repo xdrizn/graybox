@@ -117,25 +117,23 @@ fn draw_edit(app: &mut FigApp, painter: &egui::Painter, id: figcraft_doc::NodeId
     let cell = if zoom >= 8.0 { 1.0 } else { (8.0 / zoom.max(0.01)).ceil() };
     let q = screen_quad(app, xf, w, h);
     // Tile mode: the sprite repeated around itself, dimmed, to check it tiles.
+    // The sprite's background (G16.8): off, the checkerboard is left out and the canvas shows
+    // through the empty pixels, so what sits under the sprite can be traced.
+    let back = app.pixel.background;
+    let checker_uv = Rect::from_min_max(pos2(0.0, 0.0), pos2((w / f64::from(cell)) as f32 / 2.0, (h / f64::from(cell)) as f32 / 2.0));
     if app.pixel.tile {
         for (dx, dy) in [(-1.0, -1.0), (0.0, -1.0), (1.0, -1.0), (-1.0, 0.0), (1.0, 0.0), (-1.0, 1.0), (0.0, 1.0), (1.0, 1.0)] {
             let moved = xf * Affine::translate((dx * w, dy * h));
             let mq = screen_quad(app, moved, w, h);
-            painter.add(quad(
-                check,
-                mq,
-                Rect::from_min_max(pos2(0.0, 0.0), pos2((w / f64::from(cell)) as f32 / 2.0, (h / f64::from(cell)) as f32 / 2.0)),
-                Color32::from_gray(150),
-            ));
+            if back {
+                painter.add(quad(check, mq, checker_uv, Color32::from_gray(150)));
+            }
             painter.add(quad(tex, mq, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::from_white_alpha(170)));
         }
     }
-    painter.add(quad(
-        check,
-        q,
-        Rect::from_min_max(pos2(0.0, 0.0), pos2((w / f64::from(cell)) as f32 / 2.0, (h / f64::from(cell)) as f32 / 2.0)),
-        Color32::WHITE,
-    ));
+    if back {
+        painter.add(quad(check, q, checker_uv, Color32::WHITE));
+    }
     onion(app, &ctx, painter, id, &d, q);
     painter.add(quad(tex, q, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE));
     if app.pixel.grid && zoom >= GRID_FROM {

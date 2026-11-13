@@ -831,3 +831,34 @@ fn the_brush_shape_sits_with_the_brush_size_and_can_be_picked() {
     u.frame(vec![]);
     assert!(super::pill::shape_cells(&u.app).is_none());
 }
+
+/// The sprite's background can be turned off next to the grid (G16.8): the checkerboard goes, so
+/// the canvas shows through the empty pixels. The art itself is not touched.
+#[test]
+fn the_sprite_background_can_be_turned_off_in_the_pill() {
+    let (mut u, id) = editing();
+    u.app.run("pixel.stroke", json!({"id": id, "points": [[3, 3]], "color": "#ff0000"}));
+    u.frame(vec![]);
+    let before = store::load(&u.app.session.doc().unwrap().node(figcraft_doc::NodeId(id)).unwrap().plugin_data);
+    let (cell, on) = super::pill::background_cell(&u.app).expect("the background toggle is in the pill");
+    assert!(on, "the background is on to start with");
+    let p = cell.center();
+    press(&mut u, p, PointerButton::Primary, true);
+    press(&mut u, p, PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert_eq!(super::pill::background_cell(&u.app).map(|(_, on)| on), Some(false), "clicking it turns the background off");
+    // Only how the board is shown: the sprite and its pixels are the same.
+    let after = store::load(&u.app.session.doc().unwrap().node(figcraft_doc::NodeId(id)).unwrap().plugin_data);
+    assert_eq!(format!("{before:?}"), format!("{after:?}"), "the sprite itself is untouched");
+    assert_eq!(pixel(&mut u, id, 3, 3).as_deref(), Some("#ff0000"));
+    // Drawing goes on working with it off, and clicking again brings it back.
+    let q = at_board(&u, id, 5.0, 5.0);
+    press(&mut u, q, PointerButton::Primary, true);
+    press(&mut u, q, PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert!(pixel(&mut u, id, 5, 5).is_some(), "the pencil still paints");
+    press(&mut u, p, PointerButton::Primary, true);
+    press(&mut u, p, PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert_eq!(super::pill::background_cell(&u.app).map(|(_, on)| on), Some(true));
+}

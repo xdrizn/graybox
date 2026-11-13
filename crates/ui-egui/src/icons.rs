@@ -137,6 +137,8 @@ icons! {
     Shade,
     /// Graybox: the animation timeline (a strip of frames over a playhead).
     Timeline,
+    /// Graybox: the sprite's background (a checkerboard square).
+    Checkerboard,
     Home,
     Bell,
     Panels,

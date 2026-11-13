@@ -35,6 +35,8 @@ enum Opt {
     Mirror,
     Tile,
     Grid,
+    /// The checkerboard behind the art, so the canvas shows through instead (G16.8).
+    Background,
     FlipH,
     FlipV,
     Rotate,
@@ -63,7 +65,7 @@ fn options(tool: Tool) -> Vec<Opt> {
     } else if !matches!(tool, Tool::Eyedropper | Tool::Bucket) {
         v.extend([Opt::MirrorX, Opt::MirrorY]);
     }
-    v.extend([Opt::Tile, Opt::Grid]);
+    v.extend([Opt::Tile, Opt::Grid, Opt::Background]);
     v
 }
 
@@ -180,14 +182,27 @@ fn edit_pill(app: &mut FigApp, ui: &mut Ui) {
 /// them as a person would. None when the tool in hand has no brush.
 #[cfg(test)]
 pub(super) fn shape_cells(app: &FigApp) -> Option<[Rect; 2]> {
+    let (r, _) = opt_rect(app, Opt::Size)?;
+    let left = r.min.x + SIZE_W + 1.0;
+    Some([0.0, 1.0].map(|i| Rect::from_min_size(pos2(left + i * SHAPE_CELL, r.min.y), vec2(SHAPE_CELL, TOOL_CELL))))
+}
+
+/// The cell of the sprite-background toggle, and whether it is lit (tests, G16.8).
+#[cfg(test)]
+pub(super) fn background_cell(app: &FigApp) -> Option<(Rect, bool)> {
+    opt_rect(app, Opt::Background).map(|(r, _)| (r, app.pixel.background))
+}
+
+/// Where option `which` sits in the pill as it is laid out now, and its width (tests).
+#[cfg(test)]
+fn opt_rect(app: &FigApp, which: Opt) -> Option<(Rect, f32)> {
     let (opts, zoom_shown) = fit(options(app.pixel.tool), app.canvas.rect.width() - 16.0);
     let rect = crate::toolbar::pill_rect(app.canvas.rect, pill_width(&opts, zoom_shown));
     let cy = rect.center().y;
     let mut x = rect.min.x + PAD + Tool::SLOTS.len() as f32 * (TOOL_CELL + GAP) + DIVIDER + GAP + TOOL_CELL + GAP + DIVIDER + GAP;
     for o in opts {
-        if o == Opt::Size {
-            let left = x + SIZE_W + 1.0;
-            return Some([0.0, 1.0].map(|i| Rect::from_min_size(pos2(left + i * SHAPE_CELL, cy - TOOL_CELL / 2.0), vec2(SHAPE_CELL, TOOL_CELL))));
+        if o == which {
+            return Some((Rect::from_min_size(pos2(x, cy - TOOL_CELL / 2.0), vec2(o.width(), TOOL_CELL)), o.width()));
         }
         x += o.width() + GAP;
     }
@@ -327,6 +342,11 @@ fn option(app: &mut FigApp, ui: &mut Ui, o: Opt, r: Rect, t: &Tokens) {
                     "Mirror: click for left-right, up-down, both, off (drag the pink handle to move the axis)",
                 ),
                 Opt::Tile => (Icon::Tiles, e.tile, "Tile mode: drawing wraps round the edges"),
+                Opt::Background => (
+                    Icon::Checkerboard,
+                    e.background,
+                    "Sprite background: off, the canvas shows through the empty pixels (what is under the sprite can be traced)",
+                ),
                 _ => (Icon::Grid, e.grid, "Pixel grid"),
             };
             if tool_cell(ui, t, r, ("pixel_opt", tip), icon, on, tip).clicked() {
@@ -346,6 +366,7 @@ fn option(app: &mut FigApp, ui: &mut Ui, o: Opt, r: Rect, t: &Tokens) {
                         }
                     }
                     Opt::Tile => e.tile = !e.tile,
+                    Opt::Background => e.background = !e.background,
                     _ => e.grid = !e.grid,
                 }
             }

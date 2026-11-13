@@ -9,6 +9,8 @@ Graybox desenha pixel art direto no canvas, para UI de jogo:
 - **Modo Pixel** (botão "Pixel" no seletor de modos, duplo clique na camada ou "Edit pixels"):
   lápis, borracha, balde, conta-gotas, linha, retângulo, elipse, seleções, mover, espelho, modo
   tile, grade, sombra (Shade) e duas cores (botão direito usa a segunda).
+- **Fundo do sprite**: o botão de xadrez (ao lado da grade) desliga o fundo; aí o que está embaixo
+  do sprite no canvas aparece através dos pixels vazios, para desenhar por cima de uma referência.
 - **Cores do Graybox**: as duas cores abrem o seletor de cor padrão, com os estilos de cor e as
   variáveis do arquivo; a cor lembra de que estilo veio, e se o estilo mudar o painel oferece
   "Update from styles". Paletas `.gpl`/`.hex` viram estilos de cor (Palette > Import…).
@@ -77,6 +79,10 @@ with **Done**, `Esc` or `Enter`.
   (the pointer turns into a resize arrow over them); with both on, the ring where they cross drags
   both at once. Tile mode wraps drawing round the edges and shows the sprite repeated around
   itself; the pixel grid shows when zoomed in.
+- **The sprite's background** (the checkerboard button, next to the grid): turn it off and the empty
+  pixels are see-through, so whatever sits under the sprite on the canvas — a reference picture, a
+  frame, a vector — shows while you draw over it. It only changes what you see while editing: the
+  sprite's pixels, its export and the layer outside Pixel mode are the same.
 - Shift-click draws a line from the last point. `Ctrl+A`, `Ctrl+D`, `Ctrl+Shift+I` select all,
   none, invert; `Ctrl+C`/`X`/`V` copy, cut and paste pixels; `Delete` clears.
 - **Shade**: with the pencil's Shade option on, each pixel you pass over moves one colour along a
