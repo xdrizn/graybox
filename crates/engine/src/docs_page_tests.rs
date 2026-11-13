@@ -5,7 +5,7 @@ use figcraft_doc::docs::{Block, BlockId, BlockKind, Run, Table};
 use crate::docs_page::{Info, Item, Layout, PAGE_H, PAGE_W, layout};
 
 fn info(closed: bool, code: Option<&'static str>) -> Info<'static> {
-    Info { title: "Spec", icon: "", number: 1, closed, code }
+    Info { title: "Spec", icon: "", number: 1, closed, code, ..Info::default() }
 }
 
 fn block(id: u64, kind: BlockKind, text: &str) -> Block {

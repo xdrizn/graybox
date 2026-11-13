@@ -51,6 +51,8 @@ pub mod docs;
 pub mod page_tree;
 // Graybox: Markdown export of a document version (G13.3).
 pub mod docs_md;
+// Graybox: closing, versions and signatures of documents (G13.4).
+pub mod docs_version;
 pub use corner_style::CornerStyle;
 pub use styles::*;
 pub use text::*;
@@ -1377,6 +1379,8 @@ mod diff_tests;
 mod docs_md_tests;
 #[cfg(test)]
 mod docs_tests;
+#[cfg(test)]
+mod docs_version_tests;
 #[cfg(test)]
 mod effects_tests;
 #[cfg(test)]

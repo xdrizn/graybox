@@ -218,6 +218,50 @@
   Not checked: colour emoji (egui's font is monochrome), emoji in a document card or PDF title (G13.4).
   Code review (high) caught and fixed: the picker was keyed by the row's place, so a list that changed
   while it was open could send the pick to another page (now keyed by the page or document).
+- G13.4 and G13.7 (2026-11-13): closing a version, new versions, compare, the decision log, "For
+  signature" and signing on this computer.
+  - Close version… (asks first) records the SHA-256 fingerprint of what the version says (its blocks,
+    "for signature" and signers: `docs_version::canonical`) and the closing time, and the version can no
+    longer change. Its short code `GBX-XXXX-XXXX` (the first 40 bits in Crockford base 32) shows in the
+    version bar, on every PDF footer and in the Markdown. New version: a draft copy whose blocks keep
+    their ids. The version menu reads an earlier version (read-only, with a note), compares a version
+    with the one before (added, removed and changed blocks, a removed block where it was) and opens the
+    decision log (every Decision block of the file with who, when and why; a click opens its document).
+  - A closed version whose words no longer match its fingerprint says "Changed outside Graybox" and
+    cannot be signed (the editor checks again once a second). A test pins the shape of what the
+    fingerprint covers: a field added to blocks or signers later must be skipped when it is default, or
+    every version closed before would read as changed.
+  - For signature (G13.7): a switch in the version bar adds a Signatures section at the end with a slot
+    for the Designer and one for the Client (name and role fields; add or remove signers, up to 20). A
+    Signature block (Turn into → Signature; the `/` menu comes with G13.2) shows the slot of the role it
+    names anywhere in the document. In the PDF each slot is a line with the name, role and a date line;
+    a signed slot shows its mark and "Signed <time>".
+  - Sign… on a closed version: draw the signature with the mouse or a pen on a 3:1 pad, or type the name
+    in one of three handwriting styles. No font ships with Graybox (craft-fonts has no handwriting
+    fonts): each style uses the first installed of a short list (Dancing Script, Segoe Script…; Caveat,
+    Ink Free…; Great Vibes, Lucida Handwriting, Gabriola…), else Inter italic. A signature records the
+    name, role, time, the fingerprint it agreed to and how it was given ("graybox"); the model has room
+    for G15 (a signer's email, the server's time, "link").
+  - The PDF of a closed version for signature (or signed) ends with a certificate page: the code, the
+    SHA-256, the closing time, each signer (signed in Graybox on this computer, or not signed yet) and
+    the line for the client's co-signature through gov.br (assinador.iti.br). The Markdown ends with the
+    signers. Times are UTC: the engine has no local time zone.
+  - Model `crates/doc/src/docs_version.rs` (ours). Commands in `crates/engine/src/cmd/docs/version.rs`
+    (ours): `doc.version.close`, `doc.version.new`, `doc.version.for_signature`, `doc.version.signers`,
+    `doc.version.sign`, `doc.versions`, `doc.diff`, `doc.decisions`. Page: `docs_page/sign.rs`; a card
+    draws a drawn mark as a vector (`Item::Ink`), layout revision 2. UI:
+    `crates/ui-egui/src/game/docs/{versions,sign,compare}.rs`. Tests: `docs_version_tests.rs` (doc and
+    engine), `game/docs/version_tests.rs`, junk sweep entries.
+  - Checked in the real app on a scratch session with its own config folder: the switch, closing,
+    signing typed and drawn, the PDF and its certificate page, the card on the canvas, compare.
+    Screenshots and the PDF sent to Adriel.
+  - Code review (high) caught and fixed: the fingerprint's shape was not pinned; the Sign dialog's name
+    changed only on Enter (the previews lagged, the first click on Sign could miss); Compare stayed open
+    over another document; the card layout revision was not bumped; a closed version without a
+    fingerprint looked intact in the editor but could not be signed; a removed block showed after the
+    block added in its place; a slot without a name printed "Name" in bold.
+  - Not done: local times, page furniture in Portuguese, the `/` menu (G13.2), signing through a link
+    (G15).
 - G11.6, the bow (2026-11-13, Adriel's changes): a click shoots from the hip, holding aim goes over the
   shoulder with a crosshair in the middle of the screen, and the shoulder button swaps sides.
   - Hip shot: a left click alone with the bow turns the hero to where the camera looks and shoots after
@@ -1215,6 +1259,12 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   - G13.6: `crates/ui-egui/src/game/mod.rs`: `pub(crate) mod emoji_picker;` and `mod page_icon_tests;`.
     `crates/engine/src/tests.rs`: two page-icon junk entries. Locales: "Change the icon…", "Double-click
     to change the icon", "Game", "Work", "People", "Nature" (the unused "Icon" removed).
+  - G13.4: `crates/doc/src/lib.rs`: `pub mod docs_version;` and `mod docs_version_tests;`.
+    `crates/engine/src/lib.rs`: `pub mod doc_versions` (what the editor needs: `code_of`, `intact`,
+    `hand_font`, `when`) and `mod docs_version_tests;`. `crates/engine/src/tests.rs`: two junk entries
+    for `doc.version.*`. Locales: the version, signature, compare and decision-log strings
+    ("Version {n} · {state}" replaces "Version {n} · draft" and "Version {n} · closed, it can no longer
+    change").
 - Nested pages (G9; `crates/doc/src/page_tree.rs`, `crates/engine/src/cmd/page_tree.rs`,
   `crates/ui-egui/src/game/tree_list.rs` and `page_list.rs` are ours):
   - `crates/doc/src/lib.rs`: `pub mod page_tree;`, `Document::page_tree` (serde default, skipped when

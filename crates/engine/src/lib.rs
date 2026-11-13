@@ -45,6 +45,12 @@ mod weld;
 // Graybox: the page layout of a document version, shared by PDF, canvas card and web (G13.3).
 mod docs_page;
 mod docs_render;
+// Graybox: what the document editor shows of a version (G13.4): its code, whether it is intact, the
+// handwriting font of a typed signature and how a time reads.
+pub mod doc_versions {
+    pub use crate::docs_page::{hand_font, when};
+    pub use crate::docs_render::{code_of, intact};
+}
 pub use assets::components;
 pub use assets::library;
 pub use assets::library_server;
@@ -698,6 +704,8 @@ mod docs_cmd_tests;
 mod docs_export_tests;
 #[cfg(test)]
 mod docs_page_tests;
+#[cfg(test)]
+mod docs_version_tests;
 // Graybox: nested pages (G9).
 #[cfg(test)]
 mod page_tree_tests;

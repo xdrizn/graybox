@@ -10,8 +10,10 @@ use serde_json::{Map, Value, json};
 use super::CommandSpec;
 use crate::{Result, Session, bad, docs_render, spec};
 
+mod version;
+
 pub fn specs() -> Vec<CommandSpec> {
-    vec![
+    let mut list = vec![
         spec!(
             "doc.get",
             "Show documents",
@@ -82,7 +84,9 @@ pub fn specs() -> Vec<CommandSpec> {
             true,
             card_refresh
         ),
-    ]
+    ];
+    list.extend(version::specs());
+    list
 }
 
 /// Run an editing command, then lay out again every canvas card whose document it changed, in the

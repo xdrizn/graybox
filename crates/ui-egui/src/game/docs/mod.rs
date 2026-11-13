@@ -5,10 +5,13 @@
 //!
 //! Hooks in upstream files are listed in `docs/game/STATUS.md` (Upstream hooks).
 
+mod compare;
 mod editor;
 mod export;
+mod sign;
 mod state;
 mod tree;
+mod versions;
 
 use egui::Ui;
 
@@ -67,3 +70,5 @@ pub(crate) fn open(app: &mut FigApp, id: u64) {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod version_tests;

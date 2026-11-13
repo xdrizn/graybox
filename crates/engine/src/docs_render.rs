@@ -18,7 +18,7 @@ pub const CARD_VERSION: &str = "graybox.doc.version";
 /// unchanged document does not rebuild its card.
 pub const CARD_HASH: &str = "graybox.doc.hash";
 /// Bump when the page layout changes, so cards built by an older build are laid out again.
-const LAYOUT_REV: &str = "1";
+const LAYOUT_REV: &str = "2";
 /// Space between the pages of a card, in points.
 const CARD_GAP: f64 = 28.0;
 
@@ -28,13 +28,34 @@ fn other(e: impl std::fmt::Display) -> EngineError {
 
 /// The page furniture for a version of `doc`.
 fn info<'a>(doc: &'a Doc, version: &'a DocVersion, code: Option<&'a str>) -> Info<'a> {
-    Info { title: &doc.title, icon: &doc.icon, number: version.number, closed: version.is_closed(), code }
+    Info {
+        title: &doc.title,
+        icon: &doc.icon,
+        number: version.number,
+        closed: version.is_closed(),
+        code,
+        fingerprint: version.fingerprint.as_deref(),
+        closed_at: version.closed_at.as_deref(),
+        for_signature: version.for_signature,
+        signers: &version.signers,
+        signatures: &version.signatures,
+    }
 }
 
-/// The fingerprint code a version shows (G13.4 gives it its short form; until a version is closed
-/// there is none).
-fn code_of(version: &DocVersion) -> Option<&str> {
-    version.fingerprint.as_deref()
+/// The short fingerprint code a version shows (`GBX-XXXX-XXXX`); a draft has none.
+pub fn code_of(version: &DocVersion) -> Option<String> {
+    version.fingerprint.as_deref().and_then(figcraft_doc::docs_version::short_code)
+}
+
+/// The hex SHA-256 of what a version's fingerprint covers (its blocks, "for signature" and signers).
+pub fn fingerprint(version: &DocVersion) -> String {
+    figcraft_plugin::bundle::sha256_hex(figcraft_doc::docs_version::canonical(version).as_bytes())
+}
+
+/// Whether a closed version still matches its fingerprint (a draft always does): false when the file
+/// was changed outside Graybox.
+pub fn intact(version: &DocVersion) -> bool {
+    !version.is_closed() || version.fingerprint.as_deref() == Some(fingerprint(version).as_str())
 }
 
 fn solid(color: Color) -> Vec<Paint> {
@@ -49,6 +70,32 @@ fn node_for(doc: &mut Document, item: &Item) -> Node {
             let color = data.style.fills.as_ref().and_then(|f| f.first()).and_then(Paint::solid_color).unwrap_or(Color::BLACK);
             let mut n = Node::new(id, NodeKind::Text((**data).clone()), name, *w, *h);
             n.fills = solid(color);
+            n.transform = Affine::translate((*x, *y));
+            n
+        }
+        Item::Ink { x, y, w, h, strokes, color, width } => {
+            let mut path = figcraft_geom::BezPath::new();
+            for s in strokes {
+                let mut pts = s.iter().map(|(px, py)| figcraft_geom::Point::new(px - x, py - y));
+                if let Some(first) = pts.next() {
+                    path.move_to(first);
+                    let mut any = false;
+                    for q in pts {
+                        path.line_to(q);
+                        any = true;
+                    }
+                    // A dot: a tiny line, so the round caps draw it.
+                    if !any {
+                        path.line_to(first + figcraft_geom::Vec2::new(0.01, 0.0));
+                    }
+                }
+            }
+            let mut n = Node::new(id, NodeKind::Vector { network: figcraft_doc::VectorNetwork::from_path(&path) }, "Signature", *w, *h);
+            n.strokes = solid(*color);
+            n.stroke.weight = *width;
+            n.stroke.cap_start = figcraft_doc::StrokeCap::Round;
+            n.stroke.cap_end = figcraft_doc::StrokeCap::Round;
+            n.stroke.join = figcraft_doc::StrokeJoin::Round;
             n.transform = Affine::translate((*x, *y));
             n
         }
@@ -96,7 +143,7 @@ pub fn build_pages(doc: &mut Document, parent: NodeId, l: &Layout, origin: (f64,
 
 /// A version as a PDF, one A4 page per page of the layout, and how many pages it has.
 pub fn pdf(doc: &Doc, version: &DocVersion) -> Result<(Vec<u8>, usize)> {
-    let l = layout(&info(doc, version, code_of(version)), &version.blocks);
+    let l = layout(&info(doc, version, code_of(version).as_deref()), &version.blocks);
     let mut scratch = Document::new(doc.title.clone());
     let page = scratch.first_page().ok_or_else(|| other("no page to lay the document on"))?;
     let frames = build_pages(&mut scratch, page, &l, (0.0, 0.0), 40.0, false)?;
@@ -104,9 +151,21 @@ pub fn pdf(doc: &Doc, version: &DocVersion) -> Result<(Vec<u8>, usize)> {
     Ok((figcraft_pdf::export_pdf(&scratch, &frames, &opts).map_err(other)?, frames.len()))
 }
 
-/// A version as Markdown.
+/// A version as Markdown, ending with its signers when it is for signature.
 pub fn markdown(doc: &Doc, version: &DocVersion) -> String {
-    figcraft_doc::docs_md::to_markdown(&doc.title, &doc.icon, version, code_of(version))
+    let mut out = figcraft_doc::docs_md::to_markdown(&doc.title, &doc.icon, version, code_of(version).as_deref());
+    if version.for_signature && !version.signers.is_empty() {
+        out.push_str("\n## Signatures\n\n");
+        for (i, s) in version.signers.iter().enumerate() {
+            let who = [s.name.trim(), s.role.trim()].into_iter().filter(|t| !t.is_empty()).collect::<Vec<_>>().join(", ");
+            let who = if who.is_empty() { "Signature" } else { &who };
+            match version.signatures.iter().find(|g| g.slot == i) {
+                Some(g) => out.push_str(&format!("- {who}: signed {}\n", crate::docs_page::when(g.signed_at))),
+                None => out.push_str(&format!("- {who}: ______________________\n")),
+            }
+        }
+    }
+    out
 }
 
 /// FNV-1a: stable across builds, so a hash saved in the file means the same later.
@@ -163,7 +222,7 @@ pub fn refresh_card(doc: &mut Document, card: NodeId, force: bool) -> Result<boo
     if !force && doc.node(card).and_then(|n| n.plugin_data.get(CARD_HASH)).is_some_and(|h| *h == hash) {
         return Ok(false);
     }
-    let l = layout(&info(d, v, code_of(v)), &v.blocks);
+    let l = layout(&info(d, v, code_of(v).as_deref()), &v.blocks);
     let title = if d.title.trim().is_empty() { "Untitled" } else { d.title.trim() };
     let name = format!("{}{title} · v{}", if d.icon.is_empty() { String::new() } else { format!("{} ", d.icon) }, v.number);
     let name = if v.is_closed() { format!("{name} (closed)") } else { name };

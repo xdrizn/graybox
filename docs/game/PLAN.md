@@ -199,10 +199,10 @@ Notion-like documents inside the project file, a Documents tab, versions closed 
 - [x] G13.1 Model, commands and the Documents tab (tree, open a document).
 - [ ] G13.2 Block editor: left handle (turn into anything), `/` menu, formatting, embeds, tables.
 - [x] G13.3 Page layout, canvas card that follows the document, PDF and Markdown export.
-- [ ] G13.4 Close version (fingerprint, read-only), new version, diff, decision block and log.
+- [x] G13.4 Close version (fingerprint, read-only), new version, diff, decision block and log.
 - [ ] G13.5 Templates, Claude reads and writes documents, auto-tables, per-section approval.
 - [x] G13.6 Emoji on page and document icons: double-click the icon, one picker for both lists.
-- [ ] G13.7 For signature: a header toggle adds a signature section (Adriel and the client: name, role,
+- [x] G13.7 For signature: a header toggle adds a signature section (Adriel and the client: name, role,
   date line), also a Signature block in `/`; Close and Sign (G13.4) fill Adriel's slot. Before G13.2.
 - [ ] G13.8 Docs polish to the level of the rest of the app: spacing, typography, the tree, empty states.
 

@@ -26,8 +26,40 @@ pub(super) struct Pending {
     pub at: f64,
 }
 
+/// What the open document shows: its words, two versions side by side, or every decision.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum Mode {
+    #[default]
+    Write,
+    Compare,
+    Decisions,
+}
+
+/// The Sign dialog while it is open (G13.4): which slot of which closed version, and the mark being
+/// made (drawn strokes in a 3:1 box from 0 to 1, or the name typed in one of three hands).
+#[derive(Clone, Debug, Default)]
+pub(super) struct SignDraft {
+    pub doc: DocId,
+    pub version: u32,
+    pub slot: usize,
+    pub name: String,
+    pub role: String,
+    pub draw: bool,
+    pub style: u8,
+    pub strokes: Vec<Vec<[f32; 2]>>,
+}
+
 #[derive(Default)]
 pub(super) struct State {
+    /// The version shown of the open document, when not its last one.
+    pub viewing: Option<(DocId, u32)>,
+    pub mode: Mode,
+    /// What the Compare or Decisions view shows (`doc.diff` or `doc.decisions`), read when it opened,
+    /// and the document it opened over (another document opens on its words).
+    pub report: Option<(DocId, serde_json::Value)>,
+    /// The document whose last version waits for the person to confirm closing it.
+    pub confirm_close: Option<DocId>,
+    pub sign: Option<SignDraft>,
     /// The document shown in place of the canvas (while the Documents tab is the left tab).
     pub open: Option<DocId>,
     /// The tree row being renamed, and whether its field takes the keyboard this frame.

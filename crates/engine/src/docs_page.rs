@@ -7,7 +7,11 @@
 
 use figcraft_color::{Color, Paint};
 use figcraft_doc::docs::{AutoSource, Block, BlockKind, Run, Table};
+use figcraft_doc::docs_version::{Signature, Signer};
 use figcraft_doc::{LineHeight, StyleRun, TextAlignH, TextAutoResize, TextData, TextDecoration, TextStyle};
+
+mod sign;
+pub use sign::{hand_font, when};
 
 /// A4 in points.
 pub const PAGE_W: f64 = 595.0;
@@ -32,7 +36,8 @@ const SOFT: Color = Color::from_rgb8_const(0xF3, 0xF4, 0xF7);
 const SOFT_ACCENT: Color = Color::from_rgb8_const(0xEE, 0xF3, 0xFD);
 const SEAL: Color = Color::from_rgb8_const(0x1E, 0x7B, 0x4F);
 
-/// What the page furniture (title block, footer, seal) says about the version.
+/// What the page furniture (title block, footer, seal, signatures, certificate) says about the version.
+#[derive(Default)]
 pub struct Info<'a> {
     pub title: &'a str,
     pub icon: &'a str,
@@ -40,13 +45,45 @@ pub struct Info<'a> {
     pub closed: bool,
     /// The short fingerprint code, shown in every footer.
     pub code: Option<&'a str>,
+    /// The whole fingerprint (hex SHA-256), on the certificate page.
+    pub fingerprint: Option<&'a str>,
+    pub closed_at: Option<&'a str>,
+    /// The version ends with a signature section.
+    pub for_signature: bool,
+    pub signers: &'a [Signer],
+    pub signatures: &'a [Signature],
 }
 
 /// One thing on a page, in page points from the page's top left.
 #[derive(Clone, Debug)]
 pub enum Item {
-    Text { x: f64, y: f64, w: f64, h: f64, data: Box<TextData> },
-    Shape { x: f64, y: f64, w: f64, h: f64, ellipse: bool, fill: Option<Color>, stroke: Option<(Color, f64)>, radius: f64 },
+    Text {
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+        data: Box<TextData>,
+    },
+    Shape {
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+        ellipse: bool,
+        fill: Option<Color>,
+        stroke: Option<(Color, f64)>,
+        radius: f64,
+    },
+    /// Pen strokes (a drawn signature): each a polyline in page points, inside the box.
+    Ink {
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+        strokes: Vec<Vec<(f64, f64)>>,
+        color: Color,
+        width: f64,
+    },
 }
 
 impl Item {
@@ -59,7 +96,7 @@ impl Item {
     pub fn text(&self) -> &str {
         match self {
             Self::Text { data, .. } => &data.characters,
-            Self::Shape { .. } => "",
+            Self::Shape { .. } | Self::Ink { .. } => "",
         }
     }
 }
@@ -236,11 +273,14 @@ struct Pager {
     pages: Vec<Vec<Item>>,
     y: f64,
     full: bool,
+    /// The version's signers and signatures, for Signature blocks.
+    signers: Vec<Signer>,
+    signatures: Vec<Signature>,
 }
 
 impl Pager {
     fn new() -> Self {
-        Self { pages: vec![Vec::new()], y: MARGIN_TOP, full: false }
+        Self { pages: vec![Vec::new()], y: MARGIN_TOP, full: false, signers: Vec::new(), signatures: Vec::new() }
     }
 
     fn cur(&self) -> usize {
@@ -365,8 +405,12 @@ impl Pager {
 /// Lay out a version: the title block, every block, and the footer of each page.
 pub fn layout(info: &Info, blocks: &[Block]) -> Layout {
     let mut p = Pager::new();
+    p.signers = info.signers.to_vec();
+    p.signatures = info.signatures.to_vec();
     title_block(&mut p, info);
     lay_blocks(&mut p, blocks, MARGIN_X, CONTENT_W, 0);
+    sign::section(&mut p, info);
+    sign::certificate(&mut p, info);
     let total = p.pages.len();
     for i in 0..total {
         footer(&mut p, info, i, total);
@@ -517,7 +561,7 @@ fn lay_simple(p: &mut Pager, b: &Block, x: f64, w: f64) -> Vec<Frag> {
         }
         BlockKind::Shape { shape, fill } => shape_block(p, shape, fill.as_deref(), x),
         BlockKind::Swatch { color } => swatch(p, b, color, x, w),
-        BlockKind::Signature { role } => signature(p, b, role, x, w),
+        BlockKind::Signature { role } => sign::block(p, b, role, x, w),
         _ => {}
     }
     Vec::new()
@@ -720,22 +764,4 @@ fn swatch(p: &mut Pager, b: &Block, color: &str, x: f64, w: f64) {
     p.push(Item::Text { x: x + 38.0, y: y + (28.0 - th).max(0.0) / 2.0, w: w - 38.0, h: th, data: Box::new(data) });
     p.y += 28.0;
     p.gap(10.0);
-}
-
-fn signature(p: &mut Pager, b: &Block, role: &str, x: f64, w: f64) {
-    p.gap(14.0);
-    p.need(64.0);
-    let y = p.y;
-    p.push(Item::rect(x, y + 36.0, w.min(240.0), 1.0, INK));
-    let caption = if !role.is_empty() {
-        role.to_string()
-    } else if !b.text.is_empty() {
-        b.plain_text()
-    } else {
-        "Signature".to_string()
-    };
-    let data = text_data(&plain(&caption), &Look::muted(9.0));
-    let th = measure(&data, w.min(240.0)).height;
-    p.push(Item::Text { x, y: y + 42.0, w: w.min(240.0), h: th, data: Box::new(data) });
-    p.y += 64.0;
 }

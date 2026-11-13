@@ -440,6 +440,9 @@ fn every_command_survives_junk_params() {
         // Graybox: page icons (page.set_icon) as junk.
         json!({"icon": {"x": 1}}),
         json!({"id": 1, "icon": "\u{0}".repeat(5000)}),
+        // Graybox: document versions and signatures (doc.version.*) as junk.
+        json!({"doc": 1, "on": "x", "signers": [{"name": {"x": 1}}], "mark": {"type": "drawn", "strokes": [[[1e308, "x"]]]}}),
+        json!({"doc": 1, "version": u64::MAX, "slot": u64::MAX, "name": "\u{0}".repeat(5000), "mark": {"type": "typed", "style": -1}}),
         // Prototype expressions and gamepad keys as junk.
         json!({"id": -5, "expression": "x[\u{0}", "expr": {"op": {"op": "add", "args": [1]}}, "trigger": {"type": "keyPress", "key": "Gamepad \u{0}"}}),
         json!({"id": 1, "expr": {"inMode": {"variable": [], "mode": 1e308}}, "trigger": {"type": "keyPress", "key": 7}}),

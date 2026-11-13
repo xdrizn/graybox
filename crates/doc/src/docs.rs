@@ -592,16 +592,35 @@ pub struct DocVersion {
     /// SHA-256 of the closed blocks' canonical JSON, hex (G13.4 fills it when closing).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fingerprint: Option<String>,
-    /// When the version was closed, RFC 3339 UTC (G13.4).
+    /// When the version was closed, `YYYY-MM-DD HH:MM UTC` (G13.4).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub closed_at: Option<String>,
     #[serde(default)]
     pub blocks: Vec<Block>,
+    /// "For signature": the version ends with a signature section, one slot per signer (G13.7).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub for_signature: bool,
+    /// Who signs, in slot order: the designer first, then the client's signers. Part of what the
+    /// fingerprint covers.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub signers: Vec<crate::docs_version::Signer>,
+    /// The signatures given on the closed version (outside the fingerprint, which they record).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub signatures: Vec<crate::docs_version::Signature>,
 }
 
 impl DocVersion {
-    fn draft(number: u32) -> Self {
-        Self { number, state: VersionState::Draft, fingerprint: None, closed_at: None, blocks: Vec::new() }
+    pub(crate) fn draft(number: u32) -> Self {
+        Self {
+            number,
+            state: VersionState::Draft,
+            fingerprint: None,
+            closed_at: None,
+            blocks: Vec::new(),
+            for_signature: false,
+            signers: Vec::new(),
+            signatures: Vec::new(),
+        }
     }
 
     pub fn is_closed(&self) -> bool {
@@ -790,7 +809,7 @@ impl Documents {
         false
     }
 
-    fn doc_mut(&mut self, id: DocId) -> Result<&mut Doc, DocError> {
+    pub(crate) fn doc_mut(&mut self, id: DocId) -> Result<&mut Doc, DocError> {
         self.docs.get_mut(&id).map(Arc::make_mut).ok_or(DocError::NoDoc(id))
     }
 
@@ -883,7 +902,7 @@ impl Documents {
     // ---- blocks ----
 
     /// The version `number` (the last by default) of `doc`, to edit: refused when it is closed.
-    fn draft_mut(&mut self, doc: DocId, number: Option<u32>) -> Result<&mut DocVersion, DocError> {
+    pub(crate) fn draft_mut(&mut self, doc: DocId, number: Option<u32>) -> Result<&mut DocVersion, DocError> {
         let d = self.doc_mut(doc)?;
         let v = match number {
             Some(n) => d.versions.iter_mut().find(|v| v.number == n).ok_or(DocError::NoVersion(n))?,
@@ -1061,7 +1080,11 @@ impl Documents {
             for (i, v) in d.versions.iter_mut().enumerate() {
                 v.number = u32::try_from(i + 1).unwrap_or(u32::MAX);
                 let mut budget = MAX_BLOCKS;
+                // Ids are unique within a version: a new version keeps its blocks' ids, so the diff
+                // pairs them.
+                seen.clear();
                 fix_blocks(&mut v.blocks, 1, &mut seen, &mut top, &mut budget);
+                crate::docs_version::repair(v);
             }
         }
         self.next_block = top;

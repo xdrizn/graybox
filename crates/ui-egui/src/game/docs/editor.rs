@@ -8,8 +8,10 @@ use figcraft_doc::docs::{Block, BlockId, BlockKind, DocId};
 use serde_json::{Value, json};
 
 use super::state::{self, Pending, State, Target};
+use super::versions::{self, Ver};
+use super::{compare, sign};
 use crate::a11y::{self, Tip};
-use crate::i18n::{tr, trf};
+use crate::i18n::tr;
 use crate::theme::{Tokens, regular, semibold};
 use crate::{FigApp, LeftTab, widgets};
 
@@ -23,6 +25,8 @@ enum Look {
     Paragraph,
     Heading(u8),
     Divider,
+    /// A signature slot (G13.7): the role it is for; the text is the name.
+    Signature(String),
     /// A kind this editor cannot draw yet: its name, shown dim.
     Other(String),
 }
@@ -42,6 +46,7 @@ fn flatten(blocks: &[Block], depth: usize, out: &mut Vec<View>) {
         let look = match &b.kind {
             BlockKind::Heading { level } => Look::Heading((*level).clamp(1, 4)),
             BlockKind::Divider => Look::Divider,
+            BlockKind::Signature { role } => Look::Signature(role.clone()),
             k if k.has_text() => Look::Paragraph,
             k => Look::Other(k.name()),
         };
@@ -84,7 +89,7 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui) -> bool {
     let mut st = state::take(uid);
     let shown = match st.open.filter(|d| app.session.doc().is_ok_and(|doc| doc.docs.get(*d).is_some())) {
         Some(doc) => {
-            page(app, ui, &mut st, doc);
+            page(app, ui, &mut st, doc, uid);
             true
         }
         None => {
@@ -96,18 +101,18 @@ pub(super) fn show(app: &mut FigApp, ui: &mut Ui) -> bool {
     shown
 }
 
-fn page(app: &mut FigApp, ui: &mut Ui, st: &mut State, doc: DocId) {
+fn page(app: &mut FigApp, ui: &mut Ui, st: &mut State, doc: DocId, uid: u64) {
     let t = Tokens::get(ui.ctx());
     let area = ui.max_rect();
     ui.painter().rect_filled(area, CornerRadius::ZERO, t.canvas);
-    let (title, icon, number, closed, mut blocks) = {
+    let (title, icon, ver, mut blocks) = {
         let Some(d) = app.session.doc().ok().and_then(|d| d.docs.get(doc)) else { return };
-        let v = d.current();
+        // The version on screen: the one picked in the version menu, else the last.
+        let picked = st.viewing.filter(|(o, _)| *o == doc).and_then(|(_, n)| d.version(n));
+        let Some(v) = picked.or_else(|| d.current()) else { return };
         let mut blocks = Vec::new();
-        if let Some(v) = v {
-            flatten(&v.blocks, 0, &mut blocks);
-        }
-        (d.title.clone(), d.icon.clone(), v.map_or(1, |v| v.number), v.is_some_and(|v| v.is_closed()), blocks)
+        flatten(&v.blocks, 0, &mut blocks);
+        (d.title.clone(), d.icon.clone(), Ver::of(ui.ctx(), uid, d, v), blocks)
     };
     // What was typed and not yet sent shows in place of what the file has.
     if let Some(p) = st.pending.as_ref().filter(|p| p.doc == doc)
@@ -120,7 +125,7 @@ fn page(app: &mut FigApp, ui: &mut Ui, st: &mut State, doc: DocId) {
         Some(p) if p.doc == doc && p.target == Target::Title => p.text.clone(),
         _ => title,
     };
-    let editable = !closed;
+    let editable = ver.editable();
     let now = ui.input(|i| i.time);
 
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -128,12 +133,20 @@ fn page(app: &mut FigApp, ui: &mut Ui, st: &mut State, doc: DocId) {
         let col_w = (outer.width() - 96.0).clamp(240.0, COLUMN);
         let col = Rect::from_min_size(pos2(outer.center().x - col_w / 2.0, outer.min.y + 84.0), vec2(col_w, 100_000.0));
         let mut c = ui.new_child(UiBuilder::new().max_rect(col).layout(Layout::top_down(Align::Min)));
-        let at_end = title_ui(app, &mut c, st, &t, doc, &title, &icon, number, closed, editable, now);
+        let at_end = title_ui(app, &mut c, st, &t, doc, &title, &icon, editable, now);
+        c.add_space(6.0);
+        versions::bar(app, &mut c, st, &t, doc, &ver);
+        versions::notes(&mut c, st, &t, &ver);
         c.add_space(18.0);
+        if compare::show(&mut c, st, &t, doc) {
+            ui.allocate_rect(Rect::from_min_max(col.min, pos2(col.max.x, c.min_rect().max.y + 120.0)), Sense::hover());
+            return;
+        }
         let ids: Vec<BlockId> = blocks.iter().map(|b| b.id).collect();
         for (i, v) in blocks.iter().enumerate() {
-            block_ui(app, &mut c, st, &t, doc, v, i, &ids, col, editable, now);
+            block_ui(app, &mut c, st, &t, doc, v, i, &ids, col, &ver, now);
         }
+        versions::signatures(app, &mut c, st, &t, doc, &ver);
         tail_ui(app, &mut c, st, &t, doc, &blocks, editable);
         if at_end {
             // Enter in the title: the first block takes the keyboard, made first if there is none.
@@ -147,6 +160,8 @@ fn page(app: &mut FigApp, ui: &mut Ui, st: &mut State, doc: DocId) {
     back_button(ui, st, &t, area);
     export_button(app, ui, st, &t, area, doc);
     settle(app, ui.ctx(), st, doc, now);
+    versions::confirm_close(app, ui.ctx(), st);
+    sign::dialog(app, ui.ctx(), st);
 }
 
 /// The Export button at the top right: the document as a PDF or Markdown file, or as a card on the canvas.
@@ -199,19 +214,7 @@ fn back_button(ui: &mut Ui, st: &mut State, t: &Tokens, area: Rect) {
 
 /// The title row and the version line. True when Enter was pressed in the title.
 #[allow(clippy::too_many_arguments)]
-fn title_ui(
-    app: &mut FigApp,
-    ui: &mut Ui,
-    st: &mut State,
-    t: &Tokens,
-    doc: DocId,
-    title: &str,
-    icon: &str,
-    number: u32,
-    closed: bool,
-    editable: bool,
-    now: f64,
-) -> bool {
+fn title_ui(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, doc: DocId, title: &str, icon: &str, editable: bool, now: f64) -> bool {
     let mut text = title.to_string();
     let id = Id::unique(("gbx_doc_title", doc.0));
     let mut enter = false;
@@ -243,12 +246,6 @@ fn title_ui(
             queue(app, st, doc, Target::Title, text.clone(), now);
         }
     });
-    let line = if closed {
-        trf("Version {n} · closed, it can no longer change", &[("n", &number)])
-    } else {
-        trf("Version {n} · draft", &[("n", &number)])
-    };
-    ui.label(egui::RichText::new(line).font(regular(11.0)).color(t.text_tertiary));
     enter
 }
 
@@ -308,9 +305,10 @@ fn block_ui(
     index: usize,
     ids: &[BlockId],
     col: Rect,
-    editable: bool,
+    ver: &Ver,
     now: f64,
 ) {
+    let editable = ver.editable();
     // Nested blocks step in by 16 points a level (at most 8 levels, so it fits the text margin).
     let indent = v.depth as f32 * 16.0;
     ui.add_space(2.0);
@@ -320,6 +318,7 @@ fn block_ui(
             let (r, _) = ui.allocate_exact_size(vec2(col.width(), 20.0), Sense::hover());
             ui.painter().line_segment([pos2(r.min.x + indent, r.center().y), pos2(r.max.x, r.center().y)], egui::Stroke::new(1.0, t.border_strong));
         }
+        Look::Signature(role) => versions::signature_block(app, ui, t, doc, ver, v.id, &v.text, role, indent),
         Look::Other(name) => {
             let (r, _) = ui.allocate_exact_size(vec2(col.width() - indent, 30.0), Sense::hover());
             let r = Rect::from_min_max(pos2(r.min.x + indent, r.min.y), r.max);
@@ -471,8 +470,13 @@ fn handle(app: &mut FigApp, ui: &mut Ui, t: &Tokens, doc: DocId, v: &View, row: 
         use crate::right::menu_item;
         ui.set_min_width(190.0);
         widgets::label(ui, tr("Turn into"), Tokens::get(ui.ctx()).text_secondary);
-        for (label, kind) in [(tr("Text"), "paragraph"), (tr("Heading 1"), "heading1"), (tr("Heading 2"), "heading2"), (tr("Heading 3"), "heading3")]
-        {
+        for (label, kind) in [
+            (tr("Text"), "paragraph"),
+            (tr("Heading 1"), "heading1"),
+            (tr("Heading 2"), "heading2"),
+            (tr("Heading 3"), "heading3"),
+            (tr("Signature"), "signature"),
+        ] {
             if menu_item(ui, label, "") {
                 app.run("doc.block.turn_into", json!({"doc": doc.0, "id": v.id.0, "kind": kind}));
                 ui.close();
