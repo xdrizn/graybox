@@ -237,6 +237,21 @@ fn backspace_at_the_start_turns_a_list_item_into_text_then_joins_it_to_the_block
 }
 
 #[test]
+fn delete_at_the_end_joins_the_next_block_and_the_cursor_stays_put() {
+    let (mut u, doc) = open(&[("paragraph", "Hello"), ("bulleted", " world"), ("divider", "")]);
+    caret_in(&mut u, "Hello", 0);
+    key(&mut u, Key::Delete);
+    assert_eq!(words(&u, doc), ["Hello world", ""]);
+    type_text(&mut u, ",");
+    settle(&mut u);
+    assert_eq!(words(&u, doc), ["Hello, world", ""]);
+    // Before a divider there is nothing to join: the block stays as it is.
+    caret_in(&mut u, "Hello, world", 0);
+    key(&mut u, Key::Delete);
+    assert_eq!(blocks(&u, doc).len(), 2);
+}
+
+#[test]
 fn tab_nests_a_block_under_the_one_above_and_shift_tab_takes_it_out() {
     let (mut u, doc) = open(&[("bulleted", "parent"), ("bulleted", "child")]);
     // The document was opened from the panel: keyboard navigation starts there.
@@ -305,4 +320,35 @@ fn the_handle_menu_duplicates_a_block() {
     let at = text_center(&shapes(&mut u), "Duplicate");
     click(&mut u, at);
     assert_eq!(words(&u, doc), ["Remember", "Remember"]);
+}
+
+#[test]
+fn the_handle_menu_sets_the_block_in_mono_and_back() {
+    let (mut u, doc) = open(&[("paragraph", "let x = 1")]);
+    let font_of = |u: &Ui| blocks(u, doc)[0].style.font.clone();
+    let pick = |u: &mut Ui, item: &str| {
+        let r = text_rect(u, "let x = 1");
+        u.frame(vec![Event::PointerMoved(r.center())]);
+        u.frame(vec![]);
+        let handle = super::blocks::last_handle().expect("a handle while the pointer is on the block");
+        click(u, handle.center());
+        let at = text_center(&shapes(u), item);
+        click(u, at);
+    };
+    pick(&mut u, "    Mono");
+    assert_eq!(font_of(&u).as_deref(), Some("JetBrains Mono"));
+    shapes(&mut u);
+    assert!(super::inline::last_fonts().iter().any(|f| f.family == egui::FontFamily::Monospace), "drawn in the mono face");
+    pick(&mut u, "✓ Mono");
+    assert_eq!(font_of(&u), None, "picking it again goes back to the default");
+}
+
+#[test]
+fn monospaced_fonts_are_known_by_a_word_of_their_name() {
+    for f in ["JetBrains Mono", "Roboto Mono", "Courier New", "Consolas", "Noto Sans Mono", "monospace"] {
+        assert!(super::blocks::is_mono(f), "{f}");
+    }
+    for f in ["Inter", "Monotype Corsiva", "Monoton", "Space Grotesk"] {
+        assert!(!super::blocks::is_mono(f), "{f}");
+    }
 }

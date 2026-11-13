@@ -74,6 +74,40 @@ fn a_picture_shows_no_wider_than_itself_and_a_big_one_fits_the_column() {
     assert!(!has_text(&s, "Choose image"));
 }
 
+/// A clipboard holding a picture copied in another app.
+struct Clipboard(Vec<u8>);
+
+impl crate::Services for Clipboard {
+    fn clipboard_get_png(&mut self) -> Option<Vec<u8>> {
+        Some(self.0.clone())
+    }
+}
+
+fn layers(u: &Ui) -> usize {
+    u.app.session.doc().unwrap().node_count()
+}
+
+#[test]
+fn a_picture_pasted_in_a_block_goes_in_after_it_and_never_onto_the_canvas() {
+    let (mut u, doc) = open(&[("paragraph", "First"), ("paragraph", "Second")]);
+    u.app.services = Box::new(Clipboard(png(30, 10)));
+    let before = layers(&u);
+    let at = text_center(&shapes(&mut u), "First");
+    click(&mut u, at);
+    u.frame(vec![egui::Event::PasteImage(std::sync::Arc::default())]);
+    u.frame(vec![]);
+    assert_eq!(kinds(&u, doc), ["paragraph", "image:some", "paragraph"]);
+    // With blocks selected (no words focused) it goes after the last of them.
+    key(&mut u, Key::Escape);
+    u.frame(vec![egui::Event::PasteImage(std::sync::Arc::default())]);
+    u.frame(vec![]);
+    assert_eq!(kinds(&u, doc), ["paragraph", "image:some", "image:some", "paragraph"]);
+    // Nothing open but the document: still never onto the hidden canvas.
+    u.frame(vec![egui::Event::PasteImage(std::sync::Arc::default())]);
+    u.frame(vec![]);
+    assert_eq!(layers(&u), before, "the canvas got nothing");
+}
+
 #[derive(Debug)]
 struct Dropped(std::path::PathBuf, Vec<u8>);
 

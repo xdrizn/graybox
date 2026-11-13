@@ -48,6 +48,23 @@ fn escape_selects_the_block_shift_down_grows_it_and_delete_removes_both_in_one_s
 }
 
 #[test]
+fn keys_with_nothing_written_in_leave_the_hidden_canvas_alone_but_undo_still_works() {
+    let (mut u, doc) = open(&[("paragraph", "alpha")]);
+    u.app.run("shape.rectangle", serde_json::json!({"x": 0, "y": 0, "width": 40, "height": 40}));
+    let layers = u.app.session.doc().unwrap().node_count();
+    u.frame(vec![]);
+    // Delete, a tool key and a copy: the selected rectangle behind the document stays.
+    key(&mut u, Key::Delete);
+    key(&mut u, Key::R);
+    u.frame(vec![Event::Copy]);
+    assert_eq!(u.app.session.doc().unwrap().node_count(), layers, "the canvas took no key");
+    // Undo still undoes (here: the rectangle).
+    key_with(&mut u, Key::Z, Modifiers::COMMAND | Modifiers::CTRL);
+    assert_eq!(u.app.session.doc().unwrap().node_count(), layers - 1);
+    assert_eq!(words(&u, doc), ["alpha"]);
+}
+
+#[test]
 fn shift_click_selects_from_the_block_written_in_to_the_one_clicked() {
     let (mut u, _) = open(&[("paragraph", "alpha"), ("paragraph", "beta"), ("paragraph", "gamma")]);
     let s = shapes(&mut u);

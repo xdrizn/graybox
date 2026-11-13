@@ -94,6 +94,7 @@ fn page(app: &mut FigApp, ui: &mut Ui, st: &mut State, doc: DocId, uid: u64) {
         super::select::after(app, &mut c, st, &t, doc, &blocks, &rows, col, editable);
         if editable {
             super::media::take_drops(app, ui.ctx(), doc, &blocks, &rows, area);
+            super::media::take_paste(app, ui.ctx(), st, doc, &blocks);
         }
         versions::signatures(app, &mut c, st, &t, doc, &ver);
         tail_ui(app, &mut c, st, &t, doc, &blocks, editable);

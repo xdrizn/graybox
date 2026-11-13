@@ -451,6 +451,23 @@
     was shown; Enter on a selection could give the keyboard to an image.
   - Not yet: pasting blocks into an empty line is two undo steps; an image pasted while blocks are
     selected lands on the canvas; the swatch code field keeps an invalid code until reopened.
+- G13.2, fonts, pasted pictures, Delete that joins, and the canvas kept out (2026-11-13): the block's
+  handle menu now starts with Duplicate and Delete, then Font (Default or Mono), Colour and
+  Background; "Turn into" comes last as a short list that scrolls, so the menu fits a small window.
+  A Mono block is drawn in the app's monospaced face (exports use JetBrains Mono when installed). A
+  picture copied in another app and pasted (Ctrl+V) goes in as an image block after the block written
+  in, or after the selected blocks. Delete at the end of a block joins the next block's words to it.
+  While a document is open, the canvas hidden behind it takes no keys and no pastes (Delete, tool
+  keys, copy, paste used to act on the hidden layers); undo, redo, save, open, Actions and tabs still
+  work.
+  - Code: `crates/ui-egui/src/game/docs/{blocks,media,mod}.rs`; the canvas hook in `shortcuts.rs`.
+    Tests: `blocks_tests.rs` (Mono, Delete), `media_tests.rs` (pasted picture),
+    `select_tests.rs` (keys with a document open; fails without the hook).
+  - Checked in the real app: a Mono paragraph and the new menu. Screenshots sent to Adriel.
+  - Review caught and fixed: "Monotype Corsiva" counted as monospaced; "Default" showed checked for
+    a block with another font of its own.
+  - Not yet: in the browser an image-only clipboard is not pasted into a document (the browser sends
+    only the key); the handle menu does not open upwards near the bottom.
 - G11.6, the bow (2026-11-13, Adriel's changes): a click shoots from the hip, holding aim goes over the
   shoulder with a crosshair in the middle of the screen, and the shoulder button swaps sides.
   - Hip shot: a left click alone with the bow turns the hero to where the camera looks and shoots after
@@ -1464,6 +1481,9 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   - G13.2 images: `crates/ui-egui/src/pending_open.rs`, `pending_opens`: the card title arm also matches `doc.block.image` (pictures dropped on a document). Locales: "or drop one here", "Drop images to add them here".
   - G13.2 embeds: no new hook. Locales: "Live", "Pinned", "This layer was deleted", "Show a frame or component of this file", "Choose a layer", "No frames or components", "Frame or component", "Follow the layer", "Choose another layer".
   - G13.2 swatches, shapes, mentions, selection: no new hook. Locales: "Colour swatch", "Colour name".
+  - G13.2 fonts and pastes: `crates/ui-egui/src/shortcuts.rs`, after `game::pixel::paste_events`:
+    `game::docs::canvas_input` drops the keys, clipboard events and image pastes meant for the canvas
+    while a document is shown (undo, redo and the app's own keys pass). Locales unchanged.
   - G13.2 formatting words: no new hook. Locales: "Bold", "Highlight", "Paste a link".
 - Nested pages (G9; `crates/doc/src/page_tree.rs`, `crates/engine/src/cmd/page_tree.rs`,
   `crates/ui-egui/src/game/tree_list.rs` and `page_list.rs` are ours):

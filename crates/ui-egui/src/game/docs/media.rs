@@ -1,6 +1,7 @@
 //! Pictures in the document editor (G13.2): an image block shows its picture as wide as the column
 //! allows (never wider than the picture itself, never taller than [`MAX_H`]); an empty one asks for a
-//! picture; image files dropped on an open document go in as image blocks where they were dropped.
+//! picture; image files dropped on an open document go in as image blocks where they were dropped,
+//! and a picture pasted goes in after the block written in.
 
 use egui::{Align2, Color32, ColorImage, CornerRadius, Id, Rect, Sense, Stroke, StrokeKind, TextureHandle, Ui, pos2, vec2};
 use figcraft_color::ImageFilters;
@@ -8,6 +9,7 @@ use figcraft_doc::docs::{BlockId, DocId};
 use serde_json::{Value, json};
 
 use super::blocks::View;
+use super::state::State;
 use crate::FigApp;
 use crate::a11y;
 use crate::i18n::tr;
@@ -222,6 +224,36 @@ pub(super) fn take_drops(app: &mut FigApp, ctx: &egui::Context, doc: DocId, view
         app.ui.pending_opens.push(crate::pending_open::PendingOpen { label: name, params, command: "doc.block.image", target, read });
         place.1 += 1;
     }
+}
+
+/// A picture pasted while the document is shown (copied in another app: the clipboard holds no
+/// text) goes in after the block written in, else after the last block selected, else at the end.
+pub(super) fn take_paste(app: &mut FigApp, ctx: &egui::Context, st: &State, doc: DocId, views: &[View]) {
+    if !ctx.input(|i| i.raw.events.iter().any(|e| matches!(e, egui::Event::PasteImage(_)))) {
+        return;
+    }
+    let Some(png) = clipboard_picture(app) else { return };
+    let after = st.writing.or_else(|| views.iter().rev().find(|v| st.picked.contains(&v.id)).map(|v| v.id));
+    let end = || (None, views.iter().filter(|v| v.parent.is_none()).count());
+    let (parent, index) = after.and_then(|id| super::blocks::place_after(app, doc, id)).unwrap_or_else(end);
+    use base64::Engine as _;
+    let mut params = json!({"doc": doc.0, "index": index, "data": base64::engine::general_purpose::STANDARD.encode(png)});
+    if let Some(parent) = parent {
+        params["parent"] = json!(parent.0);
+    }
+    app.run("doc.block.image", params);
+}
+
+/// The clipboard's picture as PNG bytes (None when it holds none, or one too big to take).
+fn clipboard_picture(app: &mut FigApp) -> Option<Vec<u8>> {
+    if let Some(png) = app.services.clipboard_get_png().filter(|png| png.len() <= crate::MAX_CLIPBOARD_PNG_BYTES) {
+        return Some(png);
+    }
+    let (w, h, rgba) = app.services.clipboard_get_image()?;
+    let img = image::RgbaImage::from_raw(w, h, rgba)?;
+    let mut out = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut out, image::ImageFormat::Png).ok()?;
+    Some(out.into_inner()).filter(|png| png.len() <= crate::MAX_CLIPBOARD_PNG_BYTES)
 }
 
 /// Where a picture dropped at height `y` goes: after the last block that starts above it, inside the

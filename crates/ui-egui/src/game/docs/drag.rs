@@ -146,6 +146,8 @@ mod tests {
             color: None,
             background: None,
             size: None,
+            has_font: false,
+            mono: false,
             parent: None,
             before: None,
         }

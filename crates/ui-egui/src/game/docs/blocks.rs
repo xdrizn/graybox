@@ -29,6 +29,18 @@ const POPUP_W: f32 = 264.0;
 const NEW_COLOUR: &str = "#3A7FD5";
 /// The room on the left of a colour swatch's name: the chip and its code.
 const SWATCH_W: f32 = 118.0;
+/// The font the handle menu's "Mono" sets (exports draw it when installed, the editor in its own
+/// monospaced face).
+const MONO: &str = "JetBrains Mono";
+
+/// How tall the handle menu's list of kinds is before it scrolls.
+const TURN_H: f32 = 220.0;
+
+/// Whether a font family is a monospaced one (by its name).
+pub(super) fn is_mono(family: &str) -> bool {
+    let f = family.to_ascii_lowercase();
+    f.split(|c: char| !c.is_ascii_alphanumeric()).any(|w| matches!(w, "mono" | "monospace" | "courier" | "consolas"))
+}
 
 /// How a block is drawn.
 pub(super) enum Look {
@@ -96,6 +108,10 @@ pub(super) struct View {
     pub color: Option<Color32>,
     pub background: Option<Color32>,
     pub size: Option<f32>,
+    /// Its own font, if any, and whether that is a monospaced one (the editor draws the other fonts
+    /// in its own face).
+    pub has_font: bool,
+    pub mono: bool,
     /// The block it sits inside, and the one just before it among its siblings.
     pub parent: Option<BlockId>,
     pub before: Option<BlockId>,
@@ -137,6 +153,8 @@ pub(super) fn flatten(blocks: &[Block], depth: usize, parent: Option<BlockId>, a
             color: b.style.color.as_deref().and_then(parse_hex),
             background: b.style.background.as_deref().and_then(parse_hex),
             size: b.style.size,
+            has_font: b.style.font.is_some(),
+            mono: b.style.font.as_deref().is_some_and(is_mono),
             parent,
             before,
         });
@@ -204,6 +222,8 @@ fn mark_typed<'a>(before: &str, text: &str, caret: Option<usize>) -> Option<(&'a
 enum Act {
     Enter(usize),
     BackspaceAtStart,
+    /// Delete at the end: the next block's words join this one.
+    DeleteAtEnd,
     Indent,
     Outdent,
     Up,
@@ -303,7 +323,11 @@ fn text_block(
     let Some(v) = views.get(index) else { return };
     let id = field_id(doc, v.id);
     let size = font_size(&v.look, v.size);
-    let font = if matches!(v.look, Look::Heading(_)) { semibold(size) } else { regular(size) };
+    let font = match v.look {
+        _ if v.mono => egui::FontId::monospace(size),
+        Look::Heading(_) => semibold(size),
+        _ => regular(size),
+    };
     let (lead, pad) = match v.look {
         Look::Bulleted | Look::Numbered(_) | Look::Checklist(_) | Look::Toggle(_) => (MARK_W, 0.0),
         Look::Callout(_) => (40.0, 10.0),
@@ -360,6 +384,8 @@ fn text_block(
                 act = Some(Act::Enter(from));
             } else if from == 0 && to == 0 && i.consume_key(Modifiers::NONE, Key::Backspace) {
                 act = Some(Act::BackspaceAtStart);
+            } else if from == len && to == len && i.consume_key(Modifiers::NONE, Key::Delete) {
+                act = Some(Act::DeleteAtEnd);
             } else if i.consume_key(Modifiers::SHIFT, Key::Tab) {
                 act = Some(Act::Outdent);
             } else if i.consume_key(Modifiers::NONE, Key::Tab) {
@@ -861,6 +887,15 @@ fn act_on(app: &mut FigApp, st: &mut State, doc: DocId, views: &[View], index: u
                 _ => keep(st, 0),
             }
         }
+        Act::DeleteAtEnd => {
+            // The next block shown joins this one when both are written in; the cursor stays at the
+            // joint. A closed toggle's next block is not the one shown under its words.
+            let next = views.get(index + 1).filter(|n| n.look.writable() && !matches!(v.look, Look::Toggle(false)));
+            if let Some(n) = next {
+                app.run("doc.block.merge", json!({"doc": doc.0, "id": n.id.0}));
+            }
+            keep(st, text_now.chars().count());
+        }
         Act::Indent => {
             // Only under a block that is written in (not a divider, an image or an embed).
             if let Some(b) = v.before.filter(|b| views.iter().any(|w| w.id == *b && w.look.writable())) {
@@ -1056,15 +1091,19 @@ fn handle(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, doc: DocId,
             }
         }
         ui.separator();
-        widgets::label(ui, tr("Turn into"), tk.text_secondary);
-        for (label, kind) in kinds() {
-            if menu_item(ui, label, "") {
-                app.run("doc.block.turn_into", json!({"doc": doc.0, "id": v.id.0, "kind": kind}));
+        if v.look.writable() {
+            widgets::label(ui, tr("Font"), tk.text_secondary);
+            let picked = if crate::right::menu_check(ui, !v.has_font, tr("Default"), "") {
+                v.has_font.then_some(Value::Null)
+            } else if crate::right::menu_check(ui, v.mono, tr("Mono"), "") {
+                Some(if v.mono { Value::Null } else { json!(MONO) })
+            } else {
+                None
+            };
+            if let Some(font) = picked {
+                app.run("doc.block.set", json!({"doc": doc.0, "id": v.id.0, "style": {"font": font}}));
                 ui.close();
             }
-        }
-        ui.separator();
-        if v.look.writable() {
             widgets::label(ui, tr("Colour"), tk.text_secondary);
             if let Some(c) = swatches(ui, &tk, false) {
                 app.run("doc.block.set", json!({"doc": doc.0, "id": v.id.0, "style": {"color": c}}));
@@ -1074,6 +1113,17 @@ fn handle(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, doc: DocId,
         if let Some(c) = swatches(ui, &tk, true) {
             app.run("doc.block.set", json!({"doc": doc.0, "id": v.id.0, "style": {"background": c}}));
         }
+        // The kinds last, in a short list that scrolls, so the menu fits a small window.
+        ui.separator();
+        widgets::label(ui, tr("Turn into"), tk.text_secondary);
+        egui::ScrollArea::vertical().max_height(TURN_H).show(ui, |ui| {
+            for (label, kind) in kinds() {
+                if menu_item(ui, label, "") {
+                    app.run("doc.block.turn_into", json!({"doc": doc.0, "id": v.id.0, "kind": kind}));
+                    ui.close();
+                }
+            }
+        });
     });
 }
 

@@ -55,6 +55,45 @@ pub(crate) fn before_run(app: &mut FigApp, id: &str) {
     }
 }
 
+/// Whether a document is shown in the canvas' place.
+fn shown(app: &FigApp) -> bool {
+    if app.ui.left_tab != crate::LeftTab::Documents {
+        return false;
+    }
+    let Some(uid) = state::uid(app) else { return false };
+    let st = state::take(uid);
+    let open = st.open.is_some();
+    state::put(uid, st);
+    open
+}
+
+/// While a document is shown, the canvas hidden behind it takes no keys, clipboard events or image
+/// pastes (they would change layers no one sees): only undo, redo and the app's own keys (save,
+/// open, Actions, tabs…) reach it. Called by the canvas shortcuts (a Graybox hook).
+pub(crate) fn canvas_input(
+    app: &FigApp,
+    events: Vec<egui::Event>,
+    paste: crate::shortcuts::PasteEvents,
+) -> (Vec<egui::Event>, crate::shortcuts::PasteEvents) {
+    if !shown(app) {
+        return (events, paste);
+    }
+    let app_key = |id: &str| {
+        ["app.", "file.", "help.", "doc."].iter().any(|p| id.starts_with(p))
+            || matches!(id, "edit.undo" | "edit.redo" | "view.toggleUi" | "view.fullscreen" | "view.nextRegion")
+    };
+    let kept = events
+        .into_iter()
+        .filter(|e| match e {
+            egui::Event::Key { key, physical_key, modifiers, .. } => {
+                crate::shortcuts::lookup(figcraft_engine::keymap::Context::Canvas, *key, *physical_key, *modifiers).is_some_and(|b| app_key(b.id))
+            }
+            _ => false,
+        })
+        .collect();
+    (kept, crate::shortcuts::PasteEvents::default())
+}
+
 /// The document open in the editor of the file in front (for tests).
 #[cfg(test)]
 pub(crate) fn open_document(app: &FigApp) -> Option<u64> {
