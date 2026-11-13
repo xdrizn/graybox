@@ -65,6 +65,8 @@ pub(super) fn request_render(app: &mut FigApp, worker: &mut Worker, ppp: f32, ma
     let doc = crate::game::pseudo_view::view(doc);
     // Graybox: layers an auto layout drop moved glide to their places.
     let doc = crate::game::layout_ease::view(ds.uid, ds.page, doc, &ds.selection);
+    // Graybox: a tilted layer with a selected layer inside shows flat while it is edited (G17).
+    let doc = crate::game::tilt_ui::view(doc, &ds.selection);
     let outlined = if ds.view.outlines_selection { ds.selection.clone() } else { vec![] };
     let proof = ds.view.proof_srgb && !doc.color_profile.is_srgb();
     let outline_extras = figcraft_render::Outline { hidden: ds.view.outline_hidden, bounds: ds.view.outline_bounds, light: false };

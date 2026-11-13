@@ -11,6 +11,8 @@ workspace = true
 [dependencies]
 figcraft-geom = { workspace = true }
 figcraft-color = { workspace = true }
+# Graybox: 3D rotation of layers (G17).
+figcraft-tilt = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

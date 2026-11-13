@@ -58,6 +58,13 @@ impl Session {
     /// frame's. Boolean groups are hit by their results ([`crate::booleans::result_outline`]); in
     /// outline mode shapes only on their outlines.
     pub fn hit(&self, doc: &Document, page: NodeId, p: Point, tol: f64) -> Option<NodeId> {
+        // Graybox: a tilted layer with a selected layer inside shows flat, and is hit flat (G17).
+        let flat = figcraft_doc::tilt::editing_flat(doc, &self.selection());
+        figcraft_doc::tilt::with_flat(&flat, || self.hit_shown(doc, page, p, tol))
+    }
+
+    /// [`Self::hit`] with the tilted layers shown as they are drawn.
+    fn hit_shown(&self, doc: &Document, page: NodeId, p: Point, tol: f64) -> Option<NodeId> {
         let sel = self.selection();
         let result = crate::booleans::result_outline(doc, &sel);
         let focus = self.ds().ok().and_then(crate::DocState::focused);

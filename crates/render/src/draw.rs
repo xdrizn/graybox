@@ -536,6 +536,8 @@ pub(crate) fn bounds_within<'a>(
             r = r.union(ink + figcraft_geom::kurbo::Vec2::new(0.0, dy));
         }
     }
+    // Graybox: a tilted layer paints where its 3D rotation puts it (G17).
+    let r = crate::tilt::grow(n, r);
     if let (Some(m), Some(l)) = (memo, levels) {
         m.paint.borrow_mut().insert(key, (r, l));
     }
@@ -590,7 +592,8 @@ pub fn paint_bounds(doc: &Document, id: NodeId) -> Option<Rect> {
     let n = doc.node(id)?;
     let world = doc.world_transform(id);
     let local = local_paint_bounds(doc, n, world, 0, None);
-    Some(figcraft_geom::transform_rect_bbox(world, local))
+    // Graybox: a layer inside a tilted one shows where the tilt puts it (G17).
+    Some(crate::tilt::inside_tilted(doc, id, figcraft_geom::transform_rect_bbox(world, local)))
 }
 
 /// The local → page map of a layer drawn at `xf` (local → device): the view's scale taken out.
@@ -705,8 +708,9 @@ pub(crate) fn draw_layer(ctx: &Ctx, pix: &mut Pixmap, n: &Node, parent_xf: Affin
         return;
     }
     // Graybox: a 9-sliced layer drawn at another size than its base stretches only its middles;
-    // Pixel text draws sharp on the art-pixel grid (G16.3).
-    if crate::pixel::layer(ctx, pix, n, xf, depth) {
+    // Pixel text draws sharp on the art-pixel grid (G16.3). A tilted layer is drawn flat, then
+    // warped by its 3D rotation (G17).
+    if crate::tilt::draw(ctx, pix, n, xf, depth) || crate::pixel::layer(ctx, pix, n, xf, depth) {
         return;
     }
     if ctx.lod && dev.width().max(dev.height()) < lod::TINY_PX && lod::splattable_within(ctx.doc, n, 0, Some(ctx.bounds)).0 {

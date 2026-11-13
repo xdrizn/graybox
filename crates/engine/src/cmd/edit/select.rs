@@ -8,7 +8,10 @@ pub(super) fn layers_at(s: &mut Session, p: &Value) -> Result<Value> {
     let zoom = s.ds()?.view.zoom.max(1e-6);
     let sel = s.selection();
     let result = crate::booleans::result_outline(doc, &sel);
-    let layers: Vec<Value> = figcraft_doc::geometry::layers_at(doc, s.page()?, figcraft_geom::Point::new(x, y), 2.0 / zoom, Some(&result))
+    // Graybox: a tilted layer with a selected layer inside shows flat, and is hit flat (G17).
+    let (page, flat) = (s.page()?, figcraft_doc::tilt::editing_flat(doc, &sel));
+    let at = figcraft_geom::Point::new(x, y);
+    let layers: Vec<Value> = figcraft_doc::tilt::with_flat(&flat, || figcraft_doc::geometry::layers_at(doc, page, at, 2.0 / zoom, Some(&result)))
         .into_iter()
         .filter_map(|(id, depth)| doc.node(id).map(|n| json!({"id": id, "name": n.name, "type": n.kind.type_name(), "depth": depth})))
         .collect();

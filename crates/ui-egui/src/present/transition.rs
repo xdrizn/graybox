@@ -139,6 +139,8 @@ pub fn smart_interpolate(from: &Document, from_root: NodeId, to: &Document, to_r
                     }
                     lerp_paints(&sn.fills, &mut m.fills, t);
                     lerp_paints(&sn.strokes, &mut m.strokes, t);
+                    // Graybox: the 3D rotation animates too (G17).
+                    crate::game::tilt_ui::lerp(sn, m, t);
                 }
             }
             None => {

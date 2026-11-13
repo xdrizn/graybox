@@ -19,6 +19,14 @@ one), so letters are a little wider or narrower than in Graybox. Change the font
 it stays on the next import. With TextMeshPro, import its essentials once per project
 (Window → TextMeshPro → Import TMP Essential Resources), or texts have no font.
 
+**3D tilt:** a layer tilted in Graybox carries an optional `"rotation3d": {"x": deg, "y": deg,
+"perspective": n}` in `layout.json` (in `nodes`, and in `root`). Live Link sets the RectTransform's
+`localEulerAngles` to `(x, y, 0)` (Unity's `Quaternion.Euler` convention: +X tips the top away, +Y
+brings the right side nearer) about the rect's centre; the box (`x, y, width, height`) and the sprite
+stay flat. Layers without it are untouched. Note: perspective only shows with a Canvas in Screen Space -
+Camera or World Space; in Screen Space - Overlay the tilt shows without perspective. Live Link does
+not change the Canvas mode; `perspective` is informational.
+
 **Pixel art:** layers drawn in Graybox's Pixel mode always import sharp (Point filtering, no
 compression, no mipmaps), whatever the window says. To get the same for every sprite, turn on "Pixel
 art (no smoothing)" in the window (or set `GrayboxLiveLink.PixelArt`) and import again.

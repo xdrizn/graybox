@@ -36,6 +36,8 @@ figcraft-plugin = { path = "crates/plugin" }
 figcraft-game = { path = "crates/game" }
 # Graybox pixel art (G16): sprites and drawing operations.
 figcraft-pixel = { path = "crates/pixel" }
+# Graybox 3D rotation of layers (G17): the tilt and its homography.
+figcraft-tilt = { path = "crates/tilt" }
 
 # Keep coupled craft-libs crates on one rev. craft-update has no sibling-crate
 # dependencies and is pinned separately for the suite updater rollout.

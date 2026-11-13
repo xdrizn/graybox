@@ -30,6 +30,8 @@ pub mod section;
 pub mod structure;
 pub mod styles;
 pub mod text;
+// Graybox: 3D rotation of layers (G17), `node.rotation3d.set`.
+pub mod tilt;
 pub mod variables;
 pub mod variables_io;
 pub mod view;
@@ -114,6 +116,8 @@ fn registry() -> &'static Registry {
         list.extend(page_tree::specs());
         // Graybox: the pixel art commands (G16).
         list.extend(pixel::specs());
+        // Graybox: 3D rotation of layers (G17).
+        list.extend(tilt::specs());
         list.extend(game_share::specs());
         list.extend(audio::specs());
         list.extend(comment::specs());

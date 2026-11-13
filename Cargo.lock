@@ -1997,6 +1997,7 @@ dependencies = [
  "base64 0.22.1",
  "figcraft-color",
  "figcraft-geom",
+ "figcraft-tilt",
  "imbl",
  "serde",
  "serde_json",
@@ -2224,6 +2225,14 @@ dependencies = [
  "skrifa 0.47.0",
  "unicode-bidi",
  "unicode-segmentation",
+]
+
+[[package]]
+name = "figcraft-tilt"
+version = "0.15.0"
+dependencies = [
+ "figcraft-geom",
+ "proptest",
 ]
 
 [[package]]

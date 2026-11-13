@@ -487,6 +487,9 @@ fn every_command_survives_junk_params() {
         json!({"commands": [{"command": "select.all", "as": "\u{0}"}, {"command": "node.set", "params": {"ids": [
             {"$ref": "\u{0}", "field": "ids/18446744073709551616/x"}, {"$ref": {"x": 1}}, {"$step": 0, "field": "//"}, {"$ref": "\u{0}", "field": "/"}],
             "props": {"name": {"$ref": "nope", "field": 5}}}}]}),
+        // Graybox: 3D rotation (G17) with huge, tiny and wrong-typed angles and perspective.
+        json!({"ids": [2, 3], "x": 1e308, "y": -1e308, "perspective": 1e-308, "enabled": true}),
+        json!({"ids": [2], "x": "NaN", "y": [1], "perspective": -5, "enabled": "yes"}),
         // Font downloads: family names as junk and as paths (a family is only ever looked up in
         // the font index, never used as a path).
         json!({"family": "../../\u{0}Lato"}),

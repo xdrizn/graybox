@@ -209,6 +209,8 @@ fn hit_rec(doc: &Document, id: NodeId, pt: Point, tol: f64, depth: usize, result
         return None;
     }
     let n = doc.node(id)?;
+    // Graybox: a tilted layer is hit where it is drawn, the point taken back through its tilt (G17).
+    let pt = crate::tilt::flat_point(doc, id, n, pt)?;
     let outline = also.is_some();
     if (!n.visible && !also.is_some_and(|a| a.hidden)) || n.locked {
         return None;
@@ -249,6 +251,8 @@ pub fn layers_at(doc: &Document, page: NodeId, pt: Point, tol: f64, result: Bool
         if !n.visible || n.locked || depth > 512 {
             return;
         }
+        // Graybox: a tilted layer is hit where it is drawn (G17); `hit_rec` takes the page point.
+        let (raw, Some(pt)) = (pt, crate::tilt::flat_point(doc, id, n, pt)) else { return };
         let clips = n.clip && n.kind.is_frame_like();
         if clips && !hits_node_itself(doc, id, n, pt, 0.0, false) {
             return;
@@ -256,7 +260,7 @@ pub fn layers_at(doc: &Document, page: NodeId, pt: Point, tol: f64, result: Bool
         let at = out.len();
         let whole = matches!(n.kind, NodeKind::BooleanOp { .. } | NodeKind::Section { contents_hidden: true });
         if whole {
-            if hit_rec(doc, id, pt, tol, depth, result, None).is_some() {
+            if hit_rec(doc, id, raw, tol, depth, result, None).is_some() {
                 out.push((id, depth));
             }
             return;

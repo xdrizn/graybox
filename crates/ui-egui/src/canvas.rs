@@ -327,6 +327,8 @@ pub fn show(app: &mut FigApp, ui: &mut Ui, worker: &mut Worker) {
     }
     // Graybox: the selected layer's 9-slice cuts.
     crate::game::nine_slice_ui::draw(app, &painter);
+    // Graybox: a selected tilted layer outlined where it is drawn (G17).
+    crate::game::tilt_ui::draw(app, &painter);
     crate::game::pseudo_view::banner(&painter, app.canvas.rect);
     crate::board_facilitate::badges(app, &painter);
     crate::board_bar::stamp_author(app, &painter, ctx.input(|i| i.pointer.hover_pos()).filter(|p| rect.contains(*p)));

@@ -23,6 +23,15 @@ namespace Indirect.Graybox.Editor
         public string v = "top";
     }
 
+    // Optional 3D tilt in degrees (Quaternion.Euler convention) about the rect's centre; absent = flat.
+    [Serializable]
+    class Rotation3D
+    {
+        public float x, y;
+        // Page units, informational only (Unity's camera decides the real perspective).
+        public float perspective;
+    }
+
     [Serializable]
     class TextData
     {
@@ -50,6 +59,8 @@ namespace Indirect.Graybox.Editor
         public string sprite = "";
         public float[] border = new float[0];
         public TextData text = new TextData();
+        // null when the layer is not tilted (JsonUtility leaves it null only if we declare no default).
+        public Rotation3D rotation3d;
         // A pixel-art layer: its sprite is imported with Point filtering and no compression.
         public bool pixel;
         // An animated pixel layer: the sprite sheet JSON (its PNG has the same name), e.g. "sprites/7_anim.json".
@@ -432,6 +443,9 @@ namespace Indirect.Graybox.Editor
             rt.anchorMax = aMax;
             rt.offsetMin = new Vector2(xMin - aMin.x * pw, yMin - aMin.y * ph);
             rt.offsetMax = new Vector2(xMax - aMax.x * pw, yMax - aMax.y * ph);
+            // 3D tilt (optional): the pivot is the rect's centre, so the flat box stays where it was laid out.
+            if (n.rotation3d != null && (n.rotation3d.x != 0f || n.rotation3d.y != 0f))
+                rt.localRotation = Quaternion.Euler(n.rotation3d.x, n.rotation3d.y, 0f);
         }
 
         /// The layer's sprite (an Image, sliced when it has a border) or its text.

@@ -26,6 +26,8 @@ pub mod looks;
 pub mod map;
 pub mod menu;
 pub(crate) mod nine_slice_ui;
+// 3D rotation of layers (G17).
+pub(crate) mod tilt_ui;
 pub mod proto_targets;
 pub(crate) mod pseudo_view;
 pub mod renderer;

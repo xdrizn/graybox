@@ -286,6 +286,10 @@ fn design(app: &mut FigApp, ui: &mut Ui) {
         }
     }
     widgets::separator(ui);
+    // Graybox: 3D rotation (X, Y, perspective), under the position and rotation fields (G17).
+    if vector_edit_none && crate::game::tilt_ui::section(app, ui, &shown, &sel) {
+        widgets::separator(ui);
+    }
     if !points_selected {
         crate::layout_panel::layout_section(app, ui, &shown, &sel);
         widgets::separator(ui);

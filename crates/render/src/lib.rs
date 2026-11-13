@@ -22,6 +22,8 @@ pub mod images;
 mod layer_budget;
 pub mod lod;
 mod nine_slice;
+// Graybox: tilted layers (3D rotation, G17).
+mod tilt;
 // Graybox: pixel layers drawn sharp (G16).
 pub mod paint;
 pub mod pattern;
@@ -353,6 +355,10 @@ pub fn raster_bounds(doc: &Document, id: NodeId) -> Option<Rect> {
 /// The page-space rectangle a node exports: a clipping frame's box (plus its own effects), else
 /// everything it paints.
 pub fn export_bounds(doc: &Document, id: NodeId) -> Option<Rect> {
+    // Graybox: a tilted layer exports all its 3D rotation draws (G17).
+    if doc.node(id).and_then(figcraft_doc::tilt::local).is_some() {
+        return draw::paint_bounds(doc, id);
+    }
     doc.world_render_bounds(id)
 }
 

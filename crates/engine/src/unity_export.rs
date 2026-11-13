@@ -97,6 +97,8 @@ fn sprite(doc: &Document, id: NodeId, b: Rect, with_layers: bool, sprites: &std:
         // The layer's opacity goes to the layout (Unity applies it with a CanvasGroup, which its
         // layers inherit), not into the picture too.
         n.opacity = 1.0;
+        // Its 3D rotation too: Unity turns the RectTransform (G17).
+        n.plugin_data.remove(figcraft_doc::tilt::KEY);
     }
     let Some(pix) = figcraft_render::render_area(&d, &[id], b, scale) else { return Ok(None) };
     let png = figcraft_render::encode_png(&pix).map_err(EngineError::Other)?;
@@ -149,6 +151,11 @@ fn node_json(
     });
     if is_root {
         v["anchors"] = json!({"h": "stretch", "v": "stretch"});
+    }
+    // A tilted layer (G17): Unity's own Euler X and Y (the same numbers), about the rect's centre.
+    // Perspective shows with a Screen Space - Camera or World Space canvas.
+    if let Some(t) = figcraft_doc::tilt::of(n) {
+        v["rotation3d"] = json!({"x": t.x, "y": t.y, "perspective": t.perspective});
     }
     let mut children = Vec::new();
     match &n.kind {
@@ -292,6 +299,35 @@ mod tests {
         assert_eq!(alpha, 255, "the sprite is drawn at full opacity");
         assert_eq!(node(label)["text"]["autoResize"], json!("widthAndHeight"));
         assert_eq!(node(wrapped)["text"]["autoResize"], json!("height"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A tilted health bar (G17) exports Unity's X and Y rotation, and its sprite is drawn flat
+    /// (Unity turns it): opaque at all four corners of its box.
+    #[test]
+    fn a_tilted_bar_exports_its_rotation_and_a_flat_sprite() {
+        let dir = std::env::temp_dir().join(format!("graybox-unity-tilt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut s = Session::new();
+        let screen = s.execute("frame.create", &json!({"x": 0, "y": 0, "width": 400, "height": 200, "name": "Hud"})).unwrap()["id"].as_u64().unwrap();
+        let bar = s
+            .execute("frame.create", &json!({"parent": screen, "x": 20, "y": 20, "width": 200, "height": 40, "props": {"fill": "#30c050"}}))
+            .unwrap()["id"]
+            .as_u64()
+            .unwrap();
+        s.execute("node.rotation3d.set", &json!({"ids": [bar], "y": -30, "x": 5, "perspective": 800})).unwrap();
+        let out = s.execute("game.unity.export", &json!({"frame": screen, "dir": dir.to_string_lossy()})).unwrap();
+        let folder = std::path::PathBuf::from(out["screens"][0]["folder"].as_str().unwrap());
+        let layout: serde_json::Value = serde_json::from_slice(&std::fs::read(folder.join("layout.json")).unwrap()).unwrap();
+        let node = layout["nodes"].as_array().unwrap().iter().find(|n| n["id"] == json!(bar)).unwrap().clone();
+        assert_eq!(node["rotation3d"], json!({"x": 5.0, "y": -30.0, "perspective": 800.0}));
+        assert_eq!((node["width"].as_f64(), node["height"].as_f64()), (Some(200.0), Some(40.0)), "its flat box");
+        let png = std::fs::read(folder.join(node["sprite"].as_str().unwrap())).unwrap();
+        let pix = figcraft_render::images::decode(&png).unwrap();
+        let (w, h) = (pix.width() as usize, pix.height() as usize);
+        for (x, y) in [(1, 1), (w - 2, 1), (1, h - 2), (w - 2, h - 2)] {
+            assert_eq!(pix.data()[(y * w + x) * 4 + 3], 255, "corner ({x}, {y}) painted: drawn flat");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

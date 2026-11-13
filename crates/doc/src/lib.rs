@@ -25,6 +25,8 @@ pub mod props;
 pub mod proto;
 pub mod styles;
 pub mod text;
+// Graybox: 3D rotation of layers (G17).
+pub mod tilt;
 pub mod vector;
 pub mod vector_faces;
 pub mod vector_regions;

@@ -3,6 +3,42 @@
 **Current milestone:** G7 — Share (and G0.3, G2.3 leftovers)
 
 ## Done
+- G17.1 3D rotation of layers (2026-11-13, owner's request; spec
+  [`specs/2026-11-13-frames-3d-design.md`](specs/2026-11-13-frames-3d-design.md)): a frame, component,
+  instance or group gets **X, Y and Perspective** in a "3D" section of the Design panel (under Position;
+  `+` turns it on, `−` off). Unity's numbers: +X tips the top away, +Y brings the right side near (the
+  owner's "left side nearer" health bar is Y negative); ±80°, perspective 50–100 000 (default 1000,
+  raised so no corner of the box comes closer than a fifth of it). Stored in plugin data
+  `graybox.rotation3d` = `x,y,perspective` (copies, undo and old builds keep or ignore it). Math in the
+  new pure crate `crates/tilt` (`figcraft-tilt`, L0): a 3×3 homography about the layer's centre in its
+  parent's space, after its own Z rotation (Unity's Z, X, Y order), with the near-plane cut for what
+  overflows; property-tested (corners finite and in front at any angle, inverse round-trips, bounds
+  hold the corners, junk strings). `crates/doc/src/tilt.rs`: reading it, the hit-test point mapping and
+  the "edit flat" set. Rendering (`crates/render/src/tilt.rs`): the layer is drawn flat into its own
+  pixmap (cached while its subtree's `Arc`s, scale and flags are unchanged: moving or panning only
+  warps again), then each covered device pixel maps back through the inverse homography and samples
+  bilinearly; bounds, culling, repaint of a change inside a tilted frame and PNG/JPG export follow the
+  warp. The canvas, Prototype and Play all show it (one renderer). **Editable**: its layers stay real
+  layers; a click hits what is drawn under the pointer; while a layer inside it is selected the frame
+  shows flat (canvas picture and hit test) so handles, text editing and dragging line up, and it tilts
+  back when the selection leaves. A selected tilted layer is outlined where it is drawn (its flat box
+  keeps its handles). Smart animate animates X, Y and perspective. Command `node.rotation3d.set {ids?,
+  x?, y?, perspective?, enabled?}` (undoable; in the junk sweep). Unity export writes
+  `rotation3d: {x, y, perspective}` and renders the sprite flat; the Live Link sets
+  `localRotation = Euler(x, y, 0)` about the rect's centre (pivot already 0.5), README notes that
+  perspective needs a Screen Space – Camera or World Space canvas (compiled with Roslyn against Unity
+  2022.3.39 dlls, not run in Unity). Checked in the real app on a scratch file: a 320 × 56 health bar
+  at Y −40°, perspective 600 (left side near), a click above its flat box selects it, selecting its
+  label shows it flat, fill width and text changed, deselected it tilts back with the changes, PNG
+  export takes in the near end, Prototype shows it tilted. Not checked: Play over the game scene, the
+  browser build beyond `cargo xtask wasm`, the Live Link inside Unity. Code review (high) fixed: the
+  flat drawing's effect scale inside scaled parents, the cache keyed on the presenter's clock (it
+  missed every frame in Play; now keyed on GIF/pixel frames), the cache ignoring layers left out or
+  outlined, "Select layer" not following edit flat. Left for G17.2: the flat selection box and hover
+  outlines inside an unselected tilted frame, nested tilted outlines, the root frame's tilt in smart
+  animate. Limits: SVG and PDF export draw it flat; background blur / glass
+  inside a tilted frame sees only the frame's content; a blend mode on the tilted layer itself
+  composites as normal; no canvas handle to drag the tilt yet (G17.2).
 - G9 working inside a frame (2026-11-12, owner's report): with a top-level **frame** (not a component,
   instance, widget, board object or empty frame) that has layers in it **selected**, a press on its empty
   background draws a marquee of the layers inside (no Ctrl; it used to drag the frame), a press on a layer in
@@ -1147,3 +1183,17 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
 - G0.3: checkpoint and recovery copy every 2 minutes.
 - G2.3: try controllers on Linux/macOS (gilrs code is in).
 - G7: share link opening in Play (code is in, untested).
+- G17 (3D rotation of layers): workspace `Cargo.toml` (`figcraft-tilt`), `xtask/src/layers.rs`
+  (`tilt` at L0), `crates/doc/Cargo.toml` (depends on `figcraft-tilt`), `crates/doc/src/lib.rs`
+  (`pub mod tilt`); `crates/doc/src/geometry.rs` `hit_rec` and `layers_at` (the point goes back
+  through a tilted layer's warp, `tilt::flat_point`); `crates/render/src/lib.rs` (`mod tilt`;
+  `export_bounds`: a tilted layer exports its `paint_bounds`); `crates/render/src/draw.rs`
+  `draw_layer` (`tilt::draw` before `pixel::layer`), `bounds_within` (`tilt::grow`),
+  `paint_bounds` (`tilt::inside_tilted`); `crates/engine/src/cmd.rs` (`mod tilt`, its specs);
+  `crates/engine/src/canvas/tools/keys.rs` `Session::hit` (runs the hit test as `hit_shown` inside
+  `tilt::with_flat`, edit flat); `crates/engine/src/tests.rs` (two junk entries);
+  `crates/ui-egui/src/canvas/render.rs` `request_render` (`tilt_ui::view`); `canvas.rs`
+  (`tilt_ui::draw`); `panels/right.rs` (`tilt_ui::section` under Position);
+  `present/transition.rs` `smart_interpolate` (`tilt_ui::lerp`); `crates/engine/src/cmd/edit/select.rs`
+  `layers_at` and `crates/ui-egui/src/menus/select_layer.rs` (inside `tilt::with_flat`, edit flat);
+  `xtask/src/layers.rs` `same_layer_ok` (`figcraft-tilt` → `figcraft-geom` within L0).

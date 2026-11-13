@@ -1,0 +1,15 @@
+[package]
+name = "figcraft-tilt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Graybox 3D rotation of layers (G17): the tilt (X/Y rotation and perspective) and its projective transform (homography); pure math, no rendering"
+
+[lints]
+workspace = true
+
+[dependencies]
+figcraft-geom.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
