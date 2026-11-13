@@ -128,13 +128,19 @@ pub(crate) fn draw(app: &FigApp, painter: &egui::Painter) {
         let col = crate::theme::ACCENT;
         dashed(painter, a, z, Stroke::new(if hot { 2.0 } else { 1.0 }, if hot { col } else { col.gamma_multiply(0.8) }));
     }
+    super::nine_slice_nodes::draw(app, painter, world, size, &s);
 }
 
 /// The pointer on the canvas at `pos`: a press on a cut drags it, the drag moves it, the release
 /// ends it (one undo step). True when the pointer belongs to a cut (the tools leave it alone).
 pub(crate) fn input(app: &mut FigApp, ctx: &egui::Context, pos: Pos2) -> bool {
-    let (pressed, down, released) = ctx.input(|i| {
-        (i.pointer.button_pressed(egui::PointerButton::Primary), i.pointer.primary_down(), i.pointer.button_released(egui::PointerButton::Primary))
+    let (pressed, down, released, shift) = ctx.input(|i| {
+        (
+            i.pointer.button_pressed(egui::PointerButton::Primary),
+            i.pointer.primary_down(),
+            i.pointer.button_released(egui::PointerButton::Primary),
+            i.modifiers.shift,
+        )
     });
     let dragged: Option<usize> = ctx.data(|d| d.get_temp(drag_id()));
     let Some((id, world, (w, h), s)) = target(app) else {
@@ -142,6 +148,7 @@ pub(crate) fn input(app: &mut FigApp, ctx: &egui::Context, pos: Pos2) -> bool {
             ctx.data_mut(|d| d.remove::<usize>(drag_id()));
             let _ = app.session.commit_interaction();
         }
+        super::nine_slice_nodes::cancel(app, ctx);
         return false;
     };
     if let Some(side) = dragged {
@@ -149,16 +156,9 @@ pub(crate) fn input(app: &mut FigApp, ctx: &egui::Context, pos: Pos2) -> bool {
         if down {
             let p = app.to_page(pos);
             let local = world.inverse() * p;
-            let v = match side {
-                0 => local.y,
-                1 => w - local.x,
-                2 => h - local.y,
-                _ => local.x,
-            };
             let mut insets = s.insets;
-            if let Some(slot) = insets.get_mut(side) {
-                *slot = v.round().max(0.0);
-            }
+            // With Shift the opposite cut follows.
+            super::nine_slice_nodes::set_cut(&mut insets, side, super::nine_slice_nodes::cut_at(side, local, (w, h)), shift);
             if insets != s.insets {
                 let _ = app.session.execute("game.nineSlice.set", &json!({"ids": [id], "insets": insets}));
             }
@@ -167,6 +167,10 @@ pub(crate) fn input(app: &mut FigApp, ctx: &egui::Context, pos: Pos2) -> bool {
             ctx.data_mut(|d| d.remove::<usize>(drag_id()));
             let _ = app.session.commit_interaction();
         }
+        return true;
+    }
+    // The crossings first: they sit on the cuts.
+    if super::nine_slice_nodes::input(app, ctx, pos, id, world, (w, h), &s) {
         return true;
     }
     let hit = cuts(app, world, (w, h), &s).into_iter().find(|(_, a, z)| Rect::from_two_pos(*a, *z).expand(4.0).contains(pos)).map(|c| c.0);
