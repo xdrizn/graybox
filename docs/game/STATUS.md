@@ -319,6 +319,23 @@
   - Next parts: the `/` menu, drag to move, the formatting bar, images, embeds, tables, links and
     mentions, selecting several blocks, Font in the handle menu. Delete at the end does not join the next
     block yet.
+- G13.2, the `/` menu (2026-11-13): typing `/` at the start of a block or after a space opens a list of
+  blocks under the cursor (Text, Heading 1 to 3, the lists, Toggle list, Callout, Quote, Divider,
+  Decision, Link, Signature). The letters after the `/` filter it, in the app's language or English and
+  without accents ("titulo" finds "Título"); the arrows choose, Enter or a click picks, Escape closes
+  and leaves the words. An empty block turns into the kind picked; a block with words keeps them
+  (without the `/` and its letters) and gets the new block below. When nothing matches, Enter is an
+  ordinary Enter; a space after letters that find nothing, or the cursor going before the `/`, closes
+  the menu. The only empty line of a document, and the line being written, say "Type “/” for blocks";
+  an empty block's hint uses the block's own font.
+  - "Toggle" read "Alternar" in Portuguese (upstream's word for a switch): the block is now "Toggle
+    list" ("Lista recolhível").
+  - Code: `crates/ui-egui/src/game/docs/slash.rs` (ours), wired in `blocks.rs`; tests in
+    `game/docs/slash_tests.rs` and `slash.rs`.
+  - Checked in the real app, in Portuguese: the hint, the menu, the filter without accents, the arrows
+    and Enter. Screenshots sent to Adriel.
+  - Review (high) caught and fixed: the menu was 600 px wide (egui's first-pass width); Enter was
+    swallowed when nothing matched; the hint was smaller than the line's text.
 - G11.6, the bow (2026-11-13, Adriel's changes): a click shoots from the hip, holding aim goes over the
   shoulder with a crosshair in the middle of the screen, and the shoulder button swaps sides.
   - Hip shot: a left click alone with the bow turns the hero to where the camera looks and shoots after
@@ -1325,6 +1342,7 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   - G13.2: no new hook. Locales: the block editor strings ("Turn into, duplicate, colour, delete"
     replaces "Turn into, delete"; "Heading {n}", "List", "To-do", "Decision", "Who", "When", "Why",
     "Brown", "Purple"...).
+  - G13.2 `/` menu: no new hook. Locales: "Type “/” for blocks", "Blocks", "No results", "Toggle list".
 - Nested pages (G9; `crates/doc/src/page_tree.rs`, `crates/engine/src/cmd/page_tree.rs`,
   `crates/ui-egui/src/game/tree_list.rs` and `page_list.rs` are ours):
   - `crates/doc/src/lib.rs`: `pub mod page_tree;`, `Document::page_tree` (serde default, skipped when

@@ -76,6 +76,8 @@ pub(super) struct State {
     /// when `None`).
     pub focus: Option<Target>,
     pub caret: Option<usize>,
+    /// The `/` menu, while it is open (G13.2).
+    pub slash: Option<super::slash::Slash>,
 }
 
 thread_local! {

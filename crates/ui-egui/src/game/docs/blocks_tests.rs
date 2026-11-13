@@ -11,31 +11,31 @@ use crate::LeftTab;
 use crate::layers_drag_tests::Ui;
 use crate::live_tests::{flat, has_text, text_center, texts};
 
-fn shapes(u: &mut Ui) -> Vec<egui::Shape> {
+pub(super) fn shapes(u: &mut Ui) -> Vec<egui::Shape> {
     flat(&u.frame_output(vec![]).shapes)
 }
 
-fn press(u: &mut Ui, at: Pos2, pressed: bool) {
+pub(super) fn press(u: &mut Ui, at: Pos2, pressed: bool) {
     u.frame(vec![Event::PointerMoved(at), Event::PointerButton { pos: at, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE }]);
 }
 
-fn click(u: &mut Ui, at: Pos2) {
+pub(super) fn click(u: &mut Ui, at: Pos2) {
     press(u, at, true);
     press(u, at, false);
     u.frame(vec![]);
 }
 
-fn key_with(u: &mut Ui, key: Key, modifiers: Modifiers) {
+pub(super) fn key_with(u: &mut Ui, key: Key, modifiers: Modifiers) {
     u.frame_with(vec![Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers }], modifiers);
     u.frame_with(vec![Event::Key { key, physical_key: None, pressed: false, repeat: false, modifiers }], modifiers);
     u.frame(vec![]);
 }
 
-fn key(u: &mut Ui, key: Key) {
+pub(super) fn key(u: &mut Ui, key: Key) {
     key_with(u, key, Modifiers::NONE);
 }
 
-fn type_text(u: &mut Ui, s: &str) {
+pub(super) fn type_text(u: &mut Ui, s: &str) {
     for ch in s.chars() {
         u.frame(vec![Event::Text(ch.to_string())]);
     }
@@ -43,14 +43,14 @@ fn type_text(u: &mut Ui, s: &str) {
 }
 
 /// The top-left corner and size of the text `s` on screen.
-fn text_rect(u: &mut Ui, s: &str) -> egui::Rect {
+pub(super) fn text_rect(u: &mut Ui, s: &str) -> egui::Rect {
     let found = texts(&shapes(u)).into_iter().find(|(t, _, _)| t == s);
     let (_, at, size) = found.unwrap_or_else(|| panic!("no text {s:?} on screen"));
     egui::Rect::from_min_size(at, size)
 }
 
 /// Put the keyboard in the block showing `s`, with the cursor `from_end` characters before its end.
-fn caret_in(u: &mut Ui, s: &str, from_end: usize) {
+pub(super) fn caret_in(u: &mut Ui, s: &str, from_end: usize) {
     let at = text_center(&shapes(u), s);
     click(u, at);
     key(u, Key::End);
@@ -59,7 +59,7 @@ fn caret_in(u: &mut Ui, s: &str, from_end: usize) {
     }
 }
 
-fn open(blocks: &[(&str, &str)]) -> (Ui, u64) {
+pub(super) fn open(blocks: &[(&str, &str)]) -> (Ui, u64) {
     let mut s = Session::new();
     let doc = s.execute("doc.create", &json!({"title": "Notes"})).unwrap()["id"].as_u64().unwrap();
     for (kind, text) in blocks {
@@ -76,7 +76,7 @@ fn open(blocks: &[(&str, &str)]) -> (Ui, u64) {
 }
 
 /// Let typed words go out as a command.
-fn settle(u: &mut Ui) {
+pub(super) fn settle(u: &mut Ui) {
     // The clock is set, not moved: jump well past every frame so far (each is 1/60 s).
     thread_local! {
         static LATER: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
@@ -90,11 +90,11 @@ fn settle(u: &mut Ui) {
     u.frame(vec![]);
 }
 
-fn blocks(u: &Ui, doc: u64) -> Vec<Block> {
+pub(super) fn blocks(u: &Ui, doc: u64) -> Vec<Block> {
     u.app.session.doc().unwrap().docs.get(DocId(doc)).unwrap().current().unwrap().blocks.clone()
 }
 
-fn words(u: &Ui, doc: u64) -> Vec<String> {
+pub(super) fn words(u: &Ui, doc: u64) -> Vec<String> {
     blocks(u, doc).iter().map(Block::plain_text).collect()
 }
 

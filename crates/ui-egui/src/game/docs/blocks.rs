@@ -11,6 +11,7 @@ use figcraft_doc::docs::{Block, BlockId, BlockKind, DocId, DocVersion};
 use serde_json::{Value, json};
 
 use super::editor::{commit, queue};
+use super::slash;
 use super::state::{State, Target};
 use super::versions::{self, Ver};
 use crate::a11y::{self, Tip};
@@ -282,6 +283,12 @@ fn text_block(
         .and_then(|s| s.cursor.char_range())
         .map(|r| (r.primary.index.0.min(r.secondary.index.0), r.primary.index.0.max(r.secondary.index.0)));
     let mut act = None;
+    // An open `/` menu takes the arrows, Enter and Escape first.
+    let slash_at = st.slash.as_ref().filter(|s| s.block == v.id).map(|s| s.at);
+    let slash_key = match slash_at {
+        Some(at) if focused && editable => slash::keys(ui, slash::lists(&v.text, at, caret.map(|c| c.1))),
+        _ => None,
+    };
     if focused && editable {
         ui.input_mut(|i| {
             let (from, to) = caret.unwrap_or((len, len));
@@ -307,6 +314,7 @@ fn text_block(
     let mut text = v.text.clone();
     let strike = if done { Stroke::new(1.0, ink) } else { Stroke::NONE };
     let layout_font = font.clone();
+    let hint_font = font.clone();
     let mut layouter = move |ui: &Ui, buf: &dyn egui::TextBuffer, wrap: f32| -> Arc<egui::Galley> {
         let format = TextFormat { font_id: layout_font.clone(), color: ink, strikethrough: strike, ..TextFormat::default() };
         let mut job = LayoutJob::single_section(buf.as_str().to_owned(), format);
@@ -317,10 +325,12 @@ fn text_block(
         Look::Heading(n) => trf("Heading {n}", &[("n", &n)]),
         Look::Bulleted | Look::Numbered(_) => tr("List").to_string(),
         Look::Checklist(_) => tr("To-do").to_string(),
-        Look::Toggle(_) => tr("Toggle").to_string(),
+        Look::Toggle(_) => tr("Toggle list").to_string(),
         Look::Quote => tr("Quote").to_string(),
         Look::Decision { .. } => tr("What was decided").to_string(),
         Look::Link(_) => tr("Link title").to_string(),
+        // Where to start: the only line of a new document, or the line being written.
+        Look::Paragraph if editable && (focused || views.len() == 1) => tr("Type “/” for blocks").to_string(),
         _ => String::new(),
     };
     // An empty block says what it is.
@@ -335,7 +345,7 @@ fn text_block(
         .desired_rows(1)
         .interactive(editable)
         .margin(egui::Margin { left: 0, right: 0, top: 3, bottom: 3 });
-    let edit = if show_hint { edit.hint_text(egui::RichText::new(hint).color(t.text_tertiary)) } else { edit };
+    let edit = if show_hint { edit.hint_text(egui::RichText::new(hint).font(hint_font).color(t.text_tertiary)) } else { edit };
     let out = ui
         .horizontal_top(|ui| {
             ui.add_space(left);
@@ -394,9 +404,16 @@ fn text_block(
                     *at = at.saturating_sub(m.chars().count());
                 }
             }
-            None => queue(app, st, doc, Target::Block(v.id), text.clone(), now),
+            None => {
+                queue(app, st, doc, Target::Block(v.id), text.clone(), now);
+                if marks_apply && let Some(at) = slash::opened(&v.text, &text, caret_now) {
+                    st.slash = Some(slash::Slash { block: v.id, at, sel: 0, rect: None });
+                }
+            }
         }
     }
+    let caret_end = out.cursor_range.map(|r| r.primary.index.0);
+    slash::show(app, ui, st, t, doc, v.id, &text, caret_end, resp.has_focus(), &out.galley, out.galley_pos, slash_key);
     if let Look::Decision { who, when, why } = &v.look {
         decision_fields(app, ui, t, doc, v.id, [who, when, why], indent + lead + pad, col, editable);
     }
@@ -563,7 +580,7 @@ fn current(app: &FigApp, doc: DocId) -> Option<&DocVersion> {
 }
 
 /// Right after block `id`, among the blocks it sits with.
-fn place_after(app: &FigApp, doc: DocId, id: BlockId) -> Option<(Option<BlockId>, usize)> {
+pub(super) fn place_after(app: &FigApp, doc: DocId, id: BlockId) -> Option<(Option<BlockId>, usize)> {
     current(app, doc)?.locate(id).map(|(parent, at)| (parent, at + 1))
 }
 
@@ -717,7 +734,7 @@ pub(super) fn kinds() -> [(&'static str, &'static str); 13] {
         (tr("Bulleted list"), "bulleted"),
         (tr("Numbered list"), "numbered"),
         (tr("To-do list"), "checklist"),
-        (tr("Toggle"), "toggle"),
+        (tr("Toggle list"), "toggle"),
         (tr("Callout"), "callout"),
         (tr("Quote"), "quote"),
         (tr("Decision"), "decision"),
