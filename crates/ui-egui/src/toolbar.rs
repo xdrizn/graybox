@@ -153,8 +153,8 @@ fn main_width(groups: &[Group], board: bool) -> f32 {
     let tools: f32 = groups.iter().map(|g| TOOL_CELL + if g.has_flyout() { FLYOUT_GAP + FLYOUT_W } else { 0.0 }).sum();
     // The end, and the gaps that aren't a group's own: after Actions and after the divider (and
     // between a board's two buttons, which the end counts as one item).
-    // Graybox: the mode switcher (with Pixel), then Play and the Claude chat button (no Game settings button).
-    let (end, gaps) = if board { (2.0 * TOOL_CELL, 3.0) } else { (7.0 * TOOL_CELL, 4.0) };
+    // Graybox: the mode switcher (Draw · Pixel · Design), then Play and the Claude chat button (no Game settings button).
+    let (end, gaps) = if board { (2.0 * TOOL_CELL, 3.0) } else { ((MODES as f32 + 2.0) * TOOL_CELL, 4.0) };
     PAD * 2.0 + tools + (groups.len() as f32 + gaps) * GAP + TOOL_CELL + DIVIDER + end
 }
 
@@ -185,7 +185,7 @@ fn main_toolbar(app: &mut FigApp, ui: &mut Ui, canvas: Rect, t: &Tokens, board: 
         }
     } else {
         mode_switcher(app, ui, x, cy, t);
-        let x = x + 5.0 * TOOL_CELL + GAP;
+        let x = x + MODES as f32 * TOOL_CELL + GAP;
         let play = Rect::from_center_size(pos2(x + TOOL_CELL / 2.0, cy), vec2(TOOL_CELL, TOOL_CELL));
         let playable = app.session.doc().is_ok_and(|d| d.nodes().any(|n| matches!(n.kind, figcraft_doc::NodeKind::Frame)));
         if playable {
@@ -301,25 +301,23 @@ fn actions_button(app: &mut FigApp, ui: &mut Ui, x: f32, cy: f32, t: &Tokens) ->
     x + TOOL_CELL + GAP
 }
 
-/// The mode switcher from `x`: Draw · Pixel · Design · Prototype · Inspect (code).
+/// Graybox: how many buttons the mode switcher has (Prototype is a right panel tab, Inspect a
+/// button by Play: `crate::game::inspect_button`).
+const MODES: usize = 3;
+
+/// The mode switcher from `x`: Draw · Pixel · Design.
 fn mode_switcher(app: &mut FigApp, ui: &mut Ui, x: f32, cy: f32, t: &Tokens) {
-    // Graybox: Pixel mode (G16) after Draw.
-    let modes = [
-        (Icon::Pencil, tr("Draw")),
-        (Icon::PixelArt, "Pixel"),
-        (Icon::Frame, tr("Design")),
-        (Icon::Prototype, tr("Prototype")),
-        (Icon::Code, tr("Inspect")),
-    ];
+    // Graybox: Pixel mode (G16) after Draw; no Prototype or Inspect buttons.
+    let modes: [(Icon, &str); MODES] = [(Icon::Pencil, tr("Draw")), (Icon::PixelArt, "Pixel"), (Icon::Frame, tr("Design"))];
     let active = match app.ui.right_tab {
         crate::RightTab::Design if crate::game::pixel::active(app) => 1,
         // Graybox: drawing and erasing are Draw mode.
         crate::RightTab::Design if matches!(app.session.tool.tool, ToolId::Pencil | ToolId::Eraser) => 0,
         crate::RightTab::Design => 2,
-        crate::RightTab::Prototype => 3,
-        crate::RightTab::Inspect => 4,
+        // Prototype or Inspect (chosen in the right panel): no mode lit.
+        crate::RightTab::Prototype | crate::RightTab::Inspect => MODES,
     };
-    let seg = Rect::from_min_size(pos2(x, cy - TOOL_CELL / 2.0), vec2(5.0 * TOOL_CELL, TOOL_CELL));
+    let seg = Rect::from_min_size(pos2(x, cy - TOOL_CELL / 2.0), vec2(MODES as f32 * TOOL_CELL, TOOL_CELL));
     ui.painter().rect_filled(seg, CornerRadius::same(5), t.field);
     for (i, (icon, tip)) in modes.iter().enumerate() {
         let r = Rect::from_min_size(pos2(seg.min.x + i as f32 * TOOL_CELL, seg.min.y), vec2(TOOL_CELL, TOOL_CELL));
@@ -351,20 +349,11 @@ fn pick_mode(app: &mut FigApp, i: usize) {
         return;
     }
     crate::game::pixel::leave(app);
-    let i = if i > 1 { i - 1 } else { i };
-    match i {
-        0 => {
-            app.ui.right_tab = crate::RightTab::Design;
-            app.run("tool.set", json!({"tool": "pencil"}));
-        }
-        1 => {
-            app.ui.right_tab = crate::RightTab::Design;
-            if matches!(app.session.tool.tool, ToolId::Pencil | ToolId::Eraser) {
-                app.run("tool.set", json!({"tool": "move"}));
-            }
-        }
-        2 => app.ui.right_tab = crate::RightTab::Prototype,
-        _ => app.ui.right_tab = crate::RightTab::Inspect,
+    app.ui.right_tab = crate::RightTab::Design;
+    if i == 0 {
+        app.run("tool.set", json!({"tool": "pencil"}));
+    } else if matches!(app.session.tool.tool, ToolId::Pencil | ToolId::Eraser) {
+        app.run("tool.set", json!({"tool": "move"}));
     }
 }
 

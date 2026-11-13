@@ -20,6 +20,7 @@ pub mod frames;
 pub(crate) mod gradient_turn;
 pub mod hotbar;
 pub(crate) mod input;
+pub(crate) mod inspect_button;
 pub(crate) mod layout_ease;
 pub(crate) mod line_dims;
 pub mod look_ui;

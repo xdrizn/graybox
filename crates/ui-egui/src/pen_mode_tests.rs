@@ -80,13 +80,15 @@ fn the_mode_switcher_ends_the_pen_path_too() {
         press(&mut esc, Key::Escape, Modifiers::NONE);
         layers(&esc)
     };
-    for (label, tab) in [("Prototype", RightTab::Prototype), ("Inspect", RightTab::Inspect)] {
+    // Graybox: the switcher has no Prototype or Inspect buttons; Draw is the mode that leaves the pen.
+    {
+        let (label, tab, tool) = ("Draw", RightTab::Design, ToolId::Pencil);
         let mut u = drawing();
         let at = mode_button(&mut u, label);
         click(&mut u, at);
         assert_eq!(u.app.ui.right_tab, tab, "{label}");
         assert!(u.app.session.tool.pen.is_none(), "{label}: the path is finished");
-        assert_eq!(u.app.session.tool.tool, ToolId::Move, "{label}: back to Move");
+        assert_eq!(u.app.session.tool.tool, tool, "{label}: the mode's tool");
         assert_eq!(layers(&u), finished, "{label}: the path is kept as Escape keeps it");
     }
     // Design is already the mode while the pen draws: pressing it again leaves nothing, so the
@@ -102,7 +104,8 @@ fn the_mode_switcher_ends_the_pen_path_too() {
 #[test]
 fn a_press_on_the_mode_switcher_does_not_reach_the_canvas() {
     // The switcher floats over the canvas: the pen must not place an anchor under it.
-    for label in ["Prototype", "Design"] {
+    for label in ["Draw", "Design"] {
+        // Graybox: no Prototype button in the switcher
         let mut u = Ui::new(Session::new());
         u.app.run("tool.set", json!({"tool": "pen"}));
         let at = mode_button(&mut u, label);
@@ -113,4 +116,20 @@ fn a_press_on_the_mode_switcher_does_not_reach_the_canvas() {
         assert!(u.app.session.tool.pen.is_none(), "{label}: no path after the click");
         assert_eq!(layers(&u), 0, "{label}: the click adds nothing");
     }
+}
+
+/// Graybox: the toolbar's mode switcher is Draw · Pixel · Design; Prototype and Inspect are the
+/// right panel's tabs only.
+#[test]
+fn the_mode_switcher_has_no_prototype_or_inspect_buttons() {
+    let mut u = Ui::new(Session::new());
+    u.ctx.enable_accesskit();
+    u.frame(vec![]);
+    let out = u.frame_output(vec![]);
+    let nodes = out.platform_output.accesskit_update.expect("an AccessKit update").nodes;
+    // In the bottom toolbar (Inspect also has a button at the top of the right panel).
+    let button =
+        |label: &str| nodes.iter().any(|(_, n)| n.role() == Role::Button && n.label() == Some(label) && n.bounds().is_some_and(|b| b.y0 > 700.0));
+    assert!(button("Draw") && button("Pixel") && button("Design"));
+    assert!(!button("Prototype") && !button("Inspect"));
 }
