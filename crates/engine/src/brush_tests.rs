@@ -215,3 +215,27 @@ fn the_pencil_keeps_its_stroke_where_it_was_drawn() {
         }
     }
 }
+
+/// Graybox: the brush's Taper setting goes through `stroke.brush` and `node.set`, and the canvas
+/// redraws when it changes (it is part of the stroke cache's key). Sampled 2 off the line: the
+/// taper brush is 0.75 weights wide.
+#[test]
+fn taper_off_through_commands_redraws_the_ends() {
+    let mut s = Session::new();
+    let v = line(&mut s);
+    s.execute("stroke.brush", &json!({"ids": [v], "preset": "taper"})).unwrap();
+    assert_eq!(alpha(&s, 2.0, 2.0), 0, "tapered: thin at the start");
+    s.execute("stroke.brush", &json!({"ids": [v], "preset": "taper", "taper": false})).unwrap();
+    assert_eq!(alpha(&s, 2.0, 2.0), 255, "taper off: full width at the start");
+    let b = s.execute("node.get", &json!({"id": v})).unwrap()["brush"].clone();
+    assert_eq!(b["taper"].as_bool(), Some(false), "{b}");
+    s.execute("node.set", &json!({"id": v, "props": {"brush": {"preset": "taper", "taperStart": 0.1, "taperEnd": 0}}})).unwrap();
+    assert_eq!(alpha(&s, 30.0, 2.0), 255, "full width past the short start taper");
+    assert_eq!(alpha(&s, 199.0, 2.0), 255, "no end taper");
+    let b = s.execute("node.get", &json!({"id": v})).unwrap()["brush"].clone();
+    assert_eq!((b["taperStart"].as_f64(), b["taperEnd"].as_f64()), (Some(0.1), Some(0.0)), "{b}");
+    // The organic brushes are presets like the others.
+    for p in ["brushpen", "dry", "chalk", "marker"] {
+        s.execute("stroke.brush", &json!({"ids": [v], "preset": p})).unwrap();
+    }
+}

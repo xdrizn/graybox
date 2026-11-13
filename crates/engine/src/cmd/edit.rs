@@ -399,7 +399,7 @@ pub fn specs() -> Vec<CommandSpec> {
         spec!(
             "stroke.brush",
             "Brush",
-            "{ids?, preset (taper|ink|ribbon|bristle: stretched along the path; dots|stars|confetti|leaves: scattered along it | null: plain), spacing? (× weight), sizeJitter? (0-1), rotationJitter? (0-1), scatter? (0-4 × weight), seed?}  layers without a stroke get a black one",
+            "{ids?, preset (taper|ink|ribbon|bristle|brushpen|dry|chalk|marker: stretched along the path; dots|stars|confetti|leaves: scattered along it | null: plain), spacing? (× weight), sizeJitter? (0-1), rotationJitter? (0-1), scatter? (0-4 × weight), seed?, taper? (false: no thinning at the ends), taperStart? taperEnd? (0-1 of the length)}  layers without a stroke get a black one",
             true,
             stroke_brush
         ),

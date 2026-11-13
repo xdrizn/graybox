@@ -7,6 +7,7 @@ pub(crate) mod anchor_ui;
 pub mod animation;
 pub mod audio;
 pub mod brand;
+pub(crate) mod brush_taper;
 pub mod claude;
 pub(crate) mod color_fold;
 pub mod components;

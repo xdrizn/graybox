@@ -28,6 +28,11 @@ pub const PRESETS: &[Preset] = &[
     Preset { id: "ink", label: "Ink", kind: BrushKind::Stretch },
     Preset { id: "ribbon", label: "Ribbon", kind: BrushKind::Stretch },
     Preset { id: "bristle", label: "Bristle", kind: BrushKind::Stretch },
+    // Graybox: organic brushes made in code (`crate::organic`).
+    Preset { id: "brushpen", label: "Brush pen", kind: BrushKind::Stretch },
+    Preset { id: "dry", label: "Dry brush", kind: BrushKind::Stretch },
+    Preset { id: "chalk", label: "Chalk", kind: BrushKind::Stretch },
+    Preset { id: "marker", label: "Marker", kind: BrushKind::Stretch },
     Preset { id: "dots", label: "Dots", kind: BrushKind::Scatter },
     Preset { id: "stars", label: "Stars", kind: BrushKind::Scatter },
     Preset { id: "confetti", label: "Confetti", kind: BrushKind::Scatter },
@@ -129,7 +134,8 @@ fn rand(seed: u32, i: u64, k: u64) -> f64 {
 /// subpath). `None` for an unknown preset or a path too long to measure.
 pub fn outline(path: &BezPath, width: f64, props: &StrokeProps, brush: &Brush) -> Option<BezPath> {
     let p = preset(&brush.preset)?;
-    let unit = shape(p.id)?;
+    // Graybox: stretch shapes come from `crate::organic` (taper settings, organic brushes).
+    let unit = if p.kind == BrushKind::Stretch { BezPath::new() } else { shape(p.id)? };
     let lines = polylines(path)?;
     // Sanitized once: at most 64 points, so each sample's symmetry scan stays cheap.
     let profile = props.profile().map(|pr| pr.sanitized());
@@ -139,7 +145,10 @@ pub fn outline(path: &BezPath, width: f64, props: &StrokeProps, brush: &Brush) -
         BrushKind::Stretch => {
             let steps = (MAX_STRETCH_STEPS / lines.len().max(1)).clamp(8, STRETCH_STEPS);
             for line in &lines {
-                stretch(&mut out, &unit, line, steps, &scale);
+                // Graybox: a loop's seam on a side, a shape laid out by the subpath's length.
+                let line = crate::organic::seam_on_a_side(line);
+                let unit = crate::organic::stretch_unit(p.id, brush, line.length() / width.abs().max(1e-9), line.closed)?;
+                stretch(&mut out, &unit, &line, steps, &scale);
             }
         }
         BrushKind::Scatter => scatter(&mut out, &unit, &lines, width, brush, &scale),
@@ -178,6 +187,8 @@ fn stretch(out: &mut BezPath, unit: &BezPath, line: &Polyline, steps: usize, sca
 fn scatter(out: &mut BezPath, unit: &BezPath, lines: &[Polyline], width: f64, brush: &Brush, scale: &dyn Fn(f64) -> f64) {
     let total: f64 = lines.iter().map(Polyline::length).sum();
     let b = brush.sanitized();
+    // Graybox: taper amounts shrink the copies towards the ends.
+    let taper = crate::organic::taper_of(&b);
     let step = (b.spacing * width).max(total / MAX_COPIES as f64).max(1e-3);
     let mut i = 0u64;
     for line in lines {
@@ -187,7 +198,7 @@ fn scatter(out: &mut BezPath, unit: &BezPath, lines: &[Polyline], width: f64, br
             let t = s / len;
             if let Some((p, n)) = line.at(t) {
                 let r = |k| rand(b.seed, i, k) * 2.0 - 1.0;
-                let size = scale(t) * (1.0 + b.size_jitter * r(0)).max(0.05);
+                let size = scale(t) * (1.0 + b.size_jitter * r(0)).max(0.05) * crate::organic::envelope(t, taper).max(0.05);
                 let dir = Vec2::new(n.y, -n.x);
                 let angle = dir.atan2() + b.rotation_jitter * std::f64::consts::PI * r(1);
                 let at = p + n * (b.scatter * width * r(2));

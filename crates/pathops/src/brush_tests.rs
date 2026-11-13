@@ -94,3 +94,94 @@ fn an_unsanitized_profile_is_bounded_before_sampling() {
     let out = outline(&line(50.0), 1.0, &p, &b).unwrap();
     assert!(out.bounding_box().height() <= 2.0 * WidthProfile::MAX_SCALE);
 }
+
+fn square(side: f64) -> BezPath {
+    let mut p = BezPath::new();
+    p.move_to((0.0, 0.0));
+    p.line_to((side, 0.0));
+    p.line_to((side, side));
+    p.line_to((0.0, side));
+    p.close_path();
+    p
+}
+
+/// Graybox: Taper off: a stretch brush keeps its width up to both ends (no pressure thinning).
+#[test]
+fn taper_off_keeps_the_full_width_to_the_ends() {
+    let on = brush("taper");
+    let off = Brush { taper: false, ..brush("taper") };
+    let a = outline(&line(200.0), 10.0, &props(10.0, &on), &on).unwrap();
+    let b = outline(&line(200.0), 10.0, &props(10.0, &off), &off).unwrap();
+    assert_eq!(a.winding(Point::new(2.0, 3.0)), 0, "tapered: thin at the start");
+    assert_ne!(b.winding(Point::new(2.0, 3.0)), 0, "taper off: full width at the start");
+    assert_ne!(b.winding(Point::new(198.0, -3.0)), 0, "and at the end");
+}
+
+/// Graybox: start and end amounts (parts of the length) set how long each taper is.
+#[test]
+fn start_and_end_amounts_set_the_taper_lengths() {
+    let b = Brush { taper_start: Some(0.1), taper_end: Some(0.0), ..brush("taper") };
+    let out = outline(&line(200.0), 10.0, &props(10.0, &b), &b).unwrap();
+    assert_eq!(out.winding(Point::new(2.0, 3.0)), 0, "a short taper at the start");
+    assert_ne!(out.winding(Point::new(30.0, 3.0)), 0, "full width past 10% of the length");
+    assert_ne!(out.winding(Point::new(199.0, 3.0)), 0, "no taper at the end");
+}
+
+/// Graybox (owner's report): a rectangle with a brush stroke and Taper off has no thin corner
+/// where its path starts and ends.
+#[test]
+fn a_closed_path_with_taper_off_has_no_thin_corner() {
+    for id in ["taper", "ink", "brushpen", "marker"] {
+        let b = Brush { taper: false, ..brush(id) };
+        let out = outline(&square(100.0), 10.0, &props(10.0, &b), &b).unwrap();
+        for p in [(3.0, 1.5), (1.5, 3.0), (50.0, 1.5), (98.5, 50.0), (50.0, 98.5), (1.5, 50.0), (1.5, 97.0)] {
+            assert_ne!(out.winding(Point::new(p.0, p.1)), 0, "{id}: {p:?} covered");
+        }
+    }
+}
+
+/// Graybox: organic brushes made in code: dry brush, brush pen, chalk and marker.
+#[test]
+fn organic_brushes_are_stretch_brushes_repeatable_by_seed() {
+    for id in ["dry", "brushpen", "chalk", "marker"] {
+        let p = crate::brush::preset(id).unwrap_or_else(|| panic!("{id}"));
+        assert_eq!(p.kind, crate::brush::BrushKind::Stretch, "{id}");
+        let b = brush(id);
+        let a = outline(&line(300.0), 12.0, &props(12.0, &b), &b).unwrap();
+        assert_eq!(a, outline(&line(300.0), 12.0, &props(12.0, &b), &b).unwrap(), "{id}: repeatable");
+        assert!(a.winding(Point::new(150.0, 0.0)) != 0 || a.winding(Point::new(150.0, 2.0)) != 0, "{id}: paints the middle");
+    }
+    // Dry brush breaks into strands with gaps; chalk has grain; a new seed, a new pattern.
+    for id in ["dry", "chalk"] {
+        let b = brush(id);
+        let c = Brush { seed: 9, ..brush(id) };
+        let a = outline(&line(300.0), 12.0, &props(12.0, &b), &b).unwrap();
+        assert!(figcraft_geom::split_subpaths(&a).len() > 8, "{id}: many pieces");
+        assert_ne!(a, outline(&line(300.0), 12.0, &props(12.0, &c), &c).unwrap(), "{id}: seeded");
+    }
+}
+
+/// Graybox: a brush pen's width varies along the stroke like pen pressure.
+#[test]
+fn a_brush_pen_varies_its_width() {
+    let b = Brush { taper: false, ..brush("brushpen") };
+    let out = outline(&line(400.0), 20.0, &props(20.0, &b), &b).unwrap();
+    let widths: Vec<f64> = (1..20)
+        .map(|k| {
+            let x = f64::from(k) * 20.0;
+            (0..=100).map(|j| -10.0 + 0.2 * f64::from(j)).filter(|y| out.winding(Point::new(x, *y)) != 0).count() as f64 * 0.2
+        })
+        .collect();
+    let (lo, hi) = widths.iter().fold((f64::MAX, 0.0f64), |(lo, hi), w| (lo.min(*w), hi.max(*w)));
+    assert!(hi - lo > 3.0 && lo > 5.0, "{widths:?}");
+}
+
+/// Graybox: a scatter brush with taper amounts makes its copies smaller towards the ends.
+#[test]
+fn a_tapered_scatter_brush_shrinks_its_ends() {
+    let b = Brush { taper_start: Some(0.3), taper_end: Some(0.3), ..brush("dots") };
+    let out = outline(&line(300.0), 10.0, &props(10.0, &b), &b).unwrap();
+    let parts = figcraft_geom::split_subpaths(&out);
+    let (first, mid) = (parts.first().unwrap().bounding_box(), parts.get(parts.len() / 2).unwrap().bounding_box());
+    assert!(first.width() < mid.width() * 0.5, "{first:?} {mid:?}");
+}

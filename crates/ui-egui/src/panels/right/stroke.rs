@@ -143,6 +143,10 @@ fn brush_row(app: &mut FigApp, ui: &mut Ui, ids: &[NodeId], brush: Option<Option
             }
         });
     });
+    // Graybox: Taper on/off and how long each end tapers (`crate::game::brush_taper`).
+    if let Some(Some(b)) = &brush {
+        crate::game::brush_taper::rows(app, ui, ids, b, panel_w, &|ui: &mut Ui, h, add: &mut dyn FnMut(&mut Ui)| row(ui, h, |ui| add(ui)));
+    }
     // A scatter brush's spacing and jitter.
     let Some(Some(b)) =
         brush.filter(|b| b.as_ref().and_then(|b| preset(&b.preset)).is_some_and(|p| p.kind == figcraft_pathops::brush::BrushKind::Scatter))

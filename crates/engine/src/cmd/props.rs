@@ -232,7 +232,7 @@ pub(crate) const WIDTH_PROFILE_HELP: &str = "widthProfile: a preset (uniform|wed
 /// The stroke caps `strokeCap`, `startCap` and `endCap` take (every [`StrokeCap`]).
 pub(crate) const STROKE_CAP_HELP: &str = "none|round|square|lineArrow|triangleArrow|reversedTriangle|circleFilled|diamondFilled";
 
-pub(crate) const BRUSH_HELP: &str = "brush: a preset (taper|ink|ribbon|bristle: stretched; dots|stars|confetti|leaves: scattered), {preset, spacing? (× weight), sizeJitter? (0-1), rotationJitter? (0-1), scatter? (0-4 × weight), seed?}, or null (a plain stroke)";
+pub(crate) const BRUSH_HELP: &str = "brush: a preset (taper|ink|ribbon|bristle|brushpen|dry|chalk|marker: stretched; dots|stars|confetti|leaves: scattered), {preset, spacing? (× weight), sizeJitter? (0-1), rotationJitter? (0-1), scatter? (0-4 × weight), seed?, taper? (false: full width to both ends), taperStart? taperEnd? (0-1 of the length)}, or null (a plain stroke)";
 
 /// A brush from a preset id, `{preset, spacing?, sizeJitter?, rotationJitter?, scatter?, seed?}`
 /// or null. `Some(None)` = no brush; `None` = not a brush (or an unknown preset).

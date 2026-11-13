@@ -295,6 +295,8 @@ fn cached_stroke_outline(n: &Node, path: &BezPath, closed: bool) -> Arc<BezPath>
     }
     if let Some(b) = &props.brush {
         (&b.preset, b.spacing.to_bits(), b.size_jitter.to_bits(), b.rotation_jitter.to_bits(), b.scatter.to_bits(), b.seed).hash(&mut h);
+        // Graybox: the taper settings.
+        (b.taper, b.taper_start.map(f64::to_bits), b.taper_end.map(f64::to_bits)).hash(&mut h);
     }
     let key = h.finish();
     if let Some(p) = locked(stroke_cache()).get(key) {

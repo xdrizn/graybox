@@ -119,11 +119,29 @@ pub struct Brush {
     /// Scatter: how far copies stray from the path, in stroke weights, 0..4.
     pub scatter: f64,
     pub seed: u32,
+    /// Graybox: the brush thins towards its ends like pen pressure (off: full width to both ends).
+    pub taper: bool,
+    /// Graybox: how much of the length the start taper takes, 0..1 (`None`: the preset's own).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub taper_start: Option<f64>,
+    /// Graybox: how much of the length the end taper takes, 0..1 (`None`: the preset's own).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub taper_end: Option<f64>,
 }
 
 impl Default for Brush {
     fn default() -> Self {
-        Self { preset: String::new(), spacing: 1.5, size_jitter: 0.0, rotation_jitter: 0.0, scatter: 0.0, seed: 0 }
+        Self {
+            preset: String::new(),
+            spacing: 1.5,
+            size_jitter: 0.0,
+            rotation_jitter: 0.0,
+            scatter: 0.0,
+            seed: 0,
+            taper: true,
+            taper_start: None,
+            taper_end: None,
+        }
     }
 }
 
@@ -143,6 +161,10 @@ impl Brush {
             rotation_jitter: c(self.rotation_jitter, 0.0, 1.0, 0.0),
             scatter: c(self.scatter, 0.0, 4.0, 0.0),
             seed: self.seed,
+            taper: self.taper,
+            // NaN: the preset's own.
+            taper_start: self.taper_start.filter(|v| v.is_finite()).map(|v| v.clamp(0.0, 1.0)),
+            taper_end: self.taper_end.filter(|v| v.is_finite()).map(|v| v.clamp(0.0, 1.0)),
         }
     }
 

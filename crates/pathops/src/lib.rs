@@ -25,6 +25,7 @@ mod dash_ends_tests;
 mod dot_dash_tests;
 #[cfg(test)]
 mod ops_tests;
+pub mod organic; // Graybox: taper settings and organic stretch brushes.
 mod points;
 mod round;
 #[cfg(test)]
