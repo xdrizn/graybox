@@ -78,6 +78,9 @@ pub(super) struct State {
     pub caret: Option<usize>,
     /// The `/` menu, while it is open (G13.2).
     pub slash: Option<super::slash::Slash>,
+    /// The block dragged by its handle, and whether it was let go this frame.
+    pub block_drag: Option<BlockId>,
+    pub block_drop: bool,
 }
 
 thread_local! {

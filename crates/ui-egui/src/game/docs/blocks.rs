@@ -20,7 +20,7 @@ use crate::theme::{Tokens, regular, semibold};
 use crate::{FigApp, widgets};
 
 /// How far a nested block steps in, per level.
-const STEP: f32 = 24.0;
+pub(super) const STEP: f32 = 24.0;
 /// The room on the left of a list item, a task or a toggle for its mark.
 const MARK_W: f32 = 26.0;
 
@@ -171,6 +171,8 @@ enum Act {
     Outdent,
     Up,
     Down,
+    /// Ctrl+Shift+arrows: the block swaps places with its neighbour (`true` upwards).
+    Move(bool),
 }
 
 #[cfg(test)]
@@ -184,7 +186,7 @@ pub(super) fn last_handle() -> Option<Rect> {
     LAST_HANDLE.with(std::cell::Cell::get)
 }
 
-/// One block, at `views[index]`.
+/// One block, at `views[index]`, and the row it takes (nothing when there is no such block).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn block_ui(
     app: &mut FigApp,
@@ -197,8 +199,8 @@ pub(super) fn block_ui(
     col: Rect,
     ver: &Ver,
     now: f64,
-) {
-    let Some(v) = views.get(index) else { return };
+) -> Rect {
+    let Some(v) = views.get(index) else { return Rect::NOTHING };
     let editable = ver.editable();
     let indent = v.depth as f32 * STEP;
     ui.add_space(2.0);
@@ -229,7 +231,9 @@ pub(super) fn block_ui(
     if let Some(c) = fill {
         ui.painter().set(bg, Shape::rect_filled(area, CornerRadius::same(6), c));
     }
-    handle(app, ui, t, doc, v, Rect::from_min_max(pos2(col.min.x - 36.0, top), pos2(col.max.x, bottom)), editable);
+    let row = Rect::from_min_max(pos2(col.min.x - 36.0, top), pos2(col.max.x, bottom));
+    handle(app, ui, st, t, doc, v, row, editable);
+    row
 }
 
 /// A block written in: its mark on the left (bullet, number, box, arrow, icon, bar), its words, and
@@ -295,7 +299,11 @@ fn text_block(
             // consume_key ignores an extra Shift: Shift+Enter breaks the line and Shift+arrows
             // select, both left to the field.
             let shift = i.modifiers.shift;
-            if !shift && i.consume_key(Modifiers::NONE, Key::Enter) {
+            if i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::ArrowUp) {
+                act = Some(Act::Move(true));
+            } else if i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::ArrowDown) {
+                act = Some(Act::Move(false));
+            } else if !shift && i.consume_key(Modifiers::NONE, Key::Enter) {
                 act = Some(Act::Enter(from));
             } else if from == 0 && to == 0 && i.consume_key(Modifiers::NONE, Key::Backspace) {
                 act = Some(Act::BackspaceAtStart);
@@ -575,7 +583,7 @@ fn shortcut_turn(app: &mut FigApp, st: &mut State, doc: DocId, v: &View, text: &
 }
 
 /// The version of `doc` that edits go to.
-fn current(app: &FigApp, doc: DocId) -> Option<&DocVersion> {
+pub(super) fn current(app: &FigApp, doc: DocId) -> Option<&DocVersion> {
     app.session.doc().ok()?.docs.get(doc)?.current()
 }
 
@@ -693,6 +701,22 @@ fn act_on(app: &mut FigApp, st: &mut State, doc: DocId, views: &[View], index: u
             }
         }
         Act::Outdent => outdent(app, doc, v),
+        Act::Move(up) => {
+            let Some((parent, i)) = current(app, doc).and_then(|c| c.locate(v.id)) else { return };
+            let count = current(app, doc).and_then(|c| match parent {
+                Some(p) => c.block(p).map(|b| b.children.len()),
+                None => Some(c.blocks.len()),
+            });
+            // The index counts the blocks once this one is taken out of its list.
+            let to = if up { i.checked_sub(1) } else { Some(i + 1).filter(|n| count.is_some_and(|c| *n < c)) };
+            if let Some(to) = to {
+                let mut params = json!({"doc": doc.0, "id": v.id.0, "index": to});
+                if let Some(p) = parent {
+                    params["parent"] = json!(p.0);
+                }
+                app.run("doc.block.move", params);
+            }
+        }
         Act::Up | Act::Down => {
             let up = matches!(act, Act::Up);
             let next = if up {
@@ -761,22 +785,41 @@ fn colours() -> [(&'static str, &'static str, &'static str); 9] {
 
 /// The handle on the left of a block: it shows while the pointer is on the block; its menu turns the
 /// block into another kind, duplicates it, colours it or deletes it.
-fn handle(app: &mut FigApp, ui: &mut Ui, t: &Tokens, doc: DocId, v: &View, row: Rect, editable: bool) {
+#[allow(clippy::too_many_arguments)]
+fn handle(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, doc: DocId, v: &View, row: Rect, editable: bool) {
     if !editable {
         return;
     }
     let id = Id::unique(("gbx_doc_handle", doc.0, v.id.0));
     let menu_id = id.with("menu");
     let open = egui::Popup::is_id_open(ui.ctx(), menu_id);
-    let hover = ui.rect_contains_pointer(row) || open;
+    let dragged = st.block_drag == Some(v.id);
+    // While a block is dragged, only its own handle shows (it holds the drag).
+    let hover = (ui.rect_contains_pointer(row) && st.block_drag.is_none()) || open || dragged;
     if !hover {
         return;
     }
     let r = Rect::from_min_size(pos2(row.min.x + 6.0 + v.depth as f32 * STEP, row.min.y + 3.0), vec2(22.0, 24.0));
     #[cfg(test)]
     LAST_HANDLE.with(|h| h.set(Some(r)));
-    let resp = ui.interact(r, id, Sense::click()).tip(tr("Turn into, duplicate, colour, delete"));
-    if resp.hovered() || open {
+    let resp = ui.interact(r, id, Sense::click_and_drag()).tip(tr("Click for the menu, drag to move"));
+    if resp.drag_started() {
+        st.block_drag = Some(v.id);
+    }
+    if resp.drag_stopped() && dragged {
+        // egui ends a drag on Escape too: that one is cancelled, not dropped.
+        if ui.input(|i| i.key_pressed(Key::Escape)) {
+            st.block_drag = None;
+        } else {
+            st.block_drop = true;
+        }
+    }
+    if resp.dragged() || dragged {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+    } else if resp.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+    }
+    if resp.hovered() || open || dragged {
         ui.painter().rect_filled(r, CornerRadius::same(4), t.hover);
     }
     // Six dots, two by three.

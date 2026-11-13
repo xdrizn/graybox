@@ -7,6 +7,7 @@
 
 mod blocks;
 mod compare;
+mod drag;
 mod editor;
 mod export;
 mod sign;
@@ -72,6 +73,8 @@ pub(crate) fn open(app: &mut FigApp, id: u64) {
 
 #[cfg(test)]
 mod blocks_tests;
+#[cfg(test)]
+mod drag_tests;
 #[cfg(test)]
 mod slash_tests;
 #[cfg(test)]

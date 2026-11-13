@@ -336,6 +336,19 @@
     and Enter. Screenshots sent to Adriel.
   - Review (high) caught and fixed: the menu was 600 px wide (egui's first-pass width); Enter was
     swallowed when nothing matched; the hint was smaller than the line's text.
+- G13.2, moving blocks (2026-11-13): drag a block by its handle (the six dots; a click still opens its
+  menu). While it is dragged, an accent line shows where it will land: between two blocks, at the level
+  of the block below the line, or one level in (after a nested block) when the pointer is that far
+  right. Letting go moves it with what is inside it, in one undo step; it never lands inside its own
+  content; Escape cancels; near the top or bottom of the editor the page scrolls. Ctrl+Shift+↑/↓ (⌘ on
+  a Mac) moves the block with the keyboard among its neighbours. The handle's tooltip now says "Click
+  for the menu, drag to move".
+  - Code: `crates/ui-egui/src/game/docs/drag.rs` (ours; where a drop lands is a pure function with
+    tests), the handle in `blocks.rs`, `editor.rs` collects each block's row. Tests:
+    `game/docs/drag_tests.rs` (raw pointer drags and keys).
+  - Checked in the real app: the line while dragging and the block landing. Screenshots sent to Adriel.
+  - Review (high) caught and fixed: egui ends a drag on Escape too, which dropped the block instead of
+    cancelling; no scrolling while dragging in a long document; the line crossed the tops of letters.
 - G11.6, the bow (2026-11-13, Adriel's changes): a click shoots from the hip, holding aim goes over the
   shoulder with a crosshair in the middle of the screen, and the shoulder button swaps sides.
   - Hip shot: a left click alone with the bow turns the hero to where the camera looks and shoots after
@@ -1343,6 +1356,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     replaces "Turn into, delete"; "Heading {n}", "List", "To-do", "Decision", "Who", "When", "Why",
     "Brown", "Purple"...).
   - G13.2 `/` menu: no new hook. Locales: "Type “/” for blocks", "Blocks", "No results", "Toggle list".
+  - G13.2 moving blocks: no new hook. Locales: "Click for the menu, drag to move" replaces "Turn into,
+    duplicate, colour, delete".
 - Nested pages (G9; `crates/doc/src/page_tree.rs`, `crates/engine/src/cmd/page_tree.rs`,
   `crates/ui-egui/src/game/tree_list.rs` and `page_list.rs` are ours):
   - `crates/doc/src/lib.rs`: `pub mod page_tree;`, `Document::page_tree` (serde default, skipped when
