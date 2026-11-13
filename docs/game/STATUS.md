@@ -79,6 +79,40 @@
   words typed after a mention joined the mention; `doc.get` used `blocks` for a count in the list and for
   the blocks of one document (the list says `blockCount` now); editor state of closed files was never freed;
   dead code, and no tests for Enter, drag-and-drop and the delete question (added).
+- G13.3 (2026-11-13): a document version as A4 pages, a canvas card that follows the document, PDF and
+  Markdown export. One layout for everything: `crates/engine/src/docs_page.rs` (ours) lays a version out
+  as A4 pages (595 x 842 pt, 56 pt margins, title block with icon, "Version N - Draft/Closed", a footer on
+  every page with the title, the version, the fingerprint when there is one and "Page i of N") and the
+  same frames feed the PDF, the canvas card and later the web view. Text is measured with the real text
+  layout, split between lines at page breaks (never a heading alone at the bottom, never one lone line of
+  a short paragraph, no blank first line on the next page), capped at 300 pages and 12 levels of nesting.
+  Every block kind has a look (lists with bullets, right-aligned numbers and checkboxes, toggles open,
+  callouts, quotes, dividers, tables that never split a row, decisions with who/when/why, signature lines;
+  images, embeds and auto-tables are placeholders until G13.2). A closed version gets a seal on page 1.
+  `crates/engine/src/docs_render.rs` (ours) turns the layout into real nodes and into a PDF through the
+  existing PDF export (a scratch document, so the PDF matches the card). Commands: `doc.export` (`pdf` or
+  `md`, to a path or back as data), `doc.card.create` and `doc.card.refresh`. The card is a transparent
+  frame with the locked pages side by side, marked in `plugin_data` (`graybox.doc`, `graybox.doc.version`,
+  `graybox.doc.hash`); every document edit rebuilds the cards of that document in the same step, so one
+  undo takes back the words and the card together, and a card stays as a record when its document is
+  deleted. Markdown: `crates/doc/src/docs_md.rs` (ours). UI: Export pill at the top right of the editor
+  (PDF, Markdown, Put on the canvas), the same three items in a tree row's menu, and dragging a document
+  from the tree onto the canvas puts its card there. Tests: `docs_page_tests.rs`, `docs_export_tests.rs`
+  (engine), `docs_md_tests.rs` (doc), `game/docs/tests.rs` (UI).
+  Checked in the real app on a scratch file: a 4-page card on the canvas, footers, the Export menu, a card
+  by the menu and by dragging from the tree; the PDF was opened and sent to Adriel. Not checked: emoji
+  icons inside the card and the PDF (they need a font with the glyph), the browser build beyond
+  `cargo xtask wasm`. Page furniture ("Version", "Page 1 of 4", "Draft") is in English for now; G13.4
+  decides the language. The card is rebuilt whole after every typing pause (fine for small documents;
+  G13.2 can rebuild only changed pages).
+  Code review (high, three passes) caught and fixed: text dropped at a page break; a drop on the panel
+  over the canvas made a card; card pages could be edited by hand and then lost (now locked); the next
+  page started with a blank line; the canvas rect could be zero on first use (zooms to the card); pages
+  were measured after the 300-page cap; every card was rebuilt on any document's edit; an untitled
+  document gave a card with no name; `doc.card.refresh` could not repair a card whose page was deleted by
+  hand; the widow fix could leave an orphan; the PDF was laid out twice; list numbers of 10 and more
+  wrapped onto two lines; the Markdown result reported `pages: null`. Skipped: a card pasted into another
+  file follows a document of the same id there.
 - G11.5, first part (2026-11-12, with G11.4, same request from Adriel): weapons and strikes.
   - Weapons (`tps/combat.rs`): 1–4 pick sword, spear, club, bow (drawn from the back; the same key again
     puts it away; also in the air; a key pressed mid-strike counts when the strike ends); click strikes
@@ -962,6 +996,10 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
     `control.rs`: `leftTab: "documents"`. `game/mod.rs`: `pub(crate) mod docs;`.
   - `crates/ui-egui/locales/en.toml` and `pt-BR.toml`: a "Graybox: Documents" block of strings at the end
     of `[ui]` (the other languages show English until translated).
+  - G13.3: `crates/doc/src/lib.rs`: `pub mod docs_md;` and `mod docs_md_tests;`. `crates/engine/src/lib.rs`:
+    `mod docs_page; mod docs_render;` and the test mods `docs_export_tests`, `docs_page_tests`.
+    `crates/engine/src/tests.rs`: `"doc.export"` in the junk sweep's skip list (it writes files). Locales:
+    "Put on the canvas", "Export as PDF…", "Export as Markdown…", "Document put on the canvas".
 - Nested pages (G9; `crates/doc/src/page_tree.rs`, `crates/engine/src/cmd/page_tree.rs`,
   `crates/ui-egui/src/game/tree_list.rs` and `page_list.rs` are ours):
   - `crates/doc/src/lib.rs`: `pub mod page_tree;`, `Document::page_tree` (serde default, skipped when

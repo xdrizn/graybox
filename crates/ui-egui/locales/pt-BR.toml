@@ -1898,6 +1898,10 @@ status = "draft — needs native review"
 "Heading 1" = "Título 1"
 "Heading 2" = "Título 2"
 "Heading 3" = "Título 3"
+"Put on the canvas" = "Colocar no canvas"
+"Export as PDF…" = "Exportar como PDF…"
+"Export as Markdown…" = "Exportar como Markdown…"
+"Document put on the canvas" = "Documento colocado no canvas"
 
 # Graybox: páginas dentro de páginas (G9).
 "Rename, move, delete" = "Renomear, mover, excluir"

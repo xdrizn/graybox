@@ -145,7 +145,38 @@ fn page(app: &mut FigApp, ui: &mut Ui, st: &mut State, doc: DocId) {
         ui.allocate_rect(Rect::from_min_max(col.min, pos2(col.max.x, c.min_rect().max.y + 120.0)), Sense::hover());
     });
     back_button(ui, st, &t, area);
+    export_button(app, ui, st, &t, area, doc);
     settle(app, ui.ctx(), st, doc, now);
+}
+
+/// The Export button at the top right: the document as a PDF or Markdown file, or as a card on the canvas.
+fn export_button(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, area: Rect, doc: DocId) {
+    use crate::right::menu_item;
+    let label = tr("Export");
+    let galley = ui.painter().layout_no_wrap(label.to_string(), regular(12.0), t.text);
+    let w = galley.size().x + 28.0;
+    let r = Rect::from_min_size(pos2(area.max.x - 32.0 - w, area.min.y + 16.0), vec2(w, 28.0));
+    let id = ui.scope_id().with(("gbx_docs_export", doc.0));
+    let resp = ui.interact(r, id, Sense::click());
+    a11y::button(&resp, label);
+    let open = egui::Popup::is_id_open(ui.ctx(), id.with("menu"));
+    ui.painter().rect_filled(r, CornerRadius::same(6), if resp.hovered() || open { t.hover } else { t.panel });
+    ui.painter().text(r.center(), Align2::CENTER_CENTER, label, regular(12.0), t.text);
+    crate::right::menu_popup(&resp).id(id.with("menu")).show(|ui| {
+        ui.set_min_width(200.0);
+        if menu_item(ui, tr("Put on the canvas"), "") {
+            super::export::put_on_canvas(app, st, doc, None);
+            ui.close();
+        }
+        if menu_item(ui, tr("Export as PDF…"), "") {
+            super::export::export(app, doc, "pdf");
+            ui.close();
+        }
+        if menu_item(ui, tr("Export as Markdown…"), "") {
+            super::export::export(app, doc, "md");
+            ui.close();
+        }
+    });
 }
 
 fn back_button(ui: &mut Ui, st: &mut State, t: &Tokens, area: Rect) {

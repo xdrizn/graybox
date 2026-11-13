@@ -2076,6 +2076,10 @@ name = "English"
 "Heading 1" = "Heading 1"
 "Heading 2" = "Heading 2"
 "Heading 3" = "Heading 3"
+"Put on the canvas" = "Put on the canvas"
+"Export as PDF…" = "Export as PDF…"
+"Export as Markdown…" = "Export as Markdown…"
+"Document put on the canvas" = "Document put on the canvas"
 
 # Graybox: nested pages (G9).
 "Rename, move, delete" = "Rename, move, delete"

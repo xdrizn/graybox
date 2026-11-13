@@ -47,6 +47,8 @@ pub mod corner_style;
 pub mod docs;
 // Graybox: nested pages (G9), see page_tree.rs.
 pub mod page_tree;
+// Graybox: Markdown export of a document version (G13.3).
+pub mod docs_md;
 pub use corner_style::CornerStyle;
 pub use styles::*;
 pub use text::*;
@@ -1373,6 +1375,8 @@ mod diff_tests;
 mod docs_tests;
 #[cfg(test)]
 mod effects_tests;
+#[cfg(test)]
+mod docs_md_tests;
 #[cfg(test)]
 mod guides_tests;
 #[cfg(test)]

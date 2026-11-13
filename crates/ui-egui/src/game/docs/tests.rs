@@ -242,3 +242,43 @@ fn the_dots_button_on_a_row_opens_its_menu() {
     click(&mut u, dots);
     assert!(has_text(&shapes(&mut u), "Move to the top level") || has_text(&shapes(&mut u), "Add a document inside"), "the menu is open");
 }
+
+#[test]
+fn putting_a_document_on_the_canvas_makes_a_selected_card_and_shows_the_canvas() {
+    use figcraft_doc::docs::DocId;
+    let (mut s, a, _) = session_with_documents();
+    s.execute("doc.block.insert", &json!({"doc": a, "text": "Hello"})).unwrap();
+    let mut u = documents_tab(s);
+    super::open(&mut u.app, a);
+    u.frame(vec![]);
+    let uid = super::state::uid(&u.app).unwrap();
+    let mut st = super::state::take(uid);
+    super::export::put_on_canvas(&mut u.app, &mut st, DocId(a), None);
+    super::state::put(uid, st);
+    assert_eq!(super::open_document(&u.app), None, "the editor closes so the card shows");
+    let sel = u.app.session.selection();
+    assert_eq!(sel.len(), 1);
+    let d = u.app.session.doc().unwrap();
+    assert_eq!(d.node(sel[0]).unwrap().plugin_data.get("graybox.doc").map(String::as_str), Some(a.to_string().as_str()));
+}
+
+#[test]
+fn the_editor_has_an_export_menu() {
+    let (s, a, _) = session_with_documents();
+    let mut u = documents_tab(s);
+    super::open(&mut u.app, a);
+    u.frame(vec![]);
+    // The right panel has an "Export" section too: ours is the one in the editor's top row.
+    let at =
+        crate::live_tests::texts(&shapes(&mut u)).into_iter().find(|(t, p, _)| t == "Export" && p.y < 100.0).map(|(_, p, s)| p + s / 2.0).unwrap();
+    click(&mut u, at);
+    let sh = shapes(&mut u);
+    assert!(has_text(&sh, "Export as PDF…") && has_text(&sh, "Export as Markdown…") && has_text(&sh, "Put on the canvas"));
+}
+
+#[test]
+fn file_names_never_hold_characters_a_file_system_refuses() {
+    assert_eq!(super::export::file_stem("a/b:c?"), "a-b-c-");
+    assert_eq!(super::export::file_stem("  "), "Untitled");
+    assert_eq!(super::export::file_stem("..."), "Untitled");
+}

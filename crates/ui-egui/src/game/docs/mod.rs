@@ -6,6 +6,7 @@
 //! Hooks in upstream files are listed in `docs/game/STATUS.md` (Upstream hooks).
 
 mod editor;
+mod export;
 mod state;
 mod tree;
 

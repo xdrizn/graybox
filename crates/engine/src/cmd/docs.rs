@@ -8,7 +8,7 @@ use figcraft_doc::docs::{Block, BlockId, BlockKind, BlockStyle, DocError, DocId,
 use serde_json::{Map, Value, json};
 
 use super::CommandSpec;
-use crate::{Result, Session, bad, spec};
+use crate::{Result, Session, bad, docs_render, spec};
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -26,7 +26,7 @@ pub fn specs() -> Vec<CommandSpec> {
             true,
             create
         ),
-        spec!("doc.rename", "Rename document", "{id, title}", true, rename),
+        spec!("doc.rename", "Rename document", "{id, title}", true, |s, p| edit(s, p, rename)),
         spec!(
             "doc.move",
             "Move document",
@@ -35,31 +35,126 @@ pub fn specs() -> Vec<CommandSpec> {
             move_doc
         ),
         spec!("doc.delete", "Delete document", "{id} (also deletes the documents inside it) → {deleted: [ids]}", true, delete),
-        spec!("doc.set_icon", "Set document icon", "{id, icon (an emoji or short symbol; empty removes it)}", true, set_icon),
+        spec!("doc.set_icon", "Set document icon", "{id, icon (an emoji or short symbol; empty removes it)}", true, |s, p| edit(s, p, set_icon)),
         spec!(
             "doc.block.insert",
             "Add block",
             "{doc, version?, parent? (a block id), index?, kind? (paragraph, heading1-4, bulleted, numbered, checklist, toggle, callout, quote, divider… or an object like {type: embed, node}), text?, runs? ([{text, bold?, italic?, underline?, strike?, code?, color?, highlight?, link?}]), style? ({font?, size?, color?, background?})} → {id}",
             true,
-            insert_block
+            |s, p| edit(s, p, insert_block)
         ),
         spec!(
             "doc.block.set",
             "Edit block",
             "{doc, id, version?, text? (plain text; keeps the look of a single run), runs?, style? ({font?, size?, color?, background?}; null clears one), data? (the kind's own fields, like {checked: true})}",
             true,
-            set_block
+            |s, p| edit(s, p, set_block)
         ),
         spec!(
             "doc.block.turn_into",
             "Turn block into",
             "{doc, id, version?, kind (a name like heading2, or an object like {type: callout, icon})} (the text stays)",
             true,
-            turn_into
+            |s, p| edit(s, p, turn_into)
         ),
-        spec!("doc.block.move", "Move block", "{doc, id, version?, parent? (a block id; omit or null for the top), index?}", true, move_block),
-        spec!("doc.block.delete", "Delete block", "{doc, id, version?} (also deletes the blocks inside it)", true, delete_block),
+        spec!("doc.block.move", "Move block", "{doc, id, version?, parent? (a block id; omit or null for the top), index?}", true, |s, p| edit(
+            s, p, move_block
+        )),
+        spec!("doc.block.delete", "Delete block", "{doc, id, version?} (also deletes the blocks inside it)", true, |s, p| edit(s, p, delete_block)),
+        spec!(
+            "doc.export",
+            "Export document",
+            "{doc, version? (the last by default), format? (pdf|md; default pdf), path? (else returns base64 `data` for pdf, `text` for md)} → {path, bytes, pages?} | {format, data | text}",
+            false,
+            export
+        ),
+        spec!(
+            "doc.card.create",
+            "Put document on the canvas",
+            "{doc, version? (the last by default), x?, y?} (a card on the current page that follows the document; a closed version's card is frozen with its seal) → {id}",
+            true,
+            card_create
+        ),
+        spec!(
+            "doc.card.refresh",
+            "Refresh document cards",
+            "{id? (a card; omit for every card in the file)} lays the card out again from its document, also repairing pages deleted or moved by hand → {refreshed}",
+            true,
+            card_refresh
+        ),
     ]
+}
+
+/// Run an editing command, then lay out again every canvas card whose document it changed, in the
+/// same step, so one undo takes back both the words and the card.
+fn edit(s: &mut Session, p: &Value, run: fn(&mut Session, &Value) -> Result<Value>) -> Result<Value> {
+    let out = run(s, p)?;
+    // Block commands name the document `doc`; document commands name it `id`.
+    let edited = p.get("doc").or_else(|| p.get("id")).and_then(Value::as_u64).map(DocId);
+    if let Ok(d) = s.doc_mut() {
+        docs_render::refresh_cards(d, edited);
+    }
+    Ok(out)
+}
+
+fn export(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.export";
+    let id = doc_id(cmd, p, "doc")?;
+    let want = opt_version(cmd, p)?;
+    let format = text(cmd, p, "format")?.unwrap_or_else(|| "pdf".into());
+    let path = text(cmd, p, "path")?;
+    let d = s.doc()?;
+    let doc = d.docs.get(id).ok_or_else(|| refuse(cmd, DocError::NoDoc(id)))?;
+    let version = match want {
+        Some(n) => doc.version(n).ok_or_else(|| refuse(cmd, DocError::NoVersion(n)))?,
+        None => doc.current().ok_or_else(|| refuse(cmd, DocError::NoVersion(0)))?,
+    };
+    let (bytes, pages) = match format.as_str() {
+        "pdf" => docs_render::pdf(doc, version).map(|(b, n)| (b, Some(n)))?,
+        "md" | "markdown" => (docs_render::markdown(doc, version).into_bytes(), None),
+        _ => return Err(bad(cmd, "format must be pdf or md")),
+    };
+    if let Some(path) = path {
+        crate::file_access::write(&path, &bytes)?;
+        let mut out = json!({"path": path, "bytes": bytes.len()});
+        if let Some(n) = pages {
+            out["pages"] = json!(n);
+        }
+        return Ok(out);
+    }
+    if format == "pdf" {
+        use base64::Engine as _;
+        Ok(json!({"format": "pdf", "pages": pages, "data": base64::engine::general_purpose::STANDARD.encode(&bytes)}))
+    } else {
+        Ok(json!({"format": "md", "text": String::from_utf8_lossy(&bytes)}))
+    }
+}
+
+fn card_create(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.card.create";
+    let id = doc_id(cmd, p, "doc")?;
+    let want = opt_version(cmd, p)?;
+    let num = |k: &str| p.get(k).and_then(Value::as_f64).filter(|v| v.is_finite()).unwrap_or(0.0);
+    let page = s.page()?;
+    let card = docs_render::create_card(s.doc_mut()?, page, id, want, (num("x"), num("y")))?;
+    Ok(json!({"id": card}))
+}
+
+fn card_refresh(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.card.refresh";
+    let one = opt_uint(cmd, p, "id")?;
+    let d = s.doc_mut()?;
+    let cards = match one {
+        Some(n) => vec![figcraft_doc::NodeId(n)],
+        None => docs_render::cards(d),
+    };
+    let mut refreshed = 0;
+    for c in cards {
+        if docs_render::refresh_card(d, c, true)? {
+            refreshed += 1;
+        }
+    }
+    Ok(json!({"refreshed": refreshed}))
 }
 
 fn refuse(cmd: &str, e: DocError) -> crate::EngineError {

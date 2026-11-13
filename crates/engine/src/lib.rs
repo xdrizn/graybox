@@ -38,6 +38,9 @@ mod sharing;
 mod shift_select;
 mod unity_export;
 mod weld;
+// Graybox: the page layout of a document version, shared by PDF, canvas card and web (G13.3).
+mod docs_page;
+mod docs_render;
 pub use assets::components;
 pub use assets::library;
 pub use assets::library_server;
@@ -685,6 +688,10 @@ mod game_kind_tests;
 // Graybox: documents (G13).
 #[cfg(test)]
 mod docs_cmd_tests;
+#[cfg(test)]
+mod docs_export_tests;
+#[cfg(test)]
+mod docs_page_tests;
 // Graybox: nested pages (G9).
 #[cfg(test)]
 mod page_tree_tests;

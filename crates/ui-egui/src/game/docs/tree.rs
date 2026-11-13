@@ -210,6 +210,19 @@ fn menu_content(app: &mut FigApp, ui: &mut Ui, st: &mut State, row: &Row) {
         ui.close();
     }
     ui.add_space(4.0);
+    if menu_item(ui, tr("Put on the canvas"), "") {
+        super::export::put_on_canvas(app, st, row.id, None);
+        ui.close();
+    }
+    if menu_item(ui, tr("Export as PDF…"), "") {
+        super::export::export(app, row.id, "pdf");
+        ui.close();
+    }
+    if menu_item(ui, tr("Export as Markdown…"), "") {
+        super::export::export(app, row.id, "md");
+        ui.close();
+    }
+    ui.add_space(4.0);
     widgets::label(ui, tr("Icon"), Tokens::get(ui.ctx()).text_secondary);
     if let Some(icon) = icon_grid(ui, &row.icon) {
         app.run("doc.set_icon", json!({"id": row.id.0, "icon": icon}));
@@ -268,6 +281,9 @@ fn drag_and_drop(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, list
         st.drag = None;
         if let Some(drop) = target {
             apply_drop(app, st, dragged, drop);
+        } else if let Some(p) = ui.ctx().input(|i| i.pointer.interact_pos()).filter(|p| app.canvas.rect.contains(*p) && !visible.contains(*p)) {
+            // Let go out over the canvas: the document lands there as a card.
+            super::export::put_on_canvas(app, st, dragged, Some(p));
         }
     }
 }

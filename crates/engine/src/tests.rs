@@ -509,6 +509,8 @@ fn every_command_survives_junk_params() {
                 | "text.rescanFonts"
         ) {
             continue;
+                // Graybox: writes a document as a PDF or Markdown file (G13.3).
+                | "doc.export"
         }
         for j in &junk {
             // Each junk object as given (names the command doesn't take are refused) and cut down
