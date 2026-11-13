@@ -44,7 +44,7 @@ pub fn split_runs(runs: &[Run], at: usize) -> (Vec<Run>, Vec<Run>) {
 }
 
 /// Runs one after the other, with neighbours that look the same joined into one.
-fn join_runs(mut a: Vec<Run>, b: Vec<Run>) -> Vec<Run> {
+pub(super) fn join_runs(mut a: Vec<Run>, b: Vec<Run>) -> Vec<Run> {
     for r in b {
         match a.last_mut() {
             Some(last)

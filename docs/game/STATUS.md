@@ -349,6 +349,27 @@
   - Checked in the real app: the line while dragging and the block landing. Screenshots sent to Adriel.
   - Review (high) caught and fixed: egui ends a drag on Escape too, which dropped the block instead of
     cancelling; no scrolling while dragging in a long document; the line crossed the tops of letters.
+- G13.2, formatting words (2026-11-13): select words in a block and a bar comes up over them: bold,
+  italic, underline, strike, code, link and colour (text colour and highlight swatches). The keys do the
+  same: Ctrl+B, I, U, E (code), K (link) and Ctrl+Shift+X (strike), ⌘ on a Mac; pressed again they take
+  the look off. The words stay selected after each change, so looks stack. Ctrl+K (or the link button)
+  asks for an address; Enter links the words, an empty address unlinks them, Escape goes back. Links
+  are drawn in the accent colour, underlined; Ctrl+click opens them (web and e-mail addresses only,
+  never files or programs). Words typed next to formatted ones take their look. Each change is one
+  undo step through the new command `doc.block.format {doc, id, from, to, mark, value?, on?}` (also for
+  MCP, the CLI and the control channel).
+  - Code: `crates/doc/src/docs/format.rs` (the range formatting, pure, with tests), the command in
+    `crates/engine/src/cmd/docs.rs` (in the junk sweep), `crates/ui-egui/src/game/docs/inline.rs` (the
+    bar, the keys, drawing the looks, Ctrl+click). Tests: `game/docs/format_tests.rs`.
+  - Checked in the real app: the bar, bold, the colours, Ctrl+K and the drawn looks. Screenshots sent
+    to Adriel.
+  - Review (high) caught and fixed: Ctrl+click would have opened any address (a `file://` link in a
+    document from someone else could launch a program); Ctrl+Shift+U/K still deleted words (egui's
+    own keys); the bar could carry over to the same-numbered block of another document; coloured words
+    in a task done were not dimmed. Found while checking in the app: opening the colours closed the bar
+    and lost the selection (a field given the keyboard reports no selection in that frame).
+  - Not yet: Ctrl+B with nothing selected does not "type bold"; the per-frame copy of the runs could be
+    shared (small cost in long documents).
 - G11.6, the bow (2026-11-13, Adriel's changes): a click shoots from the hip, holding aim goes over the
   shoulder with a crosshair in the middle of the screen, and the shoulder button swaps sides.
   - Hip shot: a left click alone with the bow turns the hero to where the camera looks and shoots after
@@ -1358,6 +1379,7 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   - G13.2 `/` menu: no new hook. Locales: "Type “/” for blocks", "Blocks", "No results", "Toggle list".
   - G13.2 moving blocks: no new hook. Locales: "Click for the menu, drag to move" replaces "Turn into,
     duplicate, colour, delete".
+  - G13.2 formatting words: no new hook. Locales: "Bold", "Highlight", "Paste a link".
 - Nested pages (G9; `crates/doc/src/page_tree.rs`, `crates/engine/src/cmd/page_tree.rs`,
   `crates/ui-egui/src/game/tree_list.rs` and `page_list.rs` are ours):
   - `crates/doc/src/lib.rs`: `pub mod page_tree;`, `Document::page_tree` (serde default, skipped when

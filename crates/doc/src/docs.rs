@@ -23,7 +23,9 @@ use serde_json::{Value, json};
 use crate::NodeId;
 
 mod edit;
+mod format;
 pub use edit::{Merge, Split, split_runs};
+pub use format::{Mark, format_runs, has_mark};
 
 /// Most documents a file holds.
 pub const MAX_DOCS: usize = 5_000;

@@ -87,6 +87,8 @@ fn page(app: &mut FigApp, ui: &mut Ui, st: &mut State, doc: DocId, uid: u64) {
             ui.allocate_rect(Rect::from_min_max(col.min, pos2(col.max.x, c.min_rect().max.y + 120.0)), Sense::hover());
             return;
         }
+        #[cfg(test)]
+        super::inline::forget();
         let rows: Vec<Rect> = (0..blocks.len()).map(|i| blocks::block_ui(app, &mut c, st, &t, doc, &blocks, i, col, &ver, now)).collect();
         super::drag::drop_ui(app, &c, st, &t, doc, &blocks, &rows, col);
         versions::signatures(app, &mut c, st, &t, doc, &ver);

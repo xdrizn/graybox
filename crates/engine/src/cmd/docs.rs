@@ -4,7 +4,7 @@
 //! version refuses all of them. The menus, the Actions palette, the CLI, MCP (Claude) and the control
 //! channel reach documents through these ids.
 
-use figcraft_doc::docs::{Block, BlockId, BlockKind, BlockStyle, DocError, DocId, Place, Run};
+use figcraft_doc::docs::{Block, BlockId, BlockKind, BlockStyle, DocError, DocId, Mark, Place, Run};
 use serde_json::{Map, Value, json};
 
 use super::CommandSpec;
@@ -78,6 +78,13 @@ pub fn specs() -> Vec<CommandSpec> {
             p,
             duplicate_block
         )),
+        spec!(
+            "doc.block.format",
+            "Format text",
+            "{doc, id, version?, from, to (a range of characters), mark (bold, italic, underline, strike, code, color, highlight, link), value? (#RRGGBB or #RRGGBBAA for color and highlight, a web address for link; omit to take it off), on? (bold…code: true or false; omit to toggle)}",
+            true,
+            |s, p| edit(s, p, format_text)
+        ),
         spec!("doc.block.move", "Move block", "{doc, id, version?, parent? (a block id; omit or null for the top), index?}", true, |s, p| edit(
             s, p, move_block
         )),
@@ -487,6 +494,25 @@ fn duplicate_block(s: &mut Session, p: &Value) -> Result<Value> {
     let version = opt_version(cmd, p)?;
     let copy = s.doc_mut()?.docs.duplicate_block(doc, version, id).map_err(|e| refuse(cmd, e))?;
     Ok(json!({"id": copy.0}))
+}
+
+fn format_text(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "doc.block.format";
+    let doc = doc_id(cmd, p, "doc")?;
+    let id = BlockId(uint(cmd, p, "id")?);
+    let version = opt_version(cmd, p)?;
+    let at = |key| uint(cmd, p, key).map(|n| usize::try_from(n).unwrap_or(usize::MAX));
+    let (from, to) = (at("from")?, at("to")?);
+    let name = text(cmd, p, "mark")?.ok_or_else(|| bad(cmd, "mark is required: bold, italic, underline, strike, code, color, highlight or link"))?;
+    let value = text(cmd, p, "value")?;
+    let mark = Mark::from_name(&name, value.as_deref()).ok_or_else(|| bad(cmd, format!("unknown mark {name:?}")))?;
+    let on = match p.get("on") {
+        None | Some(Value::Null) => None,
+        Some(Value::Bool(b)) => Some(*b),
+        Some(_) => return Err(bad(cmd, "on must be true or false")),
+    };
+    s.doc_mut()?.docs.format_text(doc, version, id, from, to, &mark, on).map_err(|e| refuse(cmd, e))?;
+    Ok(json!({"ok": true}))
 }
 
 fn move_block(s: &mut Session, p: &Value) -> Result<Value> {

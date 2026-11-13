@@ -234,6 +234,7 @@ fn junk_parameters_are_refused_not_panicked_on() {
         "doc.block.split",
         "doc.block.merge",
         "doc.block.duplicate",
+        "doc.block.format",
     ] {
         for j in &junk {
             let _ = s.execute(cmd, j);
@@ -306,4 +307,34 @@ fn a_markdown_shortcut_turns_the_block_and_drops_the_marks_in_one_step() {
     assert_eq!(blocks(&mut s, d)[0]["kind"], json!({"type": "heading", "level": 2}));
     assert_eq!(texts(&mut s, d), [""]);
     assert_eq!(s.ds().unwrap().history.undo.len(), undo + 1);
+}
+
+#[test]
+fn format_puts_bold_on_some_words_in_one_step_and_toggles_it_back() {
+    let mut s = Session::new();
+    let d = id_of(&ex(&mut s, "doc.create", json!({})));
+    let b = id_of(&ex(&mut s, "doc.block.insert", json!({"doc": d, "text": "Hello world"})));
+    let undo = s.ds().unwrap().history.undo.len();
+    ex(&mut s, "doc.block.format", json!({"doc": d, "id": b, "from": 6, "to": 11, "mark": "bold"}));
+    let runs = blocks(&mut s, d)[0]["text"].clone();
+    assert_eq!(runs, json!([{"text": "Hello "}, {"text": "world", "bold": true}]));
+    assert_eq!(s.ds().unwrap().history.undo.len(), undo + 1);
+    ex(&mut s, "doc.block.format", json!({"doc": d, "id": b, "from": 0, "to": 5, "mark": "color", "value": "#FF0000"}));
+    assert_eq!(blocks(&mut s, d)[0]["text"][0], json!({"text": "Hello", "color": "#FF0000"}));
+    ex(&mut s, "doc.block.format", json!({"doc": d, "id": b, "from": 6, "to": 11, "mark": "bold"}));
+    assert_eq!(blocks(&mut s, d)[0]["text"][1], json!({"text": " world"}));
+    // Explicitly on, and refusals.
+    ex(&mut s, "doc.block.format", json!({"doc": d, "id": b, "from": 0, "to": 11, "mark": "italic", "on": true}));
+    ex(&mut s, "doc.block.format", json!({"doc": d, "id": b, "from": 0, "to": 11, "mark": "italic", "on": true}));
+    assert!(blocks(&mut s, d)[0]["text"].as_array().unwrap().iter().all(|r| r["italic"] == true));
+    for bad in [
+        json!({"doc": d, "id": b, "from": 3, "to": 3, "mark": "bold"}),
+        json!({"doc": d, "id": b, "from": 0, "to": 3, "mark": "blink"}),
+        json!({"doc": d, "id": b, "from": 0, "to": 3}),
+        json!({"doc": d, "id": b, "from": 0, "to": 3, "mark": "color", "value": "red"}),
+        json!({"doc": d, "id": b, "from": 0, "to": 3, "mark": "bold", "on": "yes"}),
+        json!({"doc": d, "id": b, "to": 3, "mark": "bold"}),
+    ] {
+        assert!(s.execute("doc.block.format", &bad).is_err(), "{bad}");
+    }
 }

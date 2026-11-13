@@ -5,15 +5,14 @@
 
 use std::sync::Arc;
 
-use egui::text::{LayoutJob, TextFormat};
 use egui::{Align2, Color32, CornerRadius, Id, Key, Modifiers, Rect, Sense, Shape, Stroke, Ui, pos2, vec2};
-use figcraft_doc::docs::{Block, BlockId, BlockKind, DocId, DocVersion};
+use figcraft_doc::docs::{Block, BlockId, BlockKind, DocId, DocVersion, Run};
 use serde_json::{Value, json};
 
 use super::editor::{commit, queue};
-use super::slash;
 use super::state::{State, Target};
 use super::versions::{self, Ver};
+use super::{inline, slash};
 use crate::a11y::{self, Tip};
 use crate::i18n::{tr, trf};
 use crate::theme::{Tokens, regular, semibold};
@@ -62,6 +61,8 @@ pub(super) struct View {
     pub depth: usize,
     pub look: Look,
     pub text: String,
+    /// The words with their looks (bold, links…).
+    pub runs: Vec<Run>,
     pub color: Option<Color32>,
     pub background: Option<Color32>,
     pub size: Option<f32>,
@@ -97,6 +98,7 @@ pub(super) fn flatten(blocks: &[Block], depth: usize, parent: Option<BlockId>, a
             depth,
             look,
             text: b.plain_text(),
+            runs: b.text.clone(),
             color: b.style.color.as_deref().and_then(parse_hex),
             background: b.style.background.as_deref().and_then(parse_hex),
             size: b.style.size,
@@ -293,6 +295,8 @@ fn text_block(
         Some(at) if focused && editable => slash::keys(ui, slash::lists(&v.text, at, caret.map(|c| c.1))),
         _ => None,
     };
+    // Ctrl+B, I, U, E, K and Ctrl+Shift+X act on the words selected.
+    let format_key = if focused && editable { inline::keys(ui) } else { None };
     if focused && editable {
         ui.input_mut(|i| {
             let (from, to) = caret.unwrap_or((len, len));
@@ -320,13 +324,11 @@ fn text_block(
     }
 
     let mut text = v.text.clone();
-    let strike = if done { Stroke::new(1.0, ink) } else { Stroke::NONE };
-    let layout_font = font.clone();
+    let looks = inline::Ink { font: font.clone(), color: ink, strike: done, link: t.accent, code: t.field };
+    let runs = v.runs.clone();
     let hint_font = font.clone();
     let mut layouter = move |ui: &Ui, buf: &dyn egui::TextBuffer, wrap: f32| -> Arc<egui::Galley> {
-        let format = TextFormat { font_id: layout_font.clone(), color: ink, strikethrough: strike, ..TextFormat::default() };
-        let mut job = LayoutJob::single_section(buf.as_str().to_owned(), format);
-        job.wrap.max_width = wrap;
+        let job = inline::job(&runs, buf.as_str(), &looks, wrap);
         ui.fonts_mut(|f| f.layout_job(job))
     };
     let hint = match v.look {
@@ -368,11 +370,7 @@ fn text_block(
     mark(app, ui, t, doc, v, pos2(mark_x, first_line), resp.rect, size, ink, editable);
     if st.focus == Some(Target::Block(v.id)) {
         resp.request_focus();
-        let mut state = out.state;
-        let at = egui::text::CCursor::new(st.caret.take().unwrap_or(usize::MAX).min(text.chars().count()));
-        state.cursor.set_char_range(Some(egui::text::CCursorRange::one(at)));
-        state.store(ui.ctx(), id);
-        st.focus = None;
+        take_keyboard(ui, st, id, out.state, text.chars().count());
     }
     // Enter splits where the cursor is now, after any letters typed in this same frame; words
     // selected go first, as typing over them would.
@@ -422,6 +420,18 @@ fn text_block(
     }
     let caret_end = out.cursor_range.map(|r| r.primary.index.0);
     slash::show(app, ui, st, t, doc, v.id, &text, caret_end, resp.has_focus(), &out.galley, out.galley_pos, slash_key);
+    let field = inline::Field {
+        text: &text,
+        runs: &v.runs,
+        before: caret,
+        key: format_key,
+        // A field given the keyboard this frame has no range in its output yet: its stored one.
+        sel: out.cursor_range.or_else(|| egui::TextEdit::load_state(ui.ctx(), id).and_then(|s| s.cursor.char_range())),
+        focused: resp.has_focus() && editable,
+        galley: &out.galley,
+        galley_pos: out.galley_pos,
+    };
+    inline::show(app, ui, st, t, doc, v.id, field);
     if let Look::Decision { who, when, why } = &v.look {
         decision_fields(app, ui, t, doc, v.id, [who, when, why], indent + lead + pad, col, editable);
     }
@@ -434,6 +444,19 @@ fn text_block(
     if let Some(a) = act {
         act_on(app, st, doc, views, index, a);
     }
+}
+
+/// Put the cursor of field `id` (holding `n` characters) where the block taking the keyboard asked:
+/// on the words formatted from the bar or a key (they stay selected), or at `st.caret`.
+fn take_keyboard(ui: &Ui, st: &mut State, id: Id, mut state: egui::text_edit::TextEditState, n: usize) {
+    use egui::text::{CCursor, CCursorRange};
+    let range = match st.select.take() {
+        Some((a, b)) => CCursorRange::two(CCursor::new(a.min(n)), CCursor::new(b.min(n))),
+        None => CCursorRange::one(CCursor::new(st.caret.take().unwrap_or(usize::MAX).min(n))),
+    };
+    state.cursor.set_char_range(Some(range));
+    state.store(ui.ctx(), id);
+    st.focus = None;
 }
 
 /// The mark left of a block's first line; the box of a task and the arrow of a toggle are buttons.
@@ -863,7 +886,7 @@ fn handle(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, doc: DocId,
 }
 
 /// A row of colour dots (the first one clears): the picked colour, `Value::Null` to clear.
-fn swatches(ui: &mut Ui, t: &Tokens, background: bool) -> Option<Value> {
+pub(super) fn swatches(ui: &mut Ui, t: &Tokens, background: bool) -> Option<Value> {
     let mut picked = None;
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = vec2(4.0, 4.0);

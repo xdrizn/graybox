@@ -76,6 +76,10 @@ pub(super) struct State {
     /// when `None`).
     pub focus: Option<Target>,
     pub caret: Option<usize>,
+    /// Characters selected when that field takes the keyboard (in place of `caret`).
+    pub select: Option<(usize, usize)>,
+    /// The bar over selected words (G13.2).
+    pub bar: Option<super::inline::Bar>,
     /// The `/` menu, while it is open (G13.2).
     pub slash: Option<super::slash::Slash>,
     /// The block dragged by its handle, and whether it was let go this frame.

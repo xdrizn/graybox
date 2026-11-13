@@ -142,6 +142,7 @@ mod tests {
             depth,
             look: Look::Paragraph,
             text: String::new(),
+            runs: Vec::new(),
             color: None,
             background: None,
             size: None,
