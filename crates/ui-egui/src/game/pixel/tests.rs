@@ -895,4 +895,74 @@ fn a_copied_vector_pastes_into_the_sprite_as_pixels() {
     u.frame(vec![]);
     u.frame(vec![Event::Copy]);
     assert!(u.app.pixel.clipboard.is_some());
+    // And copying the same vector once more wins again (it counts as a new copy).
+    u.app.session.execute("edit.copy", &json!({"ids": [rect]})).unwrap();
+    u.frame(vec![]);
+    assert!(u.app.pixel.clipboard.is_none(), "the newest copy is what Paste takes");
+}
+
+/// The eyedropper picks from anywhere on the canvas (G16.8), not only inside the board: off the
+/// board it takes the colour the page shows there, and on an empty art pixel it takes what is drawn
+/// under the sprite.
+#[test]
+fn the_eyedropper_picks_colours_from_the_whole_canvas() {
+    let (mut u, id) = editing();
+    // A blue square away from the sprite, and a green one under it.
+    let away = u.app.session.execute("shape.rectangle", &json!({"x": 400, "y": 40, "width": 60, "height": 60})).unwrap()["id"].as_u64().unwrap();
+    u.app.session.execute("node.set", &json!({"ids": [away], "props": {"fill": "#0000ff"}})).unwrap();
+    let under = u.app.session.execute("shape.rectangle", &json!({"x": 0, "y": 0, "width": 128, "height": 128})).unwrap()["id"].as_u64().unwrap();
+    u.app.session.execute("node.set", &json!({"ids": [under], "props": {"fill": "#00ff00"}})).unwrap();
+    u.app.session.execute("arrange.back", &json!({"ids": [under]})).unwrap();
+    u.app.run("pixel.mode", json!({"id": id}));
+    for _ in 0..2 {
+        u.frame(vec![]);
+    }
+    key(&mut u, Key::I, false);
+    assert_eq!(u.app.pixel.tool, Tool::Eyedropper);
+    // Off the board: the blue square.
+    let p = u.app.to_screen(430.0, 70.0);
+    press(&mut u, p, PointerButton::Primary, true);
+    press(&mut u, p, PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert_eq!(u.app.pixel.colors[0], [0x00, 0x00, 0xff, 255], "a layer away from the sprite");
+    // On the board, over an art pixel nothing is painted on: the green square under it.
+    let q = at_board(&u, id, 8.0, 8.0);
+    press(&mut u, q, PointerButton::Primary, true);
+    press(&mut u, q, PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert_eq!(u.app.pixel.colors[0], [0x00, 0xff, 0x00, 255], "what is under the sprite");
+    // A painted art pixel still gives its own colour.
+    u.app.session.execute("pixel.stroke", &json!({"id": id, "points": [[2, 2]], "color": "#ff00ff"})).unwrap();
+    u.frame(vec![]);
+    let r = at_board(&u, id, 2.0, 2.0);
+    press(&mut u, r, PointerButton::Primary, true);
+    press(&mut u, r, PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert_eq!(u.app.pixel.colors[0], [0xff, 0x00, 0xff, 255], "the sprite's own pixel");
+}
+
+/// The colour picker's own eyedropper works over a sprite too (G16.8): Pixel mode lets that press
+/// through to the canvas tools, which sample the page wherever it is clicked.
+#[test]
+fn the_pickers_eyedropper_samples_the_canvas_while_a_sprite_is_open() {
+    let (mut u, id) = editing();
+    let away = u.app.session.execute("shape.rectangle", &json!({"x": 400, "y": 40, "width": 60, "height": 60})).unwrap()["id"].as_u64().unwrap();
+    u.app.session.execute("node.set", &json!({"ids": [away], "props": {"fill": "#0000ff"}})).unwrap();
+    u.app.run("pixel.mode", json!({"id": id}));
+    for _ in 0..2 {
+        u.frame(vec![]);
+    }
+    // The picker open on the first drawing colour, its eyedropper armed.
+    u.app.ui.picker = Some(crate::colorpicker::PickerTarget::Pixel { which: 0 });
+    u.app.run("edit.pickColor", json!({"apply": false}));
+    u.frame(vec![]);
+    assert!(u.app.session.tool.pick_only, "the picker armed the eyedropper");
+    let p = u.app.to_screen(430.0, 70.0);
+    press(&mut u, p, PointerButton::Primary, true);
+    press(&mut u, p, PointerButton::Primary, false);
+    for _ in 0..2 {
+        u.frame(vec![]);
+    }
+    assert_eq!(u.app.pixel.colors[0], [0x00, 0x00, 0xff, 255], "the sample became the drawing colour");
+    assert_eq!(u.app.pixel.mode, Mode::Edit(figcraft_doc::NodeId(id)), "and the sprite is still open");
 }

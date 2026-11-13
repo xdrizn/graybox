@@ -450,3 +450,18 @@ fn copied_layers_paste_into_a_sprite_as_pixels_in_one_undo_step() {
     let (mut s, id) = sprite();
     assert!(refused(&mut s, "pixel.paste", json!({"id": id, "clipboard": true})).contains("copied"));
 }
+
+/// G16.8: the colour the page shows at a point, for the eyedropper: any layer, not only pixel art.
+#[test]
+fn the_canvas_colour_at_a_point_is_whatever_is_drawn_there() {
+    let (mut s, id) = sprite();
+    let rect = ex(&mut s, "shape.rectangle", json!({"x": 300, "y": 0, "width": 40, "height": 40}))["id"].as_u64().unwrap();
+    ex(&mut s, "node.set", json!({"ids": [rect], "props": {"fill": "#123456"}}));
+    assert_eq!(ex(&mut s, "pixel.colorAt", json!({"x": 320, "y": 20}))["color"], "#123456");
+    // The sprite's own art is read like anything else drawn on the page.
+    ex(&mut s, "pixel.stroke", json!({"id": id, "points": [[0, 0]], "color": "#ff0000"}));
+    assert_eq!(ex(&mut s, "pixel.colorAt", json!({"x": 12, "y": 22}))["color"], "#ff0000", "the sprite is at (10, 20), scale 4");
+    // Off everything drawn, the page itself is what shows there.
+    assert_eq!(ex(&mut s, "pixel.colorAt", json!({"x": 2000, "y": 2000}))["color"], "#f5f5f5", "the page background");
+    assert!(refused(&mut s, "pixel.colorAt", json!({"y": 1})).contains("`x`"));
+}

@@ -25,7 +25,7 @@ pub(crate) mod io;
 pub(crate) mod kit;
 mod paint;
 mod tools;
-pub use tools::{TIMELINE_PREF, link_color, timeline_shown};
+pub use tools::{TIMELINE_PREF, link_color, page_color, timeline_shown};
 
 /// The most pointer positions one stroke takes.
 const MAX_STROKE_POINTS: usize = 100_000;

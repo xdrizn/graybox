@@ -26,6 +26,13 @@ pub(super) fn specs() -> Vec<CommandSpec> {
             timeline
         ),
         spec!(
+            "pixel.colorAt",
+            "Colour on the canvas",
+            "{x, y (page units)}  the colour the page shows there, whatever draws it (a layer, a photo, a vector, pixel art) → {color} (the page background where no layer is, null only when not even that is drawn)",
+            false,
+            color_at
+        ),
+        spec!(
             "pixel.styles.follow",
             "Update pixel colours from styles",
             "{ids? (pixel layers; default every one in the file)}  pixels painted from a colour style or variable that has changed since take its colour now, in every layer and frame → {changed, layers}",
@@ -56,6 +63,32 @@ fn timeline(s: &mut Session, p: &Value) -> Result<Value> {
     s.prefs.view.insert(TIMELINE_PREF.to_string(), on);
     s.prefs_unsaved = true;
     Ok(json!({"on": on}))
+}
+
+/// The colour the page shows at page point (`x`, `y`): one pixel of the page drawn there, so it is
+/// whatever is in front at that point — any layer, a photo, a vector, another sprite, else the page
+/// background itself (G16.8).
+pub fn page_color(s: &Session, x: f64, y: f64) -> Option<Rgba> {
+    if !x.is_finite() || !y.is_finite() {
+        return None;
+    }
+    let ds = s.ds().ok()?;
+    let view = figcraft_render::View { origin: (x, y), scale: 1.0, width: 1, height: 1 };
+    let pix = figcraft_render::render_view(&ds.doc, ds.page, &view, &Default::default())?;
+    let c = pix.pixels().first()?.demultiply();
+    (c.alpha() > 0).then_some([c.red(), c.green(), c.blue(), c.alpha()])
+}
+
+fn color_at(s: &mut Session, p: &Value) -> Result<Value> {
+    let cmd = "pixel.colorAt";
+    let at = |key: &str| {
+        get(p, key)
+            .and_then(serde_json::Value::as_f64)
+            .filter(|f| f.is_finite())
+            .ok_or_else(|| bad(cmd, format!("`{key}` must be a number (page units)")))
+    };
+    let (x, y) = (at("x")?, at("y")?);
+    Ok(json!({"color": page_color(s, x, y).map(canvas::to_hex)}))
 }
 
 /// The colour link `link` stands for now: a colour style's first solid paint, or a colour

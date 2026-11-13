@@ -86,6 +86,12 @@ with **Done**, `Esc` or `Enter`.
   pixels are see-through, so whatever sits under the sprite on the canvas — a reference picture, a
   frame, a vector — shows while you draw over it. It only changes what you see while editing: the
   sprite's pixels, its export and the layer outside Pixel mode are the same.
+- **The eyedropper (`I`, or Alt with a drawing tool) picks from the whole canvas**: a painted art
+  pixel gives its own colour; over an empty art pixel it takes what is drawn under the sprite, and
+  outside the board it takes whatever the page shows there (another layer, a photo, a vector, the
+  page's own colour). The colour picker's own eyedropper works the same way over a sprite, and its
+  colour goes to the drawing colour the picker was opened on. By command:
+  `pixel.colorAt {x, y}` → `{color}`.
 - Shift-click draws a line from the last point. `Ctrl+A`, `Ctrl+D`, `Ctrl+Shift+I` select all,
   none, invert; `Ctrl+C`/`X`/`V` copy, cut and paste pixels; `Delete` clears.
 - **Shade**: with the pencil's Shade option on, each pixel you pass over moves one colour along a
@@ -145,7 +151,7 @@ Claude reaches every pixel command through the `graybox` MCP tools (`run_command
   pixel, e.g. `{"rows": ["..kk..", ".kffk."], "palette": {"k": "#1b1b2a", "f": "#e8b830"}}`.
 - `pixel.get {id, pixels: true}` reads the pixels back.
 - `pixel.stroke`, `pixel.shape`, `pixel.fill`, `pixel.replaceColor`, `pixel.outline`,
-  `pixel.frame.add`, `pixel.tag.add`, `pixel.text`, `pixel.paste` (a PNG, a layer drawn as pixels,
+  `pixel.frame.add`, `pixel.tag.add`, `pixel.text`, `pixel.colorAt`, `pixel.paste` (a PNG, a layer drawn as pixels,
   or what Copy took),
   `pixel.export`, `pixel.import`. `list_commands` with `filter: "pixel"` lists them all with their
   parameters.

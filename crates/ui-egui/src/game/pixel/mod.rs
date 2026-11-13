@@ -227,9 +227,9 @@ pub struct Editor {
     pub(crate) used: Option<(u64, Vec<figcraft_pixel::Rgba>)>,
     /// What Copy took: the pixels and where their top left was.
     pub(crate) clipboard: Option<(Canvas, i64, i64)>,
-    /// The layers the file's own clipboard held when the pixels above were copied (G16.8): copying
-    /// layers after that is what Paste then takes, drawn into the sprite as pixels.
-    pub(crate) clip_layers: Vec<figcraft_doc::NodeId>,
+    /// Which copy of the file's own clipboard was the newest when the pixels above were copied
+    /// (G16.8): layers copied after that are what Paste then takes, drawn into the sprite as pixels.
+    pub(crate) clip_layers: u64,
     /// A copy waiting to go on the system clipboard (it needs the frame's context).
     pub(crate) to_system: Option<Canvas>,
     /// This frame pasted with the V key (the paste event a browser sends with it is then not a second paste).
@@ -285,7 +285,7 @@ impl Default for Editor {
             swap: None,
             used: None,
             clipboard: None,
-            clip_layers: Vec::new(),
+            clip_layers: 0,
             to_system: None,
             pasted: false,
             cut: false,
@@ -415,9 +415,10 @@ pub(crate) fn settle(app: &mut FigApp) {
     }
 }
 
-/// The roots of the layers the file's own clipboard holds (what `edit.copy` took).
-pub(crate) fn copied_layers(app: &FigApp) -> Vec<figcraft_doc::NodeId> {
-    app.session.clipboard.nodes.iter().map(|(root, _)| *root).collect()
+/// Which copy of layers the file's own clipboard holds (0: none). It counts up on every `edit.copy`
+/// of layers, so copying the same layer twice counts as a new copy.
+pub(crate) fn copied_layers(app: &FigApp) -> u64 {
+    if app.session.clipboard.nodes.is_empty() { 0 } else { app.session.clipboard.layers_generation }
 }
 
 /// The ink for a stroke or shape with the current settings.

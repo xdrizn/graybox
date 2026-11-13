@@ -98,24 +98,37 @@ fn edit(app: &mut FigApp, ui: &egui::Ui, resp: &egui::Response, pos: Pos2, id: f
     if app.ui.picker.is_none() && super::edges::pointer(app, ui, resp, pos, id, &d.sprite, pressed, down) {
         return true;
     }
+    // The colour picker's own eyedropper (G16.8): it samples through the canvas tools, so the press
+    // goes to them instead of being taken by the board, and it picks anywhere on the page.
+    if app.session.tool.pick_only {
+        app.pixel.hover = None;
+        return false;
+    }
     let at = art_at(app, id, &d.sprite, pos);
     app.pixel.hover = at.filter(|_| resp.hovered());
-    let Some(at) = at else { return resp.hovered() };
     // A press that closes the colour picker only closes it (the picker is drawn after the canvas,
     // so it is still open here on that press).
     let swallow = app.ui.picker.is_some();
     // Alt holds the eyedropper with any drawing tool (with a selection tool it subtracts).
     let tool = if mods.alt && app.pixel.gesture.is_none() && !app.pixel.tool.selects() { Tool::Eyedropper } else { app.pixel.tool };
+    let picking = (pressed || pressed2) && resp.hovered() && app.pixel.gesture.is_none() && !swallow;
+    let Some(at) = at else {
+        // Off the board the eyedropper still picks: whatever the page shows there (G16.8).
+        if picking && tool == Tool::Eyedropper {
+            pick_on_page(app, pos, pressed2 && !pressed);
+        }
+        return resp.hovered();
+    };
     let axis = if resp.hovered() && app.pixel.gesture.is_none() { axis_under(app, id, &d.sprite, pos) } else { None };
     if let Some(which) = axis {
         super::set_cursor(app, ui.ctx(), axis_cursor(which));
     }
-    if (pressed || pressed2) && resp.hovered() && app.pixel.gesture.is_none() && !swallow {
+    if picking {
         let secondary = pressed2 && !pressed;
         if let Some(axis) = axis {
             app.pixel.gesture = Some(Gesture::Axis(axis));
         } else {
-            press(app, id, &d, tool, at, secondary, mods);
+            press(app, id, &d, tool, at, pos, secondary, mods);
         }
     }
     match app.pixel.gesture.clone() {
@@ -206,7 +219,7 @@ fn op_name(op: Op) -> &'static str {
 }
 
 /// A press with `tool` at art pixel `at`.
-fn press(app: &mut FigApp, id: figcraft_doc::NodeId, d: &super::Decoded, tool: Tool, at: Pt, secondary: bool, mods: egui::Modifiers) {
+fn press(app: &mut FigApp, id: figcraft_doc::NodeId, d: &super::Decoded, tool: Tool, at: Pt, pos: Pos2, secondary: bool, mods: egui::Modifiers) {
     // Playing stops on the frame shown, so the press draws there (G16.4).
     app.pixel.playing = None;
     match tool {
@@ -247,16 +260,32 @@ fn press(app: &mut FigApp, id: figcraft_doc::NodeId, d: &super::Decoded, tool: T
             app.run("pixel.fill", p);
         }
         Tool::Eyedropper => {
-            // What the frame shows there; a transparent pixel picks transparency.
+            // What the frame shows there. On an empty art pixel the page shows through, so what is
+            // drawn under the sprite is picked instead (G16.8).
             let picture = d.picture(&d.cel);
-            if let Some(c) = picture.get(at.0, at.1) {
-                let i = usize::from(secondary);
-                app.pixel.colors[i] = c;
-                // The colour style it was painted from, if the sprite remembers one (G16.6).
-                app.pixel.links[i] = d.sprite.links.get(&canvas::to_hex(c)).cloned();
+            match picture.get(at.0, at.1).filter(|c| c[3] > 0) {
+                Some(c) => {
+                    let i = usize::from(secondary);
+                    app.pixel.colors[i] = c;
+                    // The colour style it was painted from, if the sprite remembers one (G16.6).
+                    app.pixel.links[i] = d.sprite.links.get(&canvas::to_hex(c)).cloned();
+                }
+                None => pick_on_page(app, pos, secondary),
             }
         }
     }
+}
+
+/// The eyedropper on the canvas (G16.8): the colour the page shows at screen point `pos` becomes
+/// the drawing colour, whatever draws it there — another layer, a photo, a vector, a frame. The
+/// colours of the file are not touched where the page is empty.
+fn pick_on_page(app: &mut FigApp, pos: Pos2, secondary: bool) {
+    let page = app.to_page(pos);
+    let Some(c) = figcraft_engine::cmd::pixel::page_color(&app.session, page.x, page.y) else { return };
+    let i = usize::from(secondary);
+    app.pixel.colors[i] = [c[0], c[1], c[2], 255];
+    // It came off the page, not from a style the sprite remembers.
+    app.pixel.links[i] = None;
 }
 
 /// `{id, layer, frame}` for the cel being drawn on.
@@ -486,7 +515,7 @@ fn command_key(app: &mut FigApp, key: Key, shift: bool) -> bool {
                 }
                 // Layers copied on the canvas (a vector, a group, anything drawn) come in as
                 // pixels, at their own size in art pixels, fitted to the board (G16.8).
-                None if !super::copied_layers(app).is_empty() => on_cel(app, "pixel.paste", json!({"clipboard": true})),
+                None if super::copied_layers(app) > 0 => on_cel(app, "pixel.paste", json!({"clipboard": true})),
                 None => return false,
             }
             app.pixel.pasted = true;
