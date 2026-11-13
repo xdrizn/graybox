@@ -41,7 +41,8 @@ impl Session {
     /// or start erasing.
     pub(crate) fn board_down(&mut self, ev: &PointerEvent) -> Result<()> {
         // A board tool kept while a design file came to the front: back to Move for this press.
-        if !is_board(self.doc()?) {
+        // Graybox: except the Eraser, which erases strokes in design files too.
+        if !is_board(self.doc()?) && self.tool.tool != ToolId::Eraser {
             self.tool.tool = ToolId::Move;
             return self.pointer(ev);
         }
@@ -240,10 +241,15 @@ impl Session {
         let Gesture::Erase { mut gone } = std::mem::take(&mut self.tool.gesture) else { return Ok(()) };
         let tol = ERASER_PX / ev.zoom.max(1e-6);
         self.tool.overlay.brush = Some([ev.x, ev.y, tol]);
-        let (doc, page) = (self.doc()?.clone(), self.page()?);
-        if let Some(hit) =
-            doc.hit_test(page, ev.p(), tol, None).filter(|h| doc.node(*h).is_some_and(|n| n.board == Some(BoardItem::Ink)) && !gone.contains(h))
-        {
+        // Graybox: strokes in design files too (`crate::design_eraser`), read in place rather than
+        // cloning the document on every move (design files are big).
+        let page = self.page()?;
+        let doc = self.doc()?;
+        let board = is_board(doc);
+        let hit = doc
+            .hit_test(page, ev.p(), tol, None)
+            .filter(|h| doc.node(*h).is_some_and(|n| crate::design_eraser::erasable(n, board)) && !gone.contains(h));
+        if let Some(hit) = hit {
             gone.push(hit);
             let ids = gone.clone();
             self.preview(|d, sel| {

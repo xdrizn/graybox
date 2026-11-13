@@ -30,6 +30,10 @@ pub mod keymap;
 pub mod measure;
 #[cfg(test)]
 mod pen_tests;
+// Graybox: the Eraser in design files.
+mod design_eraser;
+#[cfg(test)]
+mod design_eraser_tests;
 pub mod proto_run;
 pub mod pseudo;
 mod rect_to_frame;

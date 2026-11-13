@@ -84,7 +84,8 @@ const GROUPS: &[Group] = &[
     Group::tools(
         "pen",
         tr_noop("Drawing tools"),
-        &[(ToolId::Pen, Icon::Pen), (ToolId::Pencil, Icon::Pencil), (ToolId::ShapeBuilder, Icon::ShapeBuilder)],
+        // Graybox: the Eraser erases strokes in design files too.
+        &[(ToolId::Pen, Icon::Pen), (ToolId::Pencil, Icon::Pencil), (ToolId::Eraser, Icon::Eraser), (ToolId::ShapeBuilder, Icon::ShapeBuilder)],
     ),
     Group::tools("text", tr_noop("Text"), &[(ToolId::Text, Icon::Text), (ToolId::TextOnPath, Icon::TextOnPath)]),
     Group::tools("comment", tr_noop("Comment"), &[(ToolId::Comment, Icon::Comment)]),
@@ -312,7 +313,8 @@ fn mode_switcher(app: &mut FigApp, ui: &mut Ui, x: f32, cy: f32, t: &Tokens) {
     ];
     let active = match app.ui.right_tab {
         crate::RightTab::Design if crate::game::pixel::active(app) => 1,
-        crate::RightTab::Design if app.session.tool.tool == ToolId::Pencil => 0,
+        // Graybox: drawing and erasing are Draw mode.
+        crate::RightTab::Design if matches!(app.session.tool.tool, ToolId::Pencil | ToolId::Eraser) => 0,
         crate::RightTab::Design => 2,
         crate::RightTab::Prototype => 3,
         crate::RightTab::Inspect => 4,
@@ -357,7 +359,7 @@ fn pick_mode(app: &mut FigApp, i: usize) {
         }
         1 => {
             app.ui.right_tab = crate::RightTab::Design;
-            if app.session.tool.tool == ToolId::Pencil {
+            if matches!(app.session.tool.tool, ToolId::Pencil | ToolId::Eraser) {
                 app.run("tool.set", json!({"tool": "move"}));
             }
         }

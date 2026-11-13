@@ -235,7 +235,8 @@ pub fn specs() -> Vec<CommandSpec> {
             }
             board_tool(s, ToolId::Highlighter)
         }),
-        spec!("tool.eraser", "Eraser", "{} (drag over marker and highlighter strokes to remove them)", false, |s, _| board_tool(s, ToolId::Eraser)),
+        // Graybox: design files too (`crate::design_eraser`): there it removes pencil strokes.
+        spec!("tool.eraser", "Eraser", "{} (drag over strokes to remove them)", false, |s, _| crate::cmd::view::tool(s, ToolId::Eraser)),
         spec!("tool.stamp", "Stamp", "{stamp?} (a click places the stamp)", false, |s, p| {
             if let Some(v) = string(p, "stamp") {
                 s.tool.board.stamp = stamp_of("tool.stamp", &v)?;

@@ -535,7 +535,8 @@ pub fn specs() -> Vec<CommandSpec> {
             |s, p| {
                 let t = req_string("tool.set", p, "tool")?;
                 let t = ToolId::from_id(&t).ok_or_else(|| bad("tool.set", format!("unknown tool `{t}`")))?;
-                if t.on_boards() {
+                // Graybox: the Eraser works in design files too (`crate::design_eraser`).
+                if t.on_boards() && t != ToolId::Eraser {
                     crate::board::require(s, &format!("tool.{}", t.id()))?;
                 }
                 tool(s, t)
