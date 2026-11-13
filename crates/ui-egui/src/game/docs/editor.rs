@@ -258,15 +258,46 @@ fn settle(app: &mut FigApp, ctx: &egui::Context, st: &mut State, doc: DocId, now
 }
 
 /// Under the last block: a click there starts a new one (or goes to the empty last one).
+/// "Start with" and a row of chips under it, one per block an empty document can begin with (from
+/// `at`, wrapping at the column's edge). True while the pointer is on a chip.
+fn starters(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, doc: DocId, at: egui::Pos2) -> bool {
+    let p = ui.painter().clone();
+    p.text(at, Align2::LEFT_TOP, tr("Start with"), regular(11.0), t.text_secondary);
+    let right = ui.max_rect().max.x;
+    let mut pos = pos2(at.x, at.y + 22.0);
+    let mut hovered = false;
+    for (label, kind) in super::slash::starters() {
+        let galley = p.layout_no_wrap(label.to_string(), regular(12.0), t.text);
+        let w = galley.size().x + 24.0;
+        if pos.x + w > right && pos.x > at.x {
+            pos = pos2(at.x, pos.y + 36.0);
+        }
+        let chip = Rect::from_min_size(pos, vec2(w, 28.0));
+        let resp = ui.interact(chip, Id::unique(("gbx_doc_starter", doc.0, kind)), Sense::click());
+        a11y::button(&resp, label);
+        hovered |= resp.hovered();
+        p.rect_filled(chip, CornerRadius::same(6), if resp.hovered() { t.hover } else { t.panel });
+        p.rect_stroke(chip, CornerRadius::same(6), egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+        p.galley(pos2(chip.min.x + 12.0, chip.center().y - galley.size().y / 2.0), galley, t.text);
+        if resp.clicked() {
+            blocks::add_block(app, st, doc, None, kind);
+        }
+        pos.x += w + 8.0;
+    }
+    hovered
+}
+
 fn tail_ui(app: &mut FigApp, ui: &mut Ui, st: &mut State, t: &Tokens, doc: DocId, blocks: &[View], editable: bool) {
     if !editable {
         return;
     }
     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 160.0), Sense::click());
+    let mut on_chip = false;
     if blocks.is_empty() {
         ui.painter().text(pos2(r.min.x, r.min.y + 12.0), Align2::LEFT_CENTER, tr("Click here and start writing"), regular(13.0), t.text_tertiary);
+        on_chip = starters(app, ui, st, t, doc, pos2(r.min.x, r.min.y + 40.0));
     }
-    if resp.hovered() {
+    if resp.hovered() && !on_chip {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
     }
     if resp.clicked() {

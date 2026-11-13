@@ -352,3 +352,16 @@ fn monospaced_fonts_are_known_by_a_word_of_their_name() {
         assert!(!super::blocks::is_mono(f), "{f}");
     }
 }
+
+#[test]
+fn an_empty_document_offers_blocks_to_start_with() {
+    let (mut u, doc) = open(&[]);
+    let s = shapes(&mut u);
+    assert!(has_text(&s, "Start with"), "the empty document says how to begin");
+    let at = text_center(&s, "Table");
+    click(&mut u, at);
+    let b = blocks(&u, doc);
+    assert_eq!(b.len(), 1);
+    assert_eq!(b[0].kind.name(), "table");
+    assert!(!has_text(&shapes(&mut u), "Start with"), "gone once the document has a block");
+}

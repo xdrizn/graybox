@@ -386,12 +386,13 @@ impl FigApp {
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.canvas)).show(ui, |ui| {
             let worker = self.worker.take();
             let mut worker = worker.unwrap_or_else(|| render_worker::Worker::new(ctx.clone()));
-            // Graybox: an open document takes the canvas' place (G13).
-            if !crate::game::docs::show_editor(self, ui) {
+            // Graybox: an open document takes the canvas' place, without the canvas tools (G13).
+            let doc_shown = crate::game::docs::show_editor(self, ui);
+            if !doc_shown {
                 canvas::show(self, ui, &mut worker);
             }
             self.worker = Some(worker);
-            if !hidden && mobile.is_none() {
+            if !hidden && mobile.is_none() && !doc_shown {
                 ui.scope_builder(egui::UiBuilder::new().id_salt("toolbar"), |ui| {
                     a11y::container(ui, egui::accesskit::Role::Toolbar, i18n::tr("Tools"));
                     toolbar::show(self, ui);

@@ -468,6 +468,19 @@
     a block with another font of its own.
   - Not yet: in the browser an image-only clipboard is not pasted into a document (the browser sends
     only the key); the handle menu does not open upwards near the bottom.
+- G13.8, Docs polish, first pass (2026-11-13): headings stand apart from what is above them (more room
+  over a heading 1 than a heading 3), and callouts, quotes and decisions keep a little away from their
+  neighbours. The canvas toolbar no longer floats over an open document. A callout without an icon of
+  its own shows a drawn "i" in a ring (the light bulb emoji drew as an outline). An empty document
+  offers "Start with" chips under its hint: Text, Heading 1, To-do list, Table, Image, Frame or
+  component. The `/` and `@` lists and the list of layers open above their line when there is no room
+  below.
+  - Code: `crates/ui-egui/src/game/docs/{blocks,editor,slash,embed}.rs`; the toolbar in the existing
+    `app.rs` hook. Tests: `blocks_tests.rs` (empty document), `slash.rs` (where a list opens).
+  - Checked in the real app: the briefing with headings, the empty document, `/` near the bottom.
+    Screenshots sent to Adriel.
+  - Not yet: the right panel still shows the canvas' page properties while a document is open (that
+    panel is another session's area); Up/Down step over tables, images and embeds.
 - G11.6, the bow (2026-11-13, Adriel's changes): a click shoots from the hip, holding aim goes over the
   shoulder with a crosshair in the middle of the screen, and the shoulder button swaps sides.
   - Hip shot: a left click alone with the bow turns the hero to where the camera looks and shoots after
@@ -1527,6 +1540,8 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   - G13.2 fonts and pastes: `crates/ui-egui/src/shortcuts.rs`, after `game::pixel::paste_events`:
     `game::docs::canvas_input` drops the keys, clipboard events and image pastes meant for the canvas
     while a document is shown (undo, redo and the app's own keys pass). Locales unchanged.
+  - G13.8: `crates/ui-egui/src/app.rs`, the Documents hook in the central panel: `show_editor`'s answer
+    also hides the canvas toolbar while a document is shown. Locales: "Start with".
   - G13.2 formatting words: no new hook. Locales: "Bold", "Highlight", "Paste a link".
 - Nested pages (G9; `crates/doc/src/page_tree.rs`, `crates/engine/src/cmd/page_tree.rs`,
   `crates/ui-egui/src/game/tree_list.rs` and `page_list.rs` are ours):

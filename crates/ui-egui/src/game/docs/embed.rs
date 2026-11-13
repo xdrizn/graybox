@@ -20,6 +20,8 @@ use crate::theme::{Tokens, regular};
 const MAX_H: f32 = 560.0;
 /// The most layers the list offers.
 const MAX_LISTED: usize = 300;
+/// How tall the list of layers gets (its search field and the list).
+const PICK_H: f32 = 340.0;
 /// The most layers walked to tell whether a live layer changed (past it, any edit redraws it).
 const MAX_WALKED: usize = 5_000;
 
@@ -234,9 +236,12 @@ pub(super) fn picker(app: &mut FigApp, ctx: &egui::Context, st: &mut State, doc:
     let found: Vec<_> = all.into_iter().filter(|(_, n, p)| q.is_empty() || n.to_lowercase().contains(&q) || p.to_lowercase().contains(&q)).collect();
     let mut chosen = None;
     let mut close = ctx.input(|i| i.key_pressed(Key::Escape));
+    // Under the block, or over it when only above has room; centred on it.
+    let (at, corner) = super::slash::opens_at(ctx.content_rect(), pick.under, PICK_H);
     let area = egui::Area::new(Id::unique(("gbx_doc_embed_pick", doc.0, pick.block.0)))
         .order(egui::Order::Foreground)
-        .fixed_pos(pos2(pick.under.center().x - 160.0, pick.under.max.y + 6.0))
+        .fixed_pos(pos2(pick.under.center().x - 160.0, at.y))
+        .pivot(corner)
         .show(ctx, |ui| {
             egui::Frame::popup(ui.style()).fill(t.panel).show(ui, |ui| {
                 ui.set_width(320.0);

@@ -180,6 +180,19 @@ pub(super) fn parse_hex(s: &str) -> Option<Color32> {
     }
 }
 
+/// The room above a block: a heading starts a new part of the document, so it stands apart from
+/// what comes before it (not at the very top).
+fn space_above(look: &Look, first: bool) -> f32 {
+    match look {
+        Look::Heading(1) if !first => 22.0,
+        Look::Heading(2) if !first => 16.0,
+        Look::Heading(_) if !first => 10.0,
+        // Blocks with a background or a bar of their own keep a little away from their neighbours.
+        Look::Callout(_) | Look::Quote | Look::Decision { .. } if !first => 6.0,
+        _ => 2.0,
+    }
+}
+
 fn font_size(look: &Look, own: Option<f32>) -> f32 {
     own.unwrap_or(match look {
         Look::Heading(1) => 28.0,
@@ -260,7 +273,7 @@ pub(super) fn block_ui(
     let Some(v) = views.get(index) else { return Rect::NOTHING };
     let editable = ver.editable();
     let indent = v.depth as f32 * STEP;
-    ui.add_space(2.0);
+    ui.add_space(space_above(&v.look, index == 0));
     let top = ui.cursor().min.y;
     // Room for a background drawn once the block's height is known.
     let bg = ui.painter().add(Shape::Noop);
@@ -606,8 +619,16 @@ fn mark(app: &mut FigApp, ui: &Ui, t: &Tokens, doc: DocId, v: &View, at: egui::P
             }
         }
         Look::Callout(icon) => {
-            let icon = if icon.is_empty() { "💡" } else { icon.as_str() };
-            p.text(pos2(at.x + 22.0, at.y), Align2::CENTER_CENTER, icon, regular(size * 1.15), t.text);
+            let c = pos2(at.x + 22.0, at.y);
+            if !icon.is_empty() && crate::game::emoji_picker::can_draw(ui.ctx(), icon) {
+                p.text(c, Align2::CENTER_CENTER, icon, regular(size * 1.15), t.text);
+            } else {
+                // No icon of its own: an "i" in a ring, drawn.
+                let ink = Stroke::new(1.5, t.icon_secondary);
+                p.circle_stroke(c, 8.0, ink);
+                p.circle_filled(c + vec2(0.0, -3.5), 1.1, t.icon_secondary);
+                p.line_segment([c + vec2(0.0, -0.5), c + vec2(0.0, 4.0)], ink);
+            }
         }
         Look::Quote => {
             p.line_segment([pos2(at.x + 2.0, field.min.y + 3.0), pos2(at.x + 2.0, field.max.y - 3.0)], Stroke::new(3.0, t.text));

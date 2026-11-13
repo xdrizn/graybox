@@ -104,6 +104,12 @@ fn items() -> [(&'static str, &'static str, &'static str); 19] {
     ]
 }
 
+/// The blocks an empty document offers to start with: their names and kinds.
+pub(super) fn starters() -> Vec<(&'static str, &'static str)> {
+    const KINDS: [&str; 6] = ["paragraph", "heading1", "checklist", "table", "image", "embed"];
+    items().into_iter().filter(|(_, kind, _)| KINDS.contains(kind)).map(|(label, kind, _)| (label, kind)).collect()
+}
+
 /// `s` in lower case without the accents of Portuguese and other Latin languages.
 fn fold(s: &str) -> String {
     s.chars()
@@ -231,12 +237,12 @@ pub(super) fn show(
         None => {}
     }
     let moved = matches!(key, Some(Move::Up | Move::Down));
-    let under = galley.pos_from_cursor(egui::text::CCursor::new(s.at));
-    let anchor = galley_pos + under.left_bottom().to_vec2() + egui::vec2(-8.0, 6.0);
+    let (anchor, corner) = list_place(ui.ctx(), galley, galley_pos, s.at);
     let all = items();
     let area = egui::Area::new(Id::unique(("gbx_doc_slash", doc.0, block.0)))
         .order(egui::Order::Foreground)
         .fixed_pos(anchor)
+        .pivot(corner)
         .constrain(true)
         .default_width(MENU_W)
         .show(ui.ctx(), |ui| {
@@ -266,6 +272,29 @@ pub(super) fn show(
     if let Some((_, kind, _)) = picked.and_then(|i| all.get(i)) {
         pick(app, st, doc, block, text, s.at, end, kind);
     }
+}
+
+/// The tallest a list gets (its scrolling part and a heading). The side it opens on is chosen for
+/// this height, not the list's own, so it does not jump while the letters typed shorten it.
+const LIST_H: f32 = 360.0;
+
+/// Where a list for the words on `line` opens (its corner, and which corner that is): 6 points under
+/// the line, or over it when only above has room for `height`; 8 points left of the line's start.
+pub(super) fn opens_at(screen: Rect, line: Rect, height: f32) -> (Pos2, egui::Align2) {
+    let x = line.min.x - 8.0;
+    let below = screen.max.y - (line.max.y + 6.0);
+    let above = (line.min.y - 6.0) - screen.min.y;
+    if below < height && above > below {
+        (egui::pos2(x, line.min.y - 6.0), egui::Align2::LEFT_BOTTOM)
+    } else {
+        (egui::pos2(x, line.max.y + 6.0), egui::Align2::LEFT_TOP)
+    }
+}
+
+/// [`opens_at`] for the caret line at character `at` of a block's words.
+fn list_place(ctx: &egui::Context, galley: &egui::Galley, galley_pos: Pos2, at: usize) -> (Pos2, egui::Align2) {
+    let under = galley.pos_from_cursor(egui::text::CCursor::new(at));
+    opens_at(ctx.content_rect(), under.translate(galley_pos.to_vec2()), LIST_H)
 }
 
 /// The new place of the highlight after an arrow, among `n` things.
@@ -314,11 +343,11 @@ fn show_named(
     let sel = step(s.sel, n, key);
     let mut picked = matches!(key, Some(Move::Pick)).then(|| found.get(sel).map(|f| f.2)).flatten();
     let moved = matches!(key, Some(Move::Up | Move::Down));
-    let under = galley.pos_from_cursor(egui::text::CCursor::new(s.at));
-    let anchor = galley_pos + under.left_bottom().to_vec2() + egui::vec2(-8.0, 6.0);
+    let (anchor, corner) = list_place(ui.ctx(), galley, galley_pos, s.at);
     let area = egui::Area::new(Id::unique(("gbx_doc_mention", doc.0, block.0)))
         .order(egui::Order::Foreground)
         .fixed_pos(anchor)
+        .pivot(corner)
         .constrain(true)
         .default_width(MENU_W)
         .show(ui.ctx(), |ui| {
@@ -406,6 +435,18 @@ fn pick(app: &mut FigApp, st: &mut State, doc: DocId, block: BlockId, text: &str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_list_opens_under_its_line_unless_only_above_has_room() {
+        let screen = Rect::from_min_max(Pos2::ZERO, egui::pos2(1000.0, 800.0));
+        let line = |y: f32| Rect::from_min_max(egui::pos2(100.0, y), egui::pos2(110.0, y + 20.0));
+        // Room below: under the line.
+        assert_eq!(opens_at(screen, line(100.0), 300.0), (egui::pos2(92.0, 126.0), egui::Align2::LEFT_TOP));
+        // Near the bottom: above the line, its bottom edge 6 points over it.
+        assert_eq!(opens_at(screen, line(700.0), 300.0), (egui::pos2(92.0, 694.0), egui::Align2::LEFT_BOTTOM));
+        // No room either way: wherever there is more.
+        assert_eq!(opens_at(screen, line(300.0), 600.0).1, egui::Align2::LEFT_TOP);
+    }
 
     #[test]
     fn a_slash_opens_at_the_start_or_after_a_space_only() {
