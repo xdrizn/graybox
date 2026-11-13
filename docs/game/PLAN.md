@@ -238,7 +238,7 @@ panels (a health bar with its left side nearer), still editable.
 - [x] G17.1 X, Y and Perspective on frames (Design panel "3D"), drawn by a homography warp in the one
   renderer (canvas, Prototype, Play, PNG), clicks through the tilt, shown flat while editing inside,
   smart animate, Unity export + Live Link.
-- [ ] G17.2 A canvas handle to drag the tilt; the flat selection box hidden behind the tilted outline;
+- [x] G17.2 A canvas handle to drag the tilt; the flat selection box hidden behind the tilted outline;
   SVG/PDF export of a tilted frame (rasterised).
 ## Later
 Third-person preset (now G11), 2D platformer and top-down presets, safe-area guides and resolution presets,

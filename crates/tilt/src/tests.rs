@@ -67,6 +67,48 @@ fn bounds_cut_what_falls_behind_the_eye() {
     assert!(h.bounds(Rect::new(1e6, -1.0, 2e6, 1.0)).is_none());
 }
 
+/// The owner's bar, 320 × 56 at (100, 100), Y −60° at perspective 600, its bottom-right corner
+/// dragged: the solved corner is drawn where the pointer is, the left side stays put (flat).
+#[test]
+fn a_resized_tilted_box_is_drawn_with_its_corner_under_the_pointer() {
+    let t = Tilt::new(0.0, -60.0, 600.0);
+    let r = Resize {
+        parent: Affine::IDENTITY,
+        start: Affine::translate((100.0, 100.0)),
+        size: (320.0, 56.0),
+        anchor: Point::new(0.0, 0.0),
+        moves: (true, true),
+    };
+    let start = r.drawn(&t, Point::new(320.0, 56.0)).unwrap();
+    // Untouched, the corner is drawn where it was.
+    assert!(close(r.solve(&t, start, Point::new(320.0, 56.0)).unwrap(), Point::new(320.0, 56.0)));
+    let p = Point::new(start.x + 30.0, start.y + 4.0);
+    let c = r.solve(&t, p, Point::new(320.0, 56.0)).unwrap();
+    assert!(c.x > 320.0, "wider: {c:?}");
+    let at = r.drawn(&t, c).unwrap();
+    assert!((at - p).hypot() < 1e-6, "{at:?} {p:?}");
+    // A flat box: the pointer's own point.
+    let flat = Tilt::default();
+    assert!(close(r.solve(&flat, Point::new(500.0, 170.0), Point::new(320.0, 56.0)).unwrap(), Point::new(400.0, 70.0)));
+}
+
+/// A side handle moves one side: the solved point is on that side, drawn under the pointer.
+#[test]
+fn a_side_dragged_through_the_tilt_lands_under_the_pointer() {
+    let t = Tilt::new(20.0, 35.0, 500.0);
+    let r = Resize {
+        parent: Affine::translate((10.0, 5.0)),
+        start: Affine::translate((100.0, 100.0)),
+        size: (200.0, 40.0),
+        anchor: Point::new(0.0, 0.0),
+        moves: (true, false),
+    };
+    let p = r.drawn(&t, Point::new(200.0, 30.0)).unwrap() + figcraft_geom::Vec2::new(-25.0, 3.0);
+    let c = r.solve(&t, p, Point::new(200.0, 30.0)).unwrap();
+    assert!((r.drawn(&t, c).unwrap() - p).hypot() < 1e-6);
+    assert!(c.x < 200.0);
+}
+
 mod props {
     use super::super::*;
     use proptest::prelude::*;
@@ -105,6 +147,25 @@ mod props {
                 let q = m.apply(p).unwrap();
                 prop_assert!(b.inflate(1e-6, 1e-6).contains(q));
             }
+        }
+
+        #[test]
+        fn a_dragged_corner_is_drawn_under_the_pointer(
+            x in -60.0..60.0f64, y in -60.0..60.0f64, d in 300.0..5000.0f64,
+            w in 20.0..1000.0f64, h in 20.0..1000.0f64, rot in -3.2..3.2f64,
+            corner in 0usize..4, du in -0.2..0.2f64, dv in -0.2..0.2f64,
+        ) {
+            let t = Tilt::new(x, y, d);
+            let start = Affine::translate((50.0, -20.0)) * Affine::rotate(rot);
+            let corners = [Point::new(0.0, 0.0), Point::new(w, 0.0), Point::new(w, h), Point::new(0.0, h)];
+            let (moving, anchor) = (corners[corner], corners[(corner + 2) % 4]);
+            let r = Resize { parent: Affine::scale(1.5), start, size: (w, h), anchor, moves: (true, true) };
+            let from = r.drawn(&t, moving).unwrap();
+            let p = from + figcraft_geom::Vec2::new(du * w, dv * h);
+            let c = r.solve(&t, p, moving);
+            prop_assert!(c.is_some(), "no solution for {p:?}");
+            let at = r.drawn(&t, c.unwrap()).unwrap();
+            prop_assert!((at - p).hypot() < 1e-4 * w.max(h), "{at:?} {p:?}");
         }
 
         #[test]

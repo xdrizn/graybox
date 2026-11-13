@@ -273,7 +273,8 @@ pub(super) fn selection_geometry(app: &FigApp, painter: &egui::Painter, doc: &Ar
         SelectionGeometry {
             col,
             outlines: Arc::new(outlines),
-            bbox: selection_box(doc, sel),
+            // Graybox: one selected layer turned in 3D: its box where its corners are drawn (G17).
+            bbox: crate::game::tilt_ui::drawn_box(app, doc, sel, selection_box(doc, sel)),
             size: selection_frame(doc, sel).map(|(_, w, h)| (w, h)),
             locked: sel.iter().any(|i| figcraft_engine::tools::locked_in(doc, *i)),
         }

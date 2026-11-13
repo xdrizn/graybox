@@ -179,6 +179,8 @@ impl Session {
             && !self.tool.dev_mode
             && (arc_drag || !self.tool.busy())
             && self.ds().is_ok_and(|ds| ds.vector_edit.is_none() && ds.text_edit.is_none())
+            // Graybox: none on a layer turned in 3D (G17).
+            && !crate::cmd::tilt::selected_tilted(self)
     }
 
     /// The selected ellipse's arc handles as the canvas shows them at the current zoom.

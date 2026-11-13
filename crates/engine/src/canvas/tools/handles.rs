@@ -186,6 +186,8 @@ pub fn handle_at(doc: &Document, sel: &[NodeId], p: Point, zoom: f64) -> Option<
         return None;
     }
     let corners = selection_box(doc, sel)?;
+    // Graybox: a layer turned in 3D has its handles where its corners are drawn (G17).
+    let p = crate::cmd::tilt::handle_point(doc, sel, p)?;
     // Lines (zero height) only get end handles.
     let is_line = sel.len() == 1 && sel.first().and_then(|i| doc.node(*i)).is_some_and(|n| matches!(n.kind, NodeKind::Line));
     handle_at_corners(&corners, p, zoom, is_line)

@@ -117,6 +117,10 @@ impl Session {
 
     /// Feed one pointer event to the current tool.
     pub fn pointer(&mut self, ev: &PointerEvent) -> Result<()> {
+        // Graybox: a handle of a layer turned in 3D is dragged through its tilt (G17).
+        if let Some(done) = crate::cmd::tilt::pointer(self, ev) {
+            return done;
+        }
         // A held button sends the same move every frame: running the gesture again would only
         // rebuild the same preview (a new document, and a canvas render, every frame).
         if ev.kind != PointerKind::Move {

@@ -103,5 +103,22 @@ sprite is rendered flat (Unity applies the rotation). The Live Link applies
 - G17.1 Math crate + doc model + command (junk sweep) + renderer warp + bounds + hit-test + edit
   flat + Design panel section. Checked in the app (health bar, left side near, edit fill and text,
   PNG export).
-- G17.2 Smart animate lerp, Unity export field + Live Link.
-- Later: a canvas handle to drag the tilt; Z order by depth between siblings; true 3D sorting.
+  Smart animate lerp, Unity export field + Live Link landed in G17.1 too.
+- G17.2 (2026-11-13):
+  - **Selection shows the tilted shape.** `doc::tilt::page_warp(doc, id, flat)` is the one page-space
+    homography a layer's flat outline goes through to where it is drawn (its own tilt and every
+    tilted ancestor's, inner first, those shown flat left out). The canvas outlines (selection and
+    hover, `canvas/outline.rs`) and the transform box (`overlays.rs` `selection_geometry`) go
+    through it, so the box and its corner handles sit on the tilted corners; the flat box is gone.
+  - **Handles through the tilt.** A pointer event on the one selected tilted layer whose point,
+    taken back through the warp, lands on a handle of its flat box is sent to the tools taken back
+    (`canvas.rs` `pointer_event` → `tilt_ui::through`), and so is the rest of that gesture, through
+    the warp it started with. Resize and rotate then work in the layer's own flat frame. Points
+    that reach no handle go as they are (clicks already hit through the warp).
+  - **Tilt handle.** A layer with 3D on shows a round handle 18 px above its drawn top edge. Drag
+    it like a trackball: right turns the face right (Y down, the left side comes near), down turns
+    it down (X down, the top comes near), 0.5° a pixel, Shift in 5° steps. One undo step
+    ("3D rotation").
+  - **SVG and PDF** draw a tilted layer through the renderer and embed it as an image
+    (`raster_whole` / `raster_node`), over `raster_bounds` grown to what the warp paints.
+- Later: Z order by depth between siblings; true 3D sorting.

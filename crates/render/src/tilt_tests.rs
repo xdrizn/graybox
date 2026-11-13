@@ -98,3 +98,17 @@ fn an_export_takes_in_the_near_side() {
     let painted = (0..4).any(|y| (0..6).any(|x| pix.pixel(x, y).is_some_and(|c| c.alpha() > 0)));
     assert!(painted, "{}×{}", pix.width(), pix.height());
 }
+
+/// SVG and PDF embed a tilted layer as `render_alone` over `raster_bounds`: that picture is the
+/// tilted one, near end and all.
+#[test]
+fn the_picture_svg_and_pdf_embed_is_the_tilted_one() {
+    let (d, f) = bar(Some(Tilt::new(0.0, -45.0, 400.0)));
+    let b = crate::raster_bounds(&d, f).unwrap();
+    assert!(b.height() > 48.0, "the near end's height: {}", b.height());
+    let view = View { origin: (b.x0, b.y0), scale: 1.0, width: b.width().ceil() as u32, height: b.height().ceil() as u32 };
+    let pix = crate::render_alone(&d, f, &view, crate::Alone::WithEffects).unwrap();
+    let (l, r) = span(&pix);
+    let (hl, hr) = (height(&pix, l + 3), height(&pix, r - 3));
+    assert!(hl > 44 && hr < 36, "left {hl}, right {hr}");
+}

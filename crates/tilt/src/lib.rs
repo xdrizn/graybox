@@ -9,7 +9,7 @@
 //! See `docs/game/specs/2026-11-13-frames-3d-design.md`.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
-pub use figcraft_geom::{Affine, Point, Rect};
+pub use figcraft_geom::{Affine, Point, Rect, Vec2};
 
 /// The plugin data key a layer's tilt is stored under: `"x,y,perspective"`.
 pub const KEY: &str = "graybox.rotation3d";
@@ -125,6 +125,68 @@ impl Tilt {
             Some(inv) => inv * hp * fa,
             None => Homography::IDENTITY,
         }
+    }
+}
+
+/// A tilted box being resized by one of its handles. The tilt turns it about its own centre, so
+/// a resize moves where all of it is drawn: [`Resize::solve`] finds the flat point that puts the
+/// dragged corner (or side) under the pointer.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Resize {
+    /// The parent's page transform.
+    pub parent: Affine,
+    /// The box's transform in its parent and its size when the drag started.
+    pub start: Affine,
+    pub size: (f64, f64),
+    /// The corner (or the point on the side) that stays, in the box's start space.
+    pub anchor: Point,
+    /// Which coordinates the handle moves (both for a corner, one for a side).
+    pub moves: (bool, bool),
+}
+
+impl Resize {
+    /// Page point where the box, resized so its moving corner is `c` (start space), draws `c`.
+    pub fn drawn(&self, t: &Tilt, c: Point) -> Option<Point> {
+        let span = |moves: bool, a: f64, c: f64, full: f64| if moves { (a.min(c), a.max(c)) } else { (0.0, full) };
+        let (x0, x1) = span(self.moves.0, self.anchor.x, c.x, self.size.0);
+        let (y0, y1) = span(self.moves.1, self.anchor.y, c.y, self.size.1);
+        let a = self.start * Affine::translate((x0, y0));
+        let world = Homography::from_affine(self.parent * a);
+        let page = world * t.local(a, (x1 - x0).max(1e-6), (y1 - y0).max(1e-6)) * world.inverse()?;
+        page.apply(self.parent * self.start * c)
+    }
+
+    /// The moving corner (start space) that is drawn at page point `p`, searched from `guess`
+    /// (Newton's method, damped). `None` when no nearby corner is.
+    pub fn solve(&self, t: &Tilt, p: Point, guess: Point) -> Option<Point> {
+        let err = |c: Point| self.drawn(t, c).map(|q| q - p);
+        let scale = (self.size.0.abs() + self.size.1.abs()).max(1.0);
+        let (mut c, mut e) = (guess, err(guess)?);
+        for _ in 0..60 {
+            if e.hypot() < 1e-9 * scale {
+                break;
+            }
+            let h = 1e-6 * scale;
+            let (dx, dy) = ((err(c + Vec2::new(h, 0.0))? - e) / h, (err(c + Vec2::new(0.0, h))? - e) / h);
+            let det = dx.x * dy.y - dy.x * dx.y;
+            if !det.is_finite() || det.abs() < 1e-12 {
+                break;
+            }
+            let step = Vec2::new((dy.y * e.x - dy.x * e.y) / det, (dx.x * e.y - dx.y * e.x) / det);
+            let mut k = 1.0;
+            loop {
+                let next = c - step * k;
+                if let Some(ne) = err(next).filter(|ne| ne.hypot() < e.hypot()) {
+                    (c, e) = (next, ne);
+                    break;
+                }
+                k *= 0.5;
+                if k < 1e-6 {
+                    return (e.hypot() < 1e-6 * scale).then_some(c);
+                }
+            }
+        }
+        (e.hypot() < 1e-6 * scale && c.x.is_finite() && c.y.is_finite()).then_some(c)
     }
 }
 

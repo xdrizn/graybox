@@ -98,8 +98,10 @@ fn turn(shape: &mut Shape, rot: Rot2, angle: f32, pivot: Pos2) {
 pub fn draw(app: &FigApp, painter: &Painter, t: &Tokens, doc: &Document, id: NodeId, selected: bool, hovered: bool) -> Option<[Pos2; 4]> {
     let n = doc.node(id)?;
     let w = doc.world_transform(id);
+    // Graybox: on the drawn top edge of a frame turned in 3D (G17).
+    let tilt = crate::game::tilt_ui::warp(app, doc, id);
     let at = |x: f64, y: f64| {
-        let p = w * Point::new(x, y);
+        let p = crate::game::tilt_ui::drawn(tilt.as_ref(), w * Point::new(x, y));
         app.to_screen(p.x, p.y)
     };
     let (p00, p01) = (at(0.0, 0.0), at(0.0, n.height));

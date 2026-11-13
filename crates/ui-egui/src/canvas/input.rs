@@ -303,6 +303,10 @@ pub(super) fn input(app: &mut FigApp, ui: &mut Ui, resp: &egui::Response) -> boo
     if !app.canvas.dragging && resp.hovered() && crate::game::nine_slice_ui::input(app, &ctx, pos) {
         return false;
     }
+    // Graybox: the round handle that turns a layer in 3D (G17).
+    if !app.canvas.dragging && (resp.hovered() || crate::game::tilt_ui::dragging(&ctx)) && crate::game::tilt_ui::input(app, &ctx, pos) {
+        return false;
+    }
     if resp.secondary_clicked() {
         open_context_menu(app, pos, mods.command);
         return true;

@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use figcraft_geom::Point;
-pub use figcraft_tilt::{Homography, KEY, NEAR_W, Tilt};
+pub use figcraft_tilt::{Homography, KEY, NEAR_W, Resize, Tilt};
 
 use crate::{Document, Node, NodeId};
 
@@ -56,6 +56,23 @@ pub fn view(doc: Arc<Document>, selection: &[NodeId]) -> Arc<Document> {
     Arc::new(d)
 }
 
+/// The page-space warp a page point of layer `id` (or of what lies inside it) goes through to
+/// where it is drawn: its own tilt and each tilted ancestor's, inner first, those in `flat` (shown
+/// flat for editing) left out. `None` when nothing tilts it.
+pub fn page_warp(doc: &Document, id: NodeId, flat: &[NodeId]) -> Option<Homography> {
+    let mut out: Option<Homography> = None;
+    for a in std::iter::once(id).chain(doc.ancestors(id)) {
+        if flat.contains(&a) {
+            continue;
+        }
+        let Some(h) = doc.node(a).and_then(local) else { continue };
+        let world = doc.world_transform(a);
+        let page = Homography::from_affine(world) * h * Homography::from_affine(world.inverse());
+        out = Some(out.map_or(page, |inner| page * inner));
+    }
+    out
+}
+
 /// Run `f` (a hit test) with the layers `flat` shown flat.
 pub fn with_flat<T>(flat: &[NodeId], f: impl FnOnce() -> T) -> T {
     struct Restore(Vec<NodeId>);
@@ -83,3 +100,7 @@ pub fn flat_point(doc: &Document, id: NodeId, n: &Node, pt: Point) -> Option<Poi
     let flat = Point::new(x / w, y / w);
     (w > 0.0 && flat.x.is_finite() && flat.y.is_finite() && h.in_front(flat)).then(|| world * flat)
 }
+
+#[cfg(test)]
+#[path = "tilt_tests.rs"]
+mod tests;

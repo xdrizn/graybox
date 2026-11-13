@@ -58,8 +58,10 @@ pub(crate) fn node_quad(app: &FigApp, doc: &Document, id: NodeId) -> Option<[Pos
     let n = doc.node(id)?;
     let w = doc.world_transform(id);
     let corners = [Point::new(0.0, 0.0), Point::new(n.width, 0.0), Point::new(n.width, n.height), Point::new(0.0, n.height)];
+    // Graybox: drawn through a 3D rotation, its own or a frame's around it (G17).
+    let tilt = crate::game::tilt_ui::warp(app, doc, id);
     Some(corners.map(|c| {
-        let p = w * c;
+        let p = crate::game::tilt_ui::drawn(tilt.as_ref(), w * c);
         app.to_screen(p.x, p.y)
     }))
 }
@@ -175,6 +177,8 @@ fn outline_shape(app: &FigApp, doc: &Document, id: NodeId) -> Option<Vec<Vec<Pos
     let n = doc.node(id)?;
     let path = outline_path(doc, n)?;
     let w = doc.world_transform(id);
+    // Graybox: drawn through a 3D rotation, its own or a frame's around it (G17).
+    let tilt = crate::game::tilt_ui::warp(app, doc, id);
     let mut out = Vec::new();
     let mut cur: Vec<Pos2> = Vec::new();
     figcraft_geom::kurbo::flatten(path.iter(), 0.5 / app.session.ds().map(|d| d.view.zoom).unwrap_or(1.0), |el| {
@@ -185,11 +189,11 @@ fn outline_shape(app: &FigApp, doc: &Document, id: NodeId) -> Option<Vec<Vec<Pos
                     out.push(std::mem::take(&mut cur));
                 }
                 cur.clear();
-                let q = w * p;
+                let q = crate::game::tilt_ui::drawn(tilt.as_ref(), w * p);
                 cur.push(app.to_screen(q.x, q.y));
             }
             LineTo(p) => {
-                let q = w * p;
+                let q = crate::game::tilt_ui::drawn(tilt.as_ref(), w * p);
                 cur.push(app.to_screen(q.x, q.y));
             }
             ClosePath => {

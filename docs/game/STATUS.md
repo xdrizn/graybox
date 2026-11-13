@@ -90,6 +90,29 @@
   animate. Limits: SVG and PDF export draw it flat; background blur / glass
   inside a tilted frame sees only the frame's content; a blend mode on the tilted layer itself
   composites as normal; no canvas handle to drag the tilt yet (G17.2).
+- G17.2 the tilt on the canvas (2026-11-13): a selected tilted layer (alone, Move tool) gets a **round
+  handle** 18 pt above the middle of its drawn top edge; dragging it turns the layer like a trackball
+  (right: Y−, down: X−, 0.5° a point, Shift snaps to 5°), shows "X …° Y …°" while held, and is one
+  "3D rotation" undo step; it keeps the pointer until the release, even off the canvas. **Selection
+  shows the tilted shape**: the selection box, its handles, hover and selection outlines and the frame
+  name label follow the warp (`tilt_ui::warp`/`drawn`/`drawn_box`, through `doc::tilt::page_warp`:
+  the page-space warp of a layer and its tilted ancestors, inner first, edit-flat ones left out), and
+  the corner radius / arc handles hide on a tilted layer. **Handles through the tilt**: a press on a
+  drawn handle maps back to the flat one (`cmd::tilt::handle_point` in `handle_at`) and the drag runs
+  in the layer's flat frame (`cmd::tilt::pointer` in `Session::pointer`, inside `with_flat`); a resize
+  solves, from the press, the flat corner whose new box is drawn with that corner under the pointer
+  (`figcraft_tilt::Resize::solve`, damped Newton, property-tested), so the corner follows the pointer
+  exactly with no drift; where no solution exists the last one stays (no jump). **SVG and PDF export**
+  embed a tilted layer as its picture (rasterised whole over its drawn bounds, like a blurred layer).
+  Checked in the real app on a scratch file: a 320 × 56 bar at Y −40°: the outline and handles on the
+  drawn corners, the round handle turning it to Y −60° X −2° in one undo step, a corner drag landing
+  under the pointer and holding its size, edit flat on its fill, PDF and SVG exports tilted. Code
+  review (high) fixed: the inside-flag reset however the tools return, the held drag tied to its
+  document, the knob drag ending off the canvas, no jump when the solver fails. Limits: the resize
+  model is a plain corner/side resize (Alt from the centre, Shift keeping the ratio and the Scale tool
+  drift from the pointer on a tilted layer, as does dragging a corner past the opposite one); an
+  outline point that falls behind the eye is drawn flat; the hover outline was checked by a unit test,
+  not in the app.
 - G9 working inside a frame (2026-11-12, owner's report): with a top-level **frame** (not a component,
   instance, widget, board object or empty frame) that has layers in it **selected**, a press on its empty
   background draws a marquee of the layers inside (no Ctrl; it used to drag the frame), a press on a layer in
@@ -1338,6 +1361,13 @@ Every place where we changed an upstream FigCraft file, so merges stay easy:
   `present/transition.rs` `smart_interpolate` (`tilt_ui::lerp`); `crates/engine/src/cmd/edit/select.rs`
   `layers_at` and `crates/ui-egui/src/menus/select_layer.rs` (inside `tilt::with_flat`, edit flat);
   `xtask/src/layers.rs` `same_layer_ok` (`figcraft-tilt` → `figcraft-geom` within L0).
+  G17.2: `crates/render/src/lib.rs` `raster_bounds` (a tilted layer: `paint_bounds`);
+  `crates/svg/src/lib.rs` `raster_whole` and `crates/pdf/src/draw.rs` (a tilted layer is embedded as
+  its picture); `crates/engine/src/canvas/tools/pointer.rs` `Session::pointer` (`cmd::tilt::pointer`);
+  `tools/handles.rs` `handle_at` (`cmd::tilt::handle_point`); `tools/keys.rs` `arc_handles_shown`
+  (`!cmd::tilt::selected_tilted`); `crates/ui-egui/src/canvas/outline.rs` `node_quad` and
+  `outline_shape`, `canvas/frame_labels.rs` `draw` (`tilt_ui::warp`/`drawn`); `canvas/overlays.rs`
+  `selection_geometry` (`tilt_ui::drawn_box`); `canvas/input.rs` (`tilt_ui::input`, the round handle).
 
 - G9 owner's batch (2026-11-13): `crates/engine/src/canvas/tools.rs` (`Gesture::PenDrag.press`,
   `pen_wobble`), `tools/pen.rs` `pen_down` (Shift: no out handle, 45°), `tools/drag.rs` (pen drag:

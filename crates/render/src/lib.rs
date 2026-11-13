@@ -345,6 +345,10 @@ pub fn render_alone(doc: &Document, id: NodeId, view: &View, how: Alone) -> Opti
 /// its bounds): what an export rasterises of it.
 pub fn raster_bounds(doc: &Document, id: NodeId) -> Option<Rect> {
     let n = doc.node(id)?;
+    // Graybox: a tilted layer paints where its 3D rotation draws it (G17).
+    if figcraft_doc::tilt::local(n).is_some() {
+        return draw::paint_bounds(doc, id);
+    }
     let sc = doc.world_transform(id).determinant().abs().sqrt();
     let sc = if sc.is_finite() && sc > 0.0 { sc } else { 1.0 };
     let m = draw::effect_margin(n).abs() * sc;

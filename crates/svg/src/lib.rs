@@ -884,7 +884,9 @@ impl W<'_> {
             || (has(&|k| matches!(k, EffectKind::Noise(_))) && has(&|k| matches!(k, EffectKind::LayerBlur(_))))
             // A group's inner shadows are cast by its layers' pixels, over them; an image fill's by
             // its alpha.
-            || (has(&|k| matches!(k, EffectKind::InnerShadow(_))) && figcraft_render::shadow::inner_from_pixels(self.doc, n));
+            || (has(&|k| matches!(k, EffectKind::InnerShadow(_))) && figcraft_render::shadow::inner_from_pixels(self.doc, n))
+            // Graybox: SVG can't warp a layer turned in 3D (G17).
+            || figcraft_doc::tilt::local(n).is_some();
         if !whole {
             return false;
         }
