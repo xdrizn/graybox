@@ -837,6 +837,10 @@
       pixels". A 9-sliced layer or an instance is not a board (no sides to drag, no W/H in art
       pixels).
     - The 9-slice section sits just above Export (it was under Layout).
+    - 9-slice with components already worked on the main component, on its pixel layer and on a
+      layer sliced before it became a component (instances resized keep the corners); now tested,
+      and the section says "Applies to this layer; instances of the component resize with it" on
+      a component or a layer inside one.
     - The pixel Text tool (text drawn into pixels) was started and cancelled by Adriel before it was
       committed; Pixel text and pixel fonts stay as they were.
   - Jog is the default speed (5 m/s), a light stick walks slower, Shift runs (8.5), crouch (2.4) only

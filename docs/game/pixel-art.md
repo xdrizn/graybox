@@ -24,6 +24,8 @@ Graybox desenha pixel art direto no canvas, para UI de jogo:
 - **Quadro (board)**: no modo Pixel o W/H do painel é o tamanho do quadro em pixels de arte;
   digite ou arraste as bordas para crescer ou cortar (Alt: pelo centro). Fora do modo Pixel a camada
   abraça só os pixels desenhados, e W/H são de camada normal.
+- **9-slice com componentes**: aplique no componente principal ou na camada de pixel dentro dele;
+  as instâncias redimensionam junto, com os cantos intactos.
 
 The rest of this guide is in English, like the other docs in the repository.
 
@@ -87,6 +89,9 @@ with **Done**, `Esc` or `Enter`.
   repeat (or stretch) by whole pixels, so a button frame grows without blurring. On a frame with
   auto layout the cuts can be its padding. The cuts are measured on the trimmed art. The 9-slice
   section sits just above Export.
+- **9-slice with components**: set it on the main component, on the pixel layer inside it, or on the
+  pixel layer before making it a component: instances resized keep the corners, and the section says
+  so ("Applies to this layer; instances of the component resize with it").
 - **Pixel text**: any text layer, drawn sharp on the art-pixel grid of the pixel art around it.
 - **Pixel button**: a component set with Default, Hover and Pressed states that grows with its label.
 - **Palette swap**: in Pixel colors, pick a colour, then **As variant** makes a new variant

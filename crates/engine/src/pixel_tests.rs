@@ -13,6 +13,7 @@ mod board;
 mod font;
 mod io;
 mod kit;
+mod nine;
 mod perf;
 mod tools;
 mod trim;

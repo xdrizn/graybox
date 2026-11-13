@@ -70,7 +70,23 @@ pub(crate) fn section(app: &mut FigApp, ui: &mut Ui, doc: &Document, sel: &[Node
         format!("Drawn at {bw:.0} × {bh:.0}: drag the cuts on the canvas")
     };
     widgets::note(ui, &note, crate::theme::Tokens::get(ui.ctx()).text_secondary);
+    // On a component (or a layer inside one) its instances follow (G16.7).
+    if in_component(doc, *id) {
+        widgets::note(ui, "Applies to this layer; instances of the component resize with it", crate::theme::Tokens::get(ui.ctx()).text_secondary);
+    }
     true
+}
+
+/// Whether `id` is a main component or inside one.
+fn in_component(doc: &Document, id: NodeId) -> bool {
+    let mut at = doc.node(id);
+    while let Some(n) = at {
+        if matches!(n.kind, NodeKind::Component { .. }) {
+            return true;
+        }
+        at = n.parent.and_then(|p| doc.node(p));
+    }
+    false
 }
 
 /// The one selected 9-sliced layer, unrotated: its id, world transform, size and 9-slice.
