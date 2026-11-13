@@ -770,7 +770,8 @@ impl Session {
                     Ok(())
                 })?;
                 self.pen_state(plan, v, None)?;
-                self.vgesture(VGesture::Pen { plan, origin: ev.p(), out });
+                // Graybox: a Shift press keeps the open end's handle off for the whole drag.
+                self.vgesture(VGesture::Pen { plan, origin: ev.p(), out: from });
             }
             VTool::Paint => {
                 // A drag paints every area it crosses the way the first one went (one undo step).
@@ -1010,9 +1011,13 @@ impl Session {
             }
             VGesture::Pen { plan, origin, out, .. } => {
                 // Graybox: a click's wobble (8 screen px, as in draw mode) pulls out no handle, and
-                // with Shift the pen never curves.
+                // with Shift the pen never curves. Shift is read live (as in Figma): letting go of it
+                // mid-drag pulls the handle out of the point Shift placed, not out of the press.
                 let straight = ev.shift || crate::tools::pen_wobble(ev, origin);
-                let d = (!straight).then(|| to_local(ev.p() - origin));
+                let d = (!straight).then(|| match plan {
+                    PenPlan::New { at, .. } => lp - at,
+                    _ => to_local(ev.p() - origin),
+                });
                 let from = if ev.shift { None } else { out };
                 let mut v = None;
                 self.preview(|doc, _| {

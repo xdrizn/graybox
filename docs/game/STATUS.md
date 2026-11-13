@@ -7,6 +7,10 @@
   - **Pen**: with Shift held, the Pen never curves. Every segment is straight and snapped to 45°, both
     when drawing and in vector edit mode. The 8 px click wobble is now measured from where the press
     landed, not from the snapped anchor, so a horizontal Shift-click no longer counts as a drag.
+    Shift is read live during the drag, as in Figma. Letting go of it mid-drag pulls the curve's
+    handles out of the point Shift placed (vector edit mode measured them from the press before).
+    Pressing it again straightens the segment again. A Shift press keeps the previous point's
+    handle off.
     Tests: `crates/engine/src/pen_tests.rs`.
   - **Pencil strokes with spikes** (the "broken brush strokes"): fixed by taking upstream's
     #1741 fix (`figcraft_geom::simplify_path`, upstream 0aba3f76 and 61389cdd) on its own,
