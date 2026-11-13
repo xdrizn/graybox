@@ -148,3 +148,40 @@ fn nine_slice_cuts_are_measured_on_the_trimmed_art_and_an_instance_keeps_its_cor
     assert_eq!(at(1, 1), [0, 0, 255, 255], "the top-left corner stays");
     assert_eq!(at(94, 94), [255, 0, 0, 255]);
 }
+
+/// G16.8: inside an auto layout the layer shows the whole board instead of hugging. Hugging moves
+/// the layer to keep its art still and the layout puts it straight back, so the art jumped on the
+/// page every time the sprite was drawn on.
+#[test]
+fn a_sprite_an_auto_layout_places_shows_its_whole_board_and_its_art_never_moves() {
+    let mut s = Session::new();
+    let row = ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 300, "height": 200, "name": "Row"}))["id"].as_u64().unwrap();
+    ex(&mut s, "node.set", json!({"ids": [row], "props": {"layout": "horizontal", "padding": [10, 10, 10, 10], "gap": 8}}));
+    let id = ex(&mut s, "pixel.create", json!({"parent": row, "width": 16, "height": 16, "scale": 4}))["id"].as_u64().unwrap();
+    // Art in the middle of the board, then a pixel further up and left than all of it.
+    ex(&mut s, "pixel.shape", json!({"id": id, "kind": "rect", "from": [4, 4], "to": [11, 11], "filled": true, "color": "#ff0000"}));
+    assert_eq!(shown_box(&s, id), [0, 0, 16, 16], "the whole board, not the art's box");
+    assert_eq!(page_box(&s, id), (10.0, 10.0, 64.0, 64.0));
+    ex(&mut s, "pixel.stroke", json!({"id": id, "points": [[0, 0]], "color": "#0000ff"}));
+    assert_eq!(shown_box(&s, id), [0, 0, 16, 16]);
+    assert_eq!(page_box(&s, id), (10.0, 10.0, 64.0, 64.0), "nothing moved or resized");
+    // Erased again: still the whole board, still in the row.
+    ex(&mut s, "pixel.stroke", json!({"id": id, "points": [[0, 0]], "erase": true}));
+    assert_eq!(page_box(&s, id), (10.0, 10.0, 64.0, 64.0));
+    assert_eq!(s.doc().unwrap().node(NodeId(id)).unwrap().parent, Some(NodeId(row)), "still in the auto layout");
+    assert_eq!(s.doc().unwrap().node(NodeId(row)).unwrap().children, vec![NodeId(id)]);
+}
+
+/// A layer told to ignore the auto layout is placed by itself again, so it hugs as usual.
+#[test]
+fn a_sprite_that_ignores_the_auto_layout_hugs_its_art_again() {
+    let mut s = Session::new();
+    let row = ex(&mut s, "frame.create", json!({"x": 0, "y": 0, "width": 300, "height": 200}))["id"].as_u64().unwrap();
+    ex(&mut s, "node.set", json!({"ids": [row], "props": {"layout": "horizontal", "padding": [10, 10, 10, 10]}}));
+    let id = ex(&mut s, "pixel.create", json!({"parent": row, "width": 16, "height": 16, "scale": 4}))["id"].as_u64().unwrap();
+    ex(&mut s, "node.set", json!({"ids": [id], "props": {"absolute": true}}));
+    ex(&mut s, "pixel.shape", json!({"id": id, "kind": "rect", "from": [4, 4], "to": [11, 11], "filled": true, "color": "#ff0000"}));
+    assert_eq!(shown_box(&s, id), [4, 4, 8, 8], "it hugs its art");
+    let (_, _, w, h) = page_box(&s, id);
+    assert_eq!((w, h), (32.0, 32.0));
+}

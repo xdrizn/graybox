@@ -29,6 +29,15 @@ fn at(u: &Ui, x: f64, y: f64) -> Pos2 {
     u.app.to_screen(x * 8.0 + 4.0, y * 8.0 + 4.0)
 }
 
+/// The screen point in the middle of art pixel (`x`, `y`) of the sprite open on the board, whatever
+/// its scale and wherever its layer sits.
+fn at_board(u: &Ui, id: u64, x: f64, y: f64) -> Pos2 {
+    let node = u.app.session.doc().unwrap().node(figcraft_doc::NodeId(id)).unwrap().clone();
+    let sprite = store::load(&node.plugin_data).unwrap();
+    let xf = super::art_to_page(&u.app, figcraft_doc::NodeId(id), &sprite).unwrap();
+    super::art_to_screen(&u.app, xf, x + 0.5, y + 0.5)
+}
+
 fn pixel(u: &mut Ui, id: u64, x: i64, y: i64) -> Option<String> {
     let r = u.app.session.execute("pixel.pick", &json!({"id": id, "x": x, "y": y})).unwrap();
     r["color"].as_str().map(str::to_string)
@@ -669,4 +678,118 @@ fn the_boards_size_in_art_pixels_shows_in_pixel_mode_only() {
     let texts = painted_texts(&mut u);
     assert!(!texts.iter().any(|t| t == "art px"), "a layer's W and H in Design");
     assert!(texts.iter().any(|t| t.starts_with("Board: 16 × 16 art pixels")), "{texts:?}");
+}
+
+/// Opening a sprite, drawing on it and leaving keeps the edit: the art is there when it is opened
+/// again, and nothing was moved (G16.8, the owner's "my edit went back to what it was").
+#[test]
+fn an_edit_survives_leaving_with_esc_and_opening_the_sprite_again() {
+    let (mut u, id) = editing();
+    // Art drawn earlier, then the sprite closed.
+    u.app.session.execute("pixel.stroke", &json!({"id": id, "points": [[4, 4], [7, 4]], "color": "#00ff00"})).unwrap();
+    u.frame(vec![]);
+    key(&mut u, Key::Escape, false);
+    u.frame(vec![]);
+    assert_eq!(u.app.pixel.mode, Mode::Off);
+    let placed = |u: &Ui| {
+        let doc = u.app.session.doc().unwrap();
+        let n = doc.node(figcraft_doc::NodeId(id)).unwrap();
+        let t = doc.world_transform(n.id).as_coeffs();
+        (t[4], t[5], n.width, n.height)
+    };
+    let before = placed(&u);
+    // Opened again by double-clicking it, as the owner does.
+    let on_art = u.app.to_screen(before.0 + 4.0, before.1 + 4.0);
+    u.app.session.execute("select.set", &json!({"ids": [id]})).unwrap();
+    u.frame(vec![]);
+    for _ in 0..2 {
+        press(&mut u, on_art, PointerButton::Primary, true);
+        press(&mut u, on_art, PointerButton::Primary, false);
+    }
+    u.frame(vec![]);
+    assert_eq!(u.app.pixel.mode, Mode::Edit(figcraft_doc::NodeId(id)), "it opens again");
+    assert_eq!(pixel(&mut u, id, 4, 4).as_deref(), Some("#00ff00"), "the art drawn before is still there");
+    // Draw more, leave with Esc, open it again: the new art is there too.
+    let p = at_board(&u, id, 10.0, 10.0);
+    u.frame(vec![Event::PointerMoved(p)]);
+    press(&mut u, p, PointerButton::Primary, true);
+    press(&mut u, p, PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert_eq!(pixel(&mut u, id, 10, 10).as_deref(), Some("#1b1d29"));
+    key(&mut u, Key::Escape, false);
+    u.frame(vec![]);
+    assert_eq!(pixel(&mut u, id, 10, 10).as_deref(), Some("#1b1d29"), "leaving keeps the edit");
+    assert_eq!(pixel(&mut u, id, 4, 4).as_deref(), Some("#00ff00"));
+    super::enter(&mut u.app, figcraft_doc::NodeId(id));
+    u.frame(vec![]);
+    assert_eq!(pixel(&mut u, id, 10, 10).as_deref(), Some("#1b1d29"), "and it is there when the sprite is opened again");
+}
+
+/// Undo after an edit takes back that edit and nothing else: the art before it comes back whole
+/// and the layer is where it was (G16.8).
+#[test]
+fn undo_after_an_edit_takes_back_only_that_edit() {
+    let (mut u, id) = editing();
+    u.app.session.execute("pixel.stroke", &json!({"id": id, "points": [[4, 4], [7, 4]], "color": "#00ff00"})).unwrap();
+    u.frame(vec![]);
+    let placed = |u: &Ui| {
+        let doc = u.app.session.doc().unwrap();
+        let n = doc.node(figcraft_doc::NodeId(id)).unwrap();
+        let t = doc.world_transform(n.id).as_coeffs();
+        (t[4], t[5], n.width, n.height)
+    };
+    let before = placed(&u);
+    let steps = undo_labels(&u).len();
+    let p = at_board(&u, id, 10.0, 10.0);
+    u.frame(vec![Event::PointerMoved(p)]);
+    press(&mut u, p, PointerButton::Primary, true);
+    press(&mut u, p, PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert_eq!(undo_labels(&u).len(), steps + 1, "one stroke, one undo step");
+    u.app.run("edit.undo", json!({}));
+    u.frame(vec![]);
+    assert_eq!(pixel(&mut u, id, 10, 10), None, "the stroke is gone");
+    assert_eq!(pixel(&mut u, id, 4, 4).as_deref(), Some("#00ff00"), "the art before it is back");
+    assert_eq!(pixel(&mut u, id, 7, 4).as_deref(), Some("#00ff00"));
+    assert_eq!(placed(&u), before, "the layer is where it was");
+    assert_eq!(undo_labels(&u).len(), steps, "one undo was enough");
+}
+
+/// A sprite inside an auto layout stays in it, in its place, across opening it, drawing and
+/// leaving: it shows its whole board, so nothing jumps (G16.8).
+#[test]
+fn a_sprite_in_an_auto_layout_keeps_its_place_across_opening_drawing_and_leaving() {
+    let mut s = Session::new();
+    let row = s.execute("frame.create", &json!({"x": 0, "y": 0, "width": 400, "height": 200})).unwrap()["id"].as_u64().unwrap();
+    s.execute("node.set", &json!({"ids": [row], "props": {"layout": "horizontal", "padding": [10, 10, 10, 10], "gap": 8}})).unwrap();
+    let id = s.execute("pixel.create", &json!({"parent": row, "width": 16, "height": 16, "scale": 8})).unwrap()["id"].as_u64().unwrap();
+    s.execute("pixel.shape", &json!({"id": id, "kind": "rect", "from": [4, 4], "to": [11, 11], "filled": true, "color": "#ff0000"})).unwrap();
+    let mut u = Ui::new(s);
+    for _ in 0..3 {
+        u.frame(vec![]);
+    }
+    let placed = |u: &Ui| {
+        let doc = u.app.session.doc().unwrap();
+        let n = doc.node(figcraft_doc::NodeId(id)).unwrap();
+        let t = doc.world_transform(n.id).as_coeffs();
+        (t[4], t[5], n.width, n.height, n.parent.map(|p| p.0))
+    };
+    let before = placed(&u);
+    assert_eq!(before, (10.0, 10.0, 128.0, 128.0, Some(row)), "its slot in the row is its whole board");
+    u.app.run("pixel.mode", json!({"id": id}));
+    u.frame(vec![]);
+    u.frame(vec![]);
+    assert_eq!(placed(&u), before, "opening it moves nothing");
+    // Draw further up and left than the art already there: that used to shift everything.
+    let p = at_board(&u, id, 0.0, 0.0);
+    u.frame(vec![Event::PointerMoved(p)]);
+    press(&mut u, p, PointerButton::Primary, true);
+    press(&mut u, p, PointerButton::Primary, false);
+    u.frame(vec![]);
+    assert_eq!(pixel(&mut u, id, 0, 0).as_deref(), Some("#1b1d29"));
+    assert_eq!(placed(&u), before, "drawing moves nothing");
+    key(&mut u, Key::Escape, false);
+    u.frame(vec![]);
+    assert_eq!(placed(&u), before, "leaving moves nothing, and it is still in the auto layout");
+    assert_eq!(pixel(&mut u, id, 4, 4).as_deref(), Some("#ff0000"), "the art it had is untouched");
 }

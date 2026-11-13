@@ -64,21 +64,38 @@ fn anchored(anchor: &str, old: (u32, u32), (w, h): (u32, u32)) -> Option<(i64, i
     Some((part(dw, ax), part(dh, ay)))
 }
 
+/// Whether an auto layout places layer `id`: its parent flows it, so where it sits on the page is
+/// the layout's to decide and moving it does nothing (G16.8).
+fn placed_by_layout(doc: &Document, id: NodeId) -> bool {
+    let Some(n) = doc.node(id) else { return false };
+    if n.child_layout.absolute {
+        return false;
+    }
+    n.parent.and_then(|p| doc.node(p)).is_some_and(|p| p.layout.is_some() && p.kind.is_frame_like())
+}
+
 /// Fits layer `id` round the pixels it uses (G16.7): outside Pixel mode it shows only the box
 /// round them (the whole board when it is empty), where they are on the page. A layer at the size
 /// of the box it showed takes the new box's size and place; one resized in Design keeps its own
 /// (its art regrows into it). A 9-sliced layer's base follows the box.
+///
+/// G16.8: a layer an auto layout places is the exception. Hugging moves the layer on the page to
+/// keep its art still, and the layout puts it straight back, so the art jumped every time it was
+/// drawn on. Inside an auto layout it shows the whole board instead: its slot in the row is the
+/// board the artist sized, and nothing ever moves under the pointer.
 pub fn retrim(doc: &mut Document, id: NodeId, sprite: &Sprite) {
     let Some(n) = doc.node(id) else { return };
     let old = store::shown_box(&n.plugin_data, sprite);
     let used = store::used_box(&n.plugin_data, sprite);
-    let new = used.unwrap_or([0, 0, sprite.width, sprite.height]);
+    let whole = [0, 0, sprite.width, sprite.height];
+    let laid_out = placed_by_layout(doc, id);
+    let new = if laid_out { whole } else { used.unwrap_or(whole) };
     let k = f64::from(sprite.scale.max(1));
     let px = |v: u32| f64::from(v) * k;
     let natural = (n.width - px(old[2])).abs() < 0.01 && (n.height - px(old[3])).abs() < 0.01;
     let world = doc.world_transform(id);
     let Some(n) = doc.node_mut(id) else { return };
-    store::put_trim(&mut n.plugin_data, used.filter(|u| *u != [0, 0, sprite.width, sprite.height]));
+    store::put_trim(&mut n.plugin_data, if laid_out { None } else { used.filter(|u| *u != whole) });
     if new == old || !natural {
         return;
     }
