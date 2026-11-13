@@ -237,6 +237,12 @@ pub struct PointerEvent {
     pub pressure: Option<f32>,
 }
 
+/// Graybox: the pen's click wobble: a press that moves less than this (screen px) pulls out no
+/// handle (a high polling rate mouse moves a few pixels during a plain click).
+pub(crate) fn pen_wobble(ev: &PointerEvent, press: Point) -> bool {
+    (ev.p() - press).hypot() * ev.zoom.max(1e-6) < 8.0
+}
+
 /// The pointer is still within [`DRAG_SLOP_PX`] of where it was pressed.
 pub(crate) fn within_slop(ev: &PointerEvent, start: Point) -> bool {
     (ev.p() - start).hypot() * ev.zoom.max(1e-6) < DRAG_SLOP_PX
@@ -477,6 +483,8 @@ pub(crate) enum Gesture {
     },
     PenDrag {
         anchor: Point,
+        // Graybox: where the press was (the anchor may sit elsewhere, snapped or on 45°).
+        press: Point,
     },
     /// Vector edit mode gestures (handled in `vectoredit`).
     Vector(crate::vectoredit::VGesture),

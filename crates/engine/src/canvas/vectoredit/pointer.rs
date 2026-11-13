@@ -761,10 +761,12 @@ impl Session {
                 let Some(plan) = self.pen_plan(ve, h, w.inverse() * at, ev.shift) else { return Ok(true) };
                 self.tool.pen_press = ve.anchor.is_none().then(|| (ev.p(), self.undo_depth().0));
                 self.begin_interaction("Pen")?;
+                // Graybox: with Shift the pen never curves, not even from the open end's handle.
                 let out = ve.pen_out;
+                let from = if ev.shift { None } else { out };
                 let mut v = None;
                 self.preview(|doc, _| {
-                    v = edit(doc, id, |net| apply_pen(net, plan, out, None))?;
+                    v = edit(doc, id, |net| apply_pen(net, plan, from, None))?;
                     Ok(())
                 })?;
                 self.pen_state(plan, v, None)?;
@@ -1007,16 +1009,17 @@ impl Session {
                 self.vgesture(VGesture::Paint { stamps });
             }
             VGesture::Pen { plan, origin, out, .. } => {
-                let d = to_local(ev.p() - origin);
-                if (ev.p() - origin).hypot() * ev.zoom < 2.0 {
-                    return Ok(());
-                }
+                // Graybox: a click's wobble (8 screen px, as in draw mode) pulls out no handle, and
+                // with Shift the pen never curves.
+                let straight = ev.shift || crate::tools::pen_wobble(ev, origin);
+                let d = (!straight).then(|| to_local(ev.p() - origin));
+                let from = if ev.shift { None } else { out };
                 let mut v = None;
                 self.preview(|doc, _| {
-                    v = edit(doc, id, |net| apply_pen(net, plan, out, Some(d)))?;
+                    v = edit(doc, id, |net| apply_pen(net, plan, from, d))?;
                     Ok(())
                 })?;
-                self.pen_state(plan, v, Some((d.x, d.y)))?;
+                self.pen_state(plan, v, d.map(|d| (d.x, d.y)))?;
                 self.vgesture(VGesture::Pen { plan, origin, out });
             }
             VGesture::Width(g) => self.width_drag(ve, g, ev)?,

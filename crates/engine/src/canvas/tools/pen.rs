@@ -113,13 +113,15 @@ impl Session {
         }
         let mut p = p;
         if ev.shift
-            && let Some((last, _, _)) = pen.points.last()
+            && let Some(last) = pen.points.last_mut()
         {
-            p = at_45_degrees(*last, p);
+            p = at_45_degrees(last.0, p);
+            // Graybox: with Shift the pen never curves, not even from the last point's handle.
+            last.2 = Vec2::ZERO;
         }
         pen.points.push((p, Vec2::ZERO, Vec2::ZERO));
         pen.undone.clear();
-        self.tool.gesture = Gesture::PenDrag { anchor: p };
+        self.tool.gesture = Gesture::PenDrag { anchor: p, press: ev.p() };
         self.pen_update()
     }
 

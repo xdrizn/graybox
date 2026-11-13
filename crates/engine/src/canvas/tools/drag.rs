@@ -472,10 +472,11 @@ impl Session {
                 self.reshape_drag(ev, id, portion, start);
                 return Ok(());
             }
-            Gesture::PenDrag { anchor } => {
-                // A click's wobble pulls out no handle (Graybox: within 8 screen px, not 3: a
-                // high polling rate mouse moves a few pixels during a plain click).
-                let out = if (ev.p() - *anchor).hypot() * ev.zoom.max(1e-6) < 8.0 { Vec2::ZERO } else { ev.p() - *anchor };
+            Gesture::PenDrag { anchor, press } => {
+                // A click's wobble pulls out no handle (Graybox: within 8 screen px of the press, not
+                // 3: a high polling rate mouse moves a few pixels during a plain click; and with
+                // Shift the pen never curves).
+                let out = if ev.shift || super::pen_wobble(ev, *press) { Vec2::ZERO } else { ev.p() - *anchor };
                 if let Some(pen) = self.tool.pen.as_mut()
                     && let Some(last) = pen.points.last_mut()
                 {
