@@ -422,6 +422,9 @@ fn al_zones(app: &FigApp) -> Option<Zones> {
         }
     }
     gaps.retain(|g| g.rect.width() > 0.5 && g.rect.height() > 0.5);
+    // Graybox: no gap handles on the canvas either (they got in the way of double-clicking small
+    // frames full of lines); gaps and padding are set in the right panel.
+    gaps.clear();
     Some(Zones { id, bands: Vec::new(), gaps, tracks })
 }
 

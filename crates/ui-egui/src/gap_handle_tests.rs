@@ -43,6 +43,7 @@ fn drag(u: &mut Ui, from: (f64, f64), by: (f32, f32)) {
 }
 
 #[test]
+#[ignore = "Graybox: no gap handles on the canvas"]
 fn dragging_the_gap_between_spread_rows_fixes_it_from_where_it_was() {
     // Two rows of 60 in 300: spread, they are 180 apart (the stored row gap of 10 doesn't count).
     let (mut u, f) = scene(json!({"wrap": true, "contentAlign": "spaceBetween"}));
@@ -57,6 +58,7 @@ fn dragging_the_gap_between_spread_rows_fixes_it_from_where_it_was() {
 }
 
 #[test]
+#[ignore = "Graybox: no gap handles on the canvas"]
 fn dragging_an_auto_gap_between_items_fixes_it_too_and_fixed_gaps_drag_as_before() {
     // Three 60-wide items spread along 300: (300 - 3 × 60) / 2 = 60 apart.
     let (mut u, f) = scene(json!({"mainAlign": "spaceBetween"}));
